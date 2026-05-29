@@ -1,5 +1,11 @@
 # 在线麻将初期需求分析与开发计划
 
+> **⚠️ 此文档已废弃。** 本文为前期讨论沉淀，部分内容（如游客登录、PostgreSQL + Redis 起步方案）已被后续主文档否决或替代。请以四个主文档为准：
+> - [requirements.md](./requirements.md)
+> - [architecture-design.md](./architecture-design.md)
+> - [technical-architecture.md](./technical-architecture.md)
+> - [development-plan.md](./development-plan.md)
+
 ## 1. 当前需求约束
 
 本阶段目标不是做大规模商业化平台，而是先做一个可本地部署测试的小规模在线麻将产品。

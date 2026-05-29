@@ -1,5 +1,11 @@
 # 在线麻将网站产品架构与开发流程
 
+> **⚠️ 此文档已废弃。** 本文为前期讨论沉淀，部分内容（如公网部署、Nginx/Caddy 前置、Redis 缓存）与当前初期本地测试定位不符。请以四个主文档为准：
+> - [requirements.md](./requirements.md)
+> - [architecture-design.md](./architecture-design.md)
+> - [technical-architecture.md](./technical-architecture.md)
+> - [development-plan.md](./development-plan.md)
+
 ## 1. 产品目标
 
 建设一个可通过 PC 浏览器和移动端浏览器访问的在线麻将网站。玩家可以创建房间、加入房间、在线对局；当人类玩家不足 4 人时，由机器人自动补位。服务端运行在 Linux 环境下，支持公网部署和域名访问。

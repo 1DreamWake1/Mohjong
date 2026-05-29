@@ -58,9 +58,10 @@ Linux 测试部署：Ubuntu 虚拟机 + Node.js + SQLite
 - React
 - TypeScript
 - Vite
-- Zustand
-- CSS Modules 或普通 CSS
+- Zustand（状态管理）
+- **CSS Modules**（样式方案，最终选定）
 - Socket.IO Client
+- **Vitest**（单元测试）
 
 ### 3.2 选择理由
 
@@ -77,6 +78,17 @@ Zustand 比 Redux 更轻，适合当前规模。状态主要包括：
 - 当前牌局视角。
 - WebSocket 连接状态。
 - 可操作动作。
+
+CSS Modules 相比普通 CSS 或 Tailwind：
+- 类名自动局部作用域，避免组件间样式冲突。
+- TypeScript 类型提示（`*.module.css` 生成 `.d.ts`）。
+- 适合麻将牌桌这种复杂、组件化程度高的场景。
+- 无需额外工具链，Vite 原生支持。
+
+Vitest 相比 Jest：
+- 与 Vite 共享插件和配置，无需额外设置。
+- 原生 ESM 和 TypeScript 支持，无需 `ts-jest`。
+- HMR 模式适合开发阶段快速迭代测试。
 
 ### 3.3 前端模块设计
 
@@ -139,6 +151,8 @@ apps/web/
 - Socket.IO
 - Prisma
 - SQLite
+- **pino**（结构化日志）
+- **Vitest + supertest**（测试）
 
 ### 4.2 选择理由
 
@@ -157,6 +171,16 @@ Socket.IO 比原生 WebSocket 多了一些实用能力：
 这些能力对本项目的房间同步和断线重连很有价值。
 
 Prisma 适合快速定义数据库模型和生成类型。初期使用 SQLite，后续迁移 PostgreSQL 时改动较小。
+
+pino 相比 console.log 或 winston：
+- Node.js 生态中最快的日志库，对游戏实时性影响最小。
+- 原生 JSON 结构化输出，便于解析和后续日志分析。
+- Fastify 内置 pino 集成，零配置即可使用。
+- 牌局关键事件可通过 pino 输出，同时写入 `GameEvent` 表用于回放。
+
+Vitest + supertest 用于服务端测试：
+- Vitest 与前端测试框架一致，降低维护成本。
+- supertest 是 Fastify 集成测试的标准工具，可直接测试 HTTP API 端点。
 
 ### 4.3 服务端模块设计
 
@@ -389,7 +413,31 @@ game:error
 game:ended
 ```
 
-### 7.3 玩家视角状态
+### 7.3 断线重连策略
+
+麻将属于回合制游戏，断线重连是关键体验。设计以下策略：
+
+**服务端侧：**
+- 为每个 Socket.IO 连接维护 `socketId → { userId, seatIndex, gameId }` 映射。
+- 玩家掉线后，服务端保留其座位和牌局状态，不立即移除。
+- 若掉线玩家当前轮到操作，等待超时（默认 30 秒），超时后自动托管（电脑玩家接管，打出随机合法牌）。
+- 托管期间电脑玩家的动作正常计入对局流程。
+
+**客户端侧：**
+- Socket.IO Client 默认启用自动重连（`reconnection: true`）。
+- 重连成功后发送 `game:sync` 事件，携带 `gameId` 和 `userId`。
+- 服务端收到 `game:sync` 后，通过 `gameStateMapper` 为该玩家重新生成当前视角的 `PlayerView` 并下发。
+- 如果掉线期间有其他玩家操作，重连后收到的 `game:state` 包含最新牌局状态。
+
+**事件补充：**
+
+| 事件 | 方向 | 说明 |
+|------|------|------|
+| `game:reconnect` | 客户端 → 服务端 | 重连请求（携带 gameId、userId、重连 token） |
+| `game:auto_play` | 服务端 → 客户端 | 通知某玩家已进入托管模式 |
+| `game:timeout` | 服务端 → 客户端 | 当前玩家操作超时提示 |
+
+### 7.4 玩家视角状态
 
 服务端必须为每个玩家生成不同的视角状态。
 
