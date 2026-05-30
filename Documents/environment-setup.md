@@ -13,7 +13,7 @@
 | Node.js | `v22.22.1` | 已安装，可用于当前 TypeScript/Fastify/Vite 技术栈 |
 | npm | `9.2.0` | 已安装 |
 | Corepack | `0.24.0` | 已安装，可用于启用 pnpm |
-| pnpm | 未安装 | 需要启用或安装 |
+| pnpm | `10.18.3` | 已通过 Corepack 启用，和根 `packageManager` 字段一致 |
 | Git | `2.53.0` | 已安装 |
 | curl | `8.18.0` | 已安装 |
 | build-essential | `12.12ubuntu2` | 已安装 |
@@ -43,7 +43,7 @@ ORM：Prisma
 因此当前环境至少需要：
 
 - Node.js 22：已安装。
-- pnpm：缺失，需要安装或通过 Corepack 启用。
+- pnpm：已通过 Corepack 启用。
 - Git：已安装。
 - curl：已安装。
 - build-essential、gcc、g++、make、python3：已安装，用于编译 Node 原生依赖。
@@ -83,6 +83,7 @@ pnpm --version
 
 - 当前 Node.js 已包含 Corepack，优先通过 Corepack 管理 pnpm。
 - 阶段 0 创建 `package.json` 时，建议增加 `packageManager` 字段固定 pnpm 版本，避免不同机器使用不同 pnpm 版本。
+- 当前项目根目录已固定为 `pnpm@10.18.3`。
 
 ## 4. 项目依赖安装方式
 
@@ -188,8 +189,7 @@ pnpm test
 
 当前虚拟机已经具备大部分开发基础，主要缺口是：
 
-1. 启用或安装 pnpm。
-2. 安装 SQLite 命令行工具 `sqlite3`。
-3. 后续服务端启动时确认监听 `0.0.0.0`，以便宿主机访问 Ubuntu 虚拟机。
-4. 如开启防火墙，需要放行 `3000/tcp` 和开发阶段的 `5173/tcp`。
-
+1. 安装 SQLite 命令行工具 `sqlite3`。
+2. 后续服务端启动时确认监听 `0.0.0.0`，以便宿主机访问 Ubuntu 虚拟机。
+3. 如开启防火墙，需要放行 `3000/tcp` 和开发阶段的 `5173/tcp`。
+4. 如果后续使用 Prisma、bcrypt、esbuild 等带安装脚本的依赖，遇到 pnpm 构建脚本拦截提示时，需要按提示执行 `pnpm approve-builds` 并只批准项目实际使用的依赖。

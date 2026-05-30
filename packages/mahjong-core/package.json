@@ -1,0 +1,21 @@
+{
+  "name": "mahjong-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mahjong/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.4"
+  }
+}

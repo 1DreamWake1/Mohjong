@@ -1,0 +1,57 @@
+.shell {
+  align-items: center;
+  background: #eef2f6;
+  color: #17202a;
+  display: flex;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.panel {
+  max-width: 720px;
+}
+
+.kicker {
+  color: #0f766e;
+  font-size: 0.875rem;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.panel h1 {
+  font-size: 2.25rem;
+  line-height: 1.15;
+  margin: 0 0 12px;
+}
+
+.panel p {
+  font-size: 1rem;
+  line-height: 1.7;
+  margin: 0 0 24px;
+}
+
+.statusList {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 160px));
+  margin: 0;
+}
+
+.statusList div {
+  background: #ffffff;
+  border: 1px solid #d7dee8;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.statusList dt {
+  color: #526171;
+  font-size: 0.8125rem;
+  margin-bottom: 4px;
+}
+
+.statusList dd {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0;
+}

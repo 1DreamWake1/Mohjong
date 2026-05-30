@@ -4,12 +4,18 @@
 
 当前开发计划分为六个阶段（含初始化）：
 
-0. 项目初始化：monorepo 脚手架、共享类型、工具链配置。
+0. 项目初始化：monorepo 脚手架、共享类型、工具链配置。（已完成）
 1. 完成麻将核心玩法算法和电脑玩家算法验证。
 2. 完成服务端基础搭建 + 账号管理模块 + 数据库准备。
 3. 完成登录前端页面 + 管理员页面。
 4. 完成麻将游戏前端显示画面。
 5. 合并麻将游戏核心业务算法，形成完整闭环。
+
+当前状态：
+
+- 阶段 0 已于 2026-05-30 完成。
+- 当前优先级进入阶段 1：核心玩法算法与电脑玩家算法验证。
+- 阶段 0 已建立 pnpm workspace、TypeScript、ESLint、Prettier、Vitest、Prisma、React/Vite、Fastify 基础骨架。
 
 ## 2. 关键决策记录
 
@@ -29,6 +35,8 @@
 ### 3.1 阶段目标
 
 搭建 monorepo 项目骨架，配置开发工具链，创建共享类型包，为后续所有阶段提供统一基础设施。
+
+阶段状态：已完成。
 
 ### 3.2 功能点
 
@@ -59,6 +67,41 @@
 - 所有包可通过 `pnpm lint` 代码规范检查。
 - `prisma generate` 可生成 Prisma Client。
 - shared 包可被 mahjong-core、server、web 引用。
+
+### 3.5 完成记录
+
+完成日期：2026-05-30
+
+已完成输出：
+
+- 根目录 pnpm workspace、`package.json`、`pnpm-workspace.yaml`。
+- TypeScript 根配置和各包 `tsconfig.json`。
+- ESLint、Prettier、EditorConfig、`.gitignore`。
+- `packages/shared` 初始类型骨架：auth、user、socket、game 类型。
+- `packages/mahjong-core` 初始包、`RuleConfig` 占位和 Vitest 测试。
+- `apps/server` Fastify 最小服务、CORS 配置、`GET /health` 和测试。
+- `apps/web` React + Vite 最小页面、CSS Modules 配置。
+- `prisma/schema.prisma` 初始 User 表。
+- `.env.example` 基础环境变量示例。
+- `pnpm-lock.yaml` 锁定依赖版本。
+
+已验证命令：
+
+```bash
+pnpm install
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+pnpm prisma:generate
+pnpm -F mahjong-core test
+```
+
+开发服务冒烟验证：
+
+- `pnpm dev` 可同时启动 web 和 server。
+- `GET http://127.0.0.1:3000/health` 返回 `{"status":"ok"}`。
+- `http://127.0.0.1:5173` 返回前端 Vite 页面。
 
 ---
 
