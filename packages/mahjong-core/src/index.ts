@@ -5,6 +5,8 @@ export { canHu, countTiles, isSevenPairs } from "./hand.js";
 export type { HuPattern, HuResult } from "./hand.js";
 export { standardRuleConfig } from "./rules.js";
 export type { RuleConfig } from "./rules.js";
+export { calculateScore, identifyFans, isChinitsu, isHonitsu, isHonroutou, isPinfu, isTanyao, isToitoi } from "./scoring.js";
+export type { Fan, FanType, ScoreOptions, ScoreResult } from "./scoring.js";
 export { compareTiles, createTile, getTileDefinition, isSameTileType, tileDefinitions } from "./tiles.js";
 export type { Tile, TileCode, TileDefinition } from "./tiles.js";
 export { createSeededRandom, createShuffledWall, createWall, shuffleWall } from "./wall.js";

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyAction,
+  calculateScore,
   canHu,
   chooseDiscardTile,
   createEmptyPlayerView,
@@ -9,6 +10,7 @@ import {
   createTile,
   createWall,
   getLegalActions,
+  identifyFans,
   runBasicBotGame,
   standardRuleConfig,
   tileDefinitions
@@ -49,6 +51,56 @@ describe("mahjong-core hand evaluation", () => {
     const hand = handFromCodes(["m1", "m2", "m4", "m5", "m6", "p2", "p3", "p4", "s7", "s8", "s9", "red", "red", "white"]);
 
     expect(canHu(hand, standardRuleConfig).canHu).toBe(false);
+  });
+});
+
+describe("mahjong-core scoring", () => {
+  it("identifies pinfu, riichi and tanyao on a simple sequence hand", () => {
+    const hand = handFromCodes(["m2", "m3", "m4", "m3", "m4", "m5", "p4", "p5", "p6", "s6", "s7", "s8", "p8", "p8"]);
+    const score = calculateScore(hand, standardRuleConfig, { isRiichi: true });
+
+    expect(score.canHu).toBe(true);
+    expect(score.fans.map((fan) => fan.type)).toEqual(["pinfu", "riichi", "tanyao"]);
+    expect(score.fanTotal).toBe(3);
+    expect(score.totalPoints).toBe(50);
+  });
+
+  it("identifies chinitsu without also counting honitsu", () => {
+    const hand = handFromCodes(["m1", "m2", "m3", "m2", "m3", "m4", "m4", "m5", "m6", "m7", "m8", "m9", "m5", "m5"]);
+    const fanTypes = identifyFans(hand, standardRuleConfig).map((fan) => fan.type);
+
+    expect(fanTypes).toContain("chinitsu");
+    expect(fanTypes).not.toContain("honitsu");
+  });
+
+  it("identifies honitsu with one suit and honors", () => {
+    const hand = handFromCodes(["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "east", "east", "east", "red", "red"]);
+
+    expect(identifyFans(hand, standardRuleConfig).map((fan) => fan.type)).toContain("honitsu");
+  });
+
+  it("identifies toitoi and honroutou on all terminal and honor triplets", () => {
+    const hand = handFromCodes(["m1", "m1", "m1", "m9", "m9", "m9", "p1", "p1", "p1", "east", "east", "east", "red", "red"]);
+    const fanTypes = identifyFans(hand, standardRuleConfig).map((fan) => fan.type);
+
+    expect(fanTypes).toContain("toitoi");
+    expect(fanTypes).toContain("honroutou");
+  });
+
+  it("identifies seven pairs", () => {
+    const hand = handFromCodes(["m1", "m1", "m9", "m9", "p2", "p2", "p8", "p8", "s3", "s3", "east", "east", "white", "white"]);
+
+    expect(identifyFans(hand, standardRuleConfig).map((fan) => fan.type)).toContain("sevenPairs");
+  });
+
+  it("returns zero points for non-winning hands", () => {
+    const hand = handFromCodes(["m1", "m2", "m4", "m5", "m6", "p2", "p3", "p4", "s7", "s8", "s9", "red", "red", "white"]);
+
+    expect(calculateScore(hand, standardRuleConfig)).toMatchObject({
+      canHu: false,
+      fanTotal: 0,
+      totalPoints: 0
+    });
   });
 });
 
