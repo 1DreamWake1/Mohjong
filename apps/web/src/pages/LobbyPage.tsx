@@ -2,8 +2,9 @@ import type { AuthUser } from "@mahjong/shared";
 import { useEffect, useMemo } from "react";
 
 import styles from "../app/App.module.css";
-import { createGameSocket } from "../socket/socketClient.js";
 import { useAuthStore } from "../stores/authStore.js";
+import { useSocketStore } from "../stores/socketStore.js";
+import { formatDateTime } from "../utils/date.js";
 
 type LobbyPageProps = {
   token: string;
@@ -12,17 +13,21 @@ type LobbyPageProps = {
 
 export function LobbyPage(props: LobbyPageProps): JSX.Element {
   const signOut = useAuthStore((state) => state.signOut);
+  const disconnectSocket = useSocketStore((state) => state.disconnectSocket);
+  const prepareSocket = useSocketStore((state) => state.prepareSocket);
+  const socketStatus = useSocketStore((state) => state.status);
   const createdAtText = useMemo(
-    () => new Date(props.user.createdAt).toLocaleString(),
+    () => formatDateTime(props.user.createdAt),
     [props.user.createdAt]
   );
+  const socketStatusText = socketStatus === "ready" ? "已准备" : "未准备";
 
   useEffect(() => {
-    const socket = createGameSocket(props.token);
+    prepareSocket(props.token);
     return () => {
-      socket.disconnect();
+      disconnectSocket();
     };
-  }, [props.token]);
+  }, [disconnectSocket, prepareSocket, props.token]);
 
   return (
     <main className={styles.lobbyShell}>
@@ -57,6 +62,10 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
             <div>
               <dt>账号创建时间</dt>
               <dd>{createdAtText}</dd>
+            </div>
+            <div>
+              <dt>连接状态</dt>
+              <dd>{socketStatusText}</dd>
             </div>
           </dl>
         </section>

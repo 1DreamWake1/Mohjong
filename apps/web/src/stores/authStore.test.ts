@@ -1,4 +1,5 @@
 import type { AuthUser } from "@mahjong/shared";
+import type { Socket } from "socket.io-client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../api/client.js", () => ({
@@ -9,6 +10,7 @@ vi.mock("../api/client.js", () => ({
 
 import { getCurrentUser, login, logout } from "../api/client.js";
 import { useAuthStore } from "./authStore.js";
+import { useSocketStore } from "./socketStore.js";
 
 const adminUser: AuthUser = {
   createdAt: "2026-05-30T00:00:00.000Z",
@@ -38,6 +40,11 @@ function createMemoryStorage(): Storage {
 }
 
 const storage = createMemoryStorage();
+const disconnectSocket = vi.fn();
+
+function createSocketMock(): Socket {
+  return { disconnect: disconnectSocket } as unknown as Socket;
+}
 
 Object.defineProperty(globalThis, "localStorage", {
   configurable: true,
@@ -52,6 +59,11 @@ describe("authStore", () => {
       status: "checking",
       token: null,
       user: null
+    });
+    useSocketStore.setState({
+      preparedToken: null,
+      socket: null,
+      status: "idle"
     });
   });
 
@@ -85,11 +97,17 @@ describe("authStore", () => {
       token: "next-token",
       user: adminUser
     });
+    useSocketStore.setState({
+      preparedToken: "previous-token",
+      socket: createSocketMock(),
+      status: "ready"
+    });
 
     await useAuthStore
       .getState()
       .signIn({ password: "admin123", username: "admin" });
 
+    expect(disconnectSocket).toHaveBeenCalledTimes(1);
     expect(localStorage.getItem("mahjong.authToken")).toBe("next-token");
     expect(useAuthStore.getState()).toMatchObject({
       status: "authenticated",
@@ -106,15 +124,51 @@ describe("authStore", () => {
       token: "current-token",
       user: adminUser
     });
+    useSocketStore.setState({
+      preparedToken: "current-token",
+      socket: createSocketMock(),
+      status: "ready"
+    });
 
     await useAuthStore.getState().signOut();
 
     expect(logout).toHaveBeenCalledWith("current-token");
+    expect(disconnectSocket).toHaveBeenCalledTimes(1);
     expect(localStorage.getItem("mahjong.authToken")).toBeNull();
     expect(useAuthStore.getState()).toMatchObject({
       status: "anonymous",
       token: null,
       user: null
+    });
+    expect(useSocketStore.getState()).toMatchObject({
+      preparedToken: null,
+      socket: null,
+      status: "idle"
+    });
+  });
+
+  it("clears socket state when restoring with an invalid token", async () => {
+    vi.mocked(getCurrentUser).mockRejectedValue(new Error("invalid token"));
+    localStorage.setItem("mahjong.authToken", "expired-token");
+    useSocketStore.setState({
+      preparedToken: "expired-token",
+      socket: createSocketMock(),
+      status: "ready"
+    });
+
+    await useAuthStore.getState().restoreSession();
+
+    expect(disconnectSocket).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem("mahjong.authToken")).toBeNull();
+    expect(useAuthStore.getState()).toMatchObject({
+      status: "anonymous",
+      token: null,
+      user: null
+    });
+    expect(useSocketStore.getState()).toMatchObject({
+      preparedToken: null,
+      socket: null,
+      status: "idle"
     });
   });
 });

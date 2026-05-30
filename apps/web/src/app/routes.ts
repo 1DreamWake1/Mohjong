@@ -11,7 +11,24 @@ type RouteAuthState =
   | { status: "anonymous"; role?: never }
   | { status: "authenticated"; role: UserRole };
 
-export function getRouteForAuth(state: RouteAuthState): string | null {
+function getDefaultAuthenticatedRoute(role: UserRole): string {
+  return role === "admin" ? APP_ROUTES.adminUsers : APP_ROUTES.lobby;
+}
+
+function isKnownRoute(path: string): boolean {
+  return Object.values(APP_ROUTES).includes(
+    path as (typeof APP_ROUTES)[keyof typeof APP_ROUTES]
+  );
+}
+
+export function getRouteForAuth(
+  state: RouteAuthState,
+  requestedPath?: string
+): string | null {
+  const currentPath =
+    requestedPath ??
+    (typeof window === "undefined" ? APP_ROUTES.login : window.location.pathname);
+
   if (state.status === "checking") {
     return null;
   }
@@ -20,7 +37,20 @@ export function getRouteForAuth(state: RouteAuthState): string | null {
     return APP_ROUTES.login;
   }
 
-  return state.role === "admin" ? APP_ROUTES.adminUsers : APP_ROUTES.lobby;
+  const defaultRoute = getDefaultAuthenticatedRoute(state.role);
+  if (!isKnownRoute(currentPath) || currentPath === APP_ROUTES.login) {
+    return defaultRoute;
+  }
+
+  if (state.role === "player" && currentPath === APP_ROUTES.adminUsers) {
+    return APP_ROUTES.lobby;
+  }
+
+  if (state.role === "admin" && currentPath === APP_ROUTES.lobby) {
+    return APP_ROUTES.adminUsers;
+  }
+
+  return currentPath;
 }
 
 export function replaceRoute(path: string): void {

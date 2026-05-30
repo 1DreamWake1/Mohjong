@@ -11,6 +11,7 @@ import {
 import { getErrorMessage, isUnauthorizedError } from "../api/errors.js";
 import styles from "../app/App.module.css";
 import { useAuthStore } from "../stores/authStore.js";
+import { formatDateTime } from "../utils/date.js";
 
 type AdminUsersPageProps = {
   token: string;
@@ -248,7 +249,7 @@ export function AdminUsersPage(props: AdminUsersPageProps): JSX.Element {
                 <article className={styles.playerRow} key={player.id}>
                   <div className={styles.playerInfo}>
                     <strong>{player.username}</strong>
-                    <span>创建于 {new Date(player.createdAt).toLocaleString()}</span>
+                    <span>创建于 {formatDateTime(player.createdAt)}</span>
                   </div>
                   <div className={styles.playerActions}>
                     <button

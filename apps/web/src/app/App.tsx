@@ -6,12 +6,14 @@ import { LoginPage } from "../pages/LoginPage.js";
 import { useAuthStore } from "../stores/authStore.js";
 import styles from "./App.module.css";
 import { getRouteForAuth, replaceRoute } from "./routes.js";
+import { useCurrentPath } from "./useCurrentPath.js";
 
 export function App(): JSX.Element {
   const status = useAuthStore((state) => state.status);
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
   const restoreSession = useAuthStore((state) => state.restoreSession);
+  const currentPath = useCurrentPath();
 
   useEffect(() => {
     void restoreSession();
@@ -20,7 +22,10 @@ export function App(): JSX.Element {
   useEffect(() => {
     const route =
       status === "authenticated" && user
-        ? getRouteForAuth({ role: user.role, status: "authenticated" })
+        ? getRouteForAuth(
+            { role: user.role, status: "authenticated" },
+            currentPath
+          )
         : getRouteForAuth({
             status: status === "checking" ? "checking" : "anonymous"
           });
@@ -30,7 +35,7 @@ export function App(): JSX.Element {
     }
 
     replaceRoute(route);
-  }, [status, user]);
+  }, [currentPath, status, user]);
 
   if (status === "checking") {
     return (

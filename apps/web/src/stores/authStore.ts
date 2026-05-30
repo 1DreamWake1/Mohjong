@@ -2,6 +2,7 @@ import type { AuthUser, LoginRequest } from "@mahjong/shared";
 import { create } from "zustand";
 
 import { getCurrentUser, login, logout } from "../api/client.js";
+import { useSocketStore } from "./socketStore.js";
 
 const TOKEN_STORAGE_KEY = "mahjong.authToken";
 
@@ -29,13 +30,18 @@ function storeToken(token: string): void {
   localStorage.setItem(TOKEN_STORAGE_KEY, token);
 }
 
+function clearClientSession(): void {
+  clearStoredToken();
+  useSocketStore.getState().disconnectSocket();
+}
+
 export const useAuthStore = create<AuthStore>((set, get) => ({
   status: "checking",
   token: null,
   user: null,
 
   clearSession: () => {
-    clearStoredToken();
+    clearClientSession();
     set({ status: "anonymous", token: null, user: null });
   },
 
@@ -50,13 +56,14 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       const user = await getCurrentUser(token);
       set({ status: "authenticated", token, user });
     } catch {
-      clearStoredToken();
+      clearClientSession();
       set({ status: "anonymous", token: null, user: null });
     }
   },
 
   signIn: async (input) => {
     const response = await login(input);
+    useSocketStore.getState().disconnectSocket();
     storeToken(response.token);
     set({
       status: "authenticated",
@@ -75,7 +82,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       }
     }
 
-    clearStoredToken();
+    clearClientSession();
     set({ status: "anonymous", token: null, user: null });
   }
 }));
