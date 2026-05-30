@@ -3,6 +3,7 @@ import type {
   CreatePlayerRequest,
   LoginRequest,
   LoginResponse,
+  LogoutResponse,
   PlayerListResponse,
   UserSummary
 } from "@mahjong/shared";
@@ -25,7 +26,9 @@ async function request<T>(
   options: RequestInit & { token?: string } = {}
 ): Promise<T> {
   const headers = new Headers(options.headers);
-  headers.set("content-type", "application/json");
+  if (options.body !== undefined) {
+    headers.set("content-type", "application/json");
+  }
   if (options.token) {
     headers.set("authorization", `Bearer ${options.token}`);
   }
@@ -64,6 +67,13 @@ export async function login(input: LoginRequest): Promise<LoginResponse> {
 export async function getCurrentUser(token: string): Promise<AuthUser> {
   const response = await request<{ user: AuthUser }>("/auth/me", { token });
   return response.user;
+}
+
+export async function logout(token: string): Promise<LogoutResponse> {
+  return request<LogoutResponse>("/auth/logout", {
+    method: "POST",
+    token
+  });
 }
 
 export async function listPlayers(token: string): Promise<UserSummary[]> {

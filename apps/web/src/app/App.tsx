@@ -7,7 +7,8 @@ import {
   deletePlayer,
   getCurrentUser,
   listPlayers,
-  login
+  login,
+  logout
 } from "../api/client.js";
 import styles from "./App.module.css";
 
@@ -20,6 +21,22 @@ type AuthState =
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
+    if (error.status === 400) {
+      return "请输入有效的用户名和密码";
+    }
+    if (error.status === 401) {
+      return "账号或密码不正确";
+    }
+    if (error.status === 403) {
+      return "当前账号没有权限执行此操作";
+    }
+    if (error.status === 404) {
+      return "要操作的账号不存在或已被删除";
+    }
+    if (error.status === 409) {
+      return "用户名已存在，请换一个用户名";
+    }
+
     return error.message;
   }
   if (error instanceof Error) {
@@ -58,7 +75,15 @@ export function App(): JSX.Element {
     setAuthState({ status: "authenticated", token, user });
   }
 
-  function handleLogout(): void {
+  async function handleLogout(): Promise<void> {
+    if (authState.status === "authenticated") {
+      try {
+        await logout(authState.token);
+      } catch {
+        // Local token removal is the source of truth for stateless logout.
+      }
+    }
+
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     setAuthState({ status: "anonymous" });
   }
@@ -95,7 +120,10 @@ export function App(): JSX.Element {
             </div>
           </dl>
           <div>
-            <button className={styles.secondaryButton} onClick={handleLogout}>
+            <button
+              className={styles.secondaryButton}
+              onClick={() => void handleLogout()}
+            >
               退出登录
             </button>
           </div>
@@ -108,8 +136,8 @@ export function App(): JSX.Element {
     <AdminUsersPage
       token={authState.token}
       user={authState.user}
-      onLogout={handleLogout}
-      onAuthExpired={handleLogout}
+      onLogout={() => void handleLogout()}
+      onAuthExpired={() => void handleLogout()}
     />
   );
 }
@@ -189,6 +217,9 @@ function AdminUsersPage(props: {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [deletingPlayerIds, setDeletingPlayerIds] = useState<Set<number>>(
+    () => new Set()
+  );
   const playerCountText = useMemo(
     () => `${players.length} 个玩家账号`,
     [players.length]
@@ -247,6 +278,7 @@ function AdminUsersPage(props: {
 
     setError(null);
     setNotice(null);
+    setDeletingPlayerIds((currentIds) => new Set(currentIds).add(player.id));
 
     try {
       await deletePlayer(props.token, player.id);
@@ -261,6 +293,12 @@ function AdminUsersPage(props: {
       }
 
       setError(getErrorMessage(deleteError));
+    } finally {
+      setDeletingPlayerIds((currentIds) => {
+        const nextIds = new Set(currentIds);
+        nextIds.delete(player.id);
+        return nextIds;
+      });
     }
   }
 
@@ -317,8 +355,12 @@ function AdminUsersPage(props: {
               <h2>玩家列表</h2>
               <p>{playerCountText}</p>
             </div>
-            <button className={styles.secondaryButton} onClick={refreshPlayers}>
-              刷新
+            <button
+              className={styles.secondaryButton}
+              disabled={isLoading}
+              onClick={refreshPlayers}
+            >
+              {isLoading ? "刷新中" : "刷新"}
             </button>
           </div>
 
@@ -336,9 +378,10 @@ function AdminUsersPage(props: {
                   </div>
                   <button
                     className={styles.dangerButton}
+                    disabled={deletingPlayerIds.has(player.id)}
                     onClick={() => void handleDeletePlayer(player)}
                   >
-                    删除
+                    {deletingPlayerIds.has(player.id) ? "删除中" : "删除"}
                   </button>
                 </article>
               ))}

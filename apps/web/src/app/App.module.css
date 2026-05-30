@@ -116,7 +116,9 @@
   color: #ffffff;
 }
 
-.primaryButton:disabled {
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.dangerButton:disabled {
   cursor: not-allowed;
   opacity: 0.68;
 }

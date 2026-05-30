@@ -14,6 +14,10 @@ export type LoginResponse = {
   user: AuthUser;
 };
 
+export type LogoutResponse = {
+  ok: true;
+};
+
 export type CurrentUserResponse = {
   user: AuthUser | null;
 };

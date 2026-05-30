@@ -1,5 +1,9 @@
 import type { FastifyInstance } from "fastify";
-import type { CreatePlayerRequest, LoginRequest } from "@mahjong/shared";
+import type {
+  CreatePlayerRequest,
+  LoginRequest,
+  LogoutResponse
+} from "@mahjong/shared";
 
 import type { AuthService } from "../modules/auth/authService.js";
 import type { createUserService } from "../modules/users/userService.js";
@@ -121,6 +125,10 @@ export async function registerRoutes(
 
     return { user };
   });
+
+  app.post("/auth/logout", async (): Promise<LogoutResponse> => ({
+    ok: true
+  }));
 
   app.get("/admin/players", async (request, reply) => {
     const user = await requireUser(

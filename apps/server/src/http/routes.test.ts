@@ -141,6 +141,20 @@ describe("routes", () => {
     await app.close();
   });
 
+  it("acknowledges stateless logout", async () => {
+    const { app } = await createTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/logout"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ ok: true });
+
+    await app.close();
+  });
+
   it("rejects invalid login and unauthenticated admin requests", async () => {
     const { app } = await createTestApp();
 
