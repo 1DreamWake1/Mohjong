@@ -1,11 +1,12 @@
 # 在线麻将项目文档索引
 
-当前文档按四个主题组织：
+当前文档按五个主题组织：
 
 1. 需求
 2. 架构设计
 3. 技术路线
 4. 开发计划
+5. 环境准备
 
 ## 1. 需求
 
@@ -97,17 +98,29 @@ ORM：Prisma
 5. 完成麻将游戏前端显示画面。
 6. 合并麻将游戏核心业务算法。
 
-## 5. 历史参考文档
+## 5. 环境准备
+
+主文档：
+
+- [environment-setup.md](./environment-setup.md)
+
+说明：
+
+- 记录 Ubuntu 26.04 虚拟机当前环境检查结果。
+- 汇总开发、测试和本地部署需要安装或确认的依赖。
+- 给出 pnpm、SQLite、端口、防火墙和后续可选部署组件建议。
+
+## 6. 历史参考文档
 
 以下文档为前期讨论沉淀，后续可以作为参考，不作为当前主线入口：
 
 - [initial-local-test-requirements-and-development-plan.md](./initial-local-test-requirements-and-development-plan.md)
 - [online-mahjong-architecture-and-development-plan.md](./online-mahjong-architecture-and-development-plan.md)
 
-后续如果文档继续扩展，建议优先更新四个主文档：
+后续如果文档继续扩展，建议优先更新五个主文档：
 
 - `requirements.md`
 - `architecture-design.md`
 - `technical-architecture.md`
 - `development-plan.md`
-
+- `environment-setup.md`
