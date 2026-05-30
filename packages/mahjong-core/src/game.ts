@@ -2,6 +2,7 @@ import type { Action, MeldInfo, PlayerView } from "@mahjong/shared";
 
 import { canHu } from "./hand.js";
 import { standardRuleConfig, type RuleConfig } from "./rules.js";
+import { calculateScore, type ScoreResult } from "./scoring.js";
 import { compareTiles, isSameTileType, isSuited, type Tile } from "./tiles.js";
 import { createSeededRandom, createShuffledWall, type RandomSource } from "./wall.js";
 
@@ -20,6 +21,7 @@ export type PendingDiscard = {
   nextSeatIndex: number;
   respondentSeatIndexes: [number, number, number];
   respondentCursor: number;
+  passedSeatIndexes: number[];
 };
 
 export type MahjongGameState = {
@@ -31,6 +33,7 @@ export type MahjongGameState = {
   rules: RuleConfig;
   winnerSeatIndex?: number;
   winningTile?: Tile;
+  score?: ScoreResult;
   endReason?: "hu" | "draw";
   pendingDiscard?: PendingDiscard;
 };
@@ -87,7 +90,8 @@ export function getLegalActions(state: MahjongGameState, seatIndex: number): Act
   }
 
   const player = getPlayer(state, seatIndex);
-  const actions: Action[] = player.handTiles.map((tile) => ({ type: "discard", tileId: tile.id }));
+  const discardActions: Action[] = player.handTiles.map((tile) => ({ type: "discard", tileId: tile.id }));
+  const actions: Action[] = [...getTurnGangActions(state, seatIndex), ...discardActions];
   const huResult = canHu(player.handTiles, state.rules);
 
   if (huResult.canHu) {
@@ -119,6 +123,7 @@ export function applyAction(state: MahjongGameState, seatIndex: number, action: 
     }
 
     const winningTile = player.handTiles.at(-1);
+    const score = calculateScore(player.handTiles, state.rules);
 
     return {
       ok: true,
@@ -128,15 +133,21 @@ export function applyAction(state: MahjongGameState, seatIndex: number, action: 
             phase: "ended",
             winnerSeatIndex: seatIndex,
             winningTile,
+            score,
             endReason: "hu"
           }
         : {
             ...state,
             phase: "ended",
             winnerSeatIndex: seatIndex,
+            score,
             endReason: "hu"
           }
     };
+  }
+
+  if (action.type === "gang") {
+    return applyTurnGangAction(state, seatIndex, action);
   }
 
   if (action.type !== "discard") {
@@ -224,27 +235,37 @@ function openClaimWindow(state: MahjongGameState, tile: Tile, fromSeatIndex: num
     fromSeatIndex,
     nextSeatIndex,
     respondentSeatIndexes: [nextSeatIndex, (fromSeatIndex + 2) % 4, (fromSeatIndex + 3) % 4],
-    respondentCursor: 0
+    respondentCursor: 0,
+    passedSeatIndexes: []
   };
-  state.currentTurn = nextSeatIndex;
+  state.currentTurn = findBestRespondentSeatIndex(state) ?? nextSeatIndex;
 }
 
 function getClaimActions(state: MahjongGameState, seatIndex: number): Action[] {
   const pendingDiscard = state.pendingDiscard;
 
-  if (!pendingDiscard || pendingDiscard.respondentSeatIndexes[pendingDiscard.respondentCursor] !== seatIndex) {
+  if (!pendingDiscard || pendingDiscard.passedSeatIndexes.includes(seatIndex) || findBestRespondentSeatIndex(state) !== seatIndex) {
+    return [];
+  }
+
+  return filterHighestPriorityClaimActions([{ type: "pass" }, ...getAvailableClaimActionsForSeat(state, seatIndex)]);
+}
+
+function getAvailableClaimActionsForSeat(state: MahjongGameState, seatIndex: number): Action[] {
+  const pendingDiscard = state.pendingDiscard;
+
+  if (!pendingDiscard || pendingDiscard.passedSeatIndexes.includes(seatIndex)) {
     return [];
   }
 
   const player = getPlayer(state, seatIndex);
-  const actions: Action[] = [{ type: "pass" }];
+  const actions: Action[] = [];
   const handWithDiscard = [...player.handTiles, pendingDiscard.tile];
+  const sameTiles = player.handTiles.filter((tile) => isSameTileType(tile, pendingDiscard.tile));
 
   if (canHu(handWithDiscard, state.rules).canHu) {
-    actions.unshift({ type: "hu", tileId: pendingDiscard.tile.id });
+    actions.push({ type: "hu", tileId: pendingDiscard.tile.id });
   }
-
-  const sameTiles = player.handTiles.filter((tile) => isSameTileType(tile, pendingDiscard.tile));
 
   if (state.rules.allowGang && sameTiles.length >= 3) {
     actions.push({
@@ -276,7 +297,9 @@ function applyClaimAction(state: MahjongGameState, seatIndex: number, action: Ac
     return { ok: false, error: "No discard is waiting for claim", state };
   }
 
-  if (pendingDiscard.respondentSeatIndexes[pendingDiscard.respondentCursor] !== seatIndex) {
+  const bestRespondentSeatIndex = findBestRespondentSeatIndex(state);
+
+  if (bestRespondentSeatIndex !== undefined && bestRespondentSeatIndex !== seatIndex) {
     return { ok: false, error: "Player is not the current claim respondent", state };
   }
 
@@ -288,9 +311,11 @@ function applyClaimAction(state: MahjongGameState, seatIndex: number, action: Ac
       return { ok: false, error: "No discard is waiting for claim", state };
     }
 
-    nextPendingDiscard.respondentCursor += 1;
+    nextPendingDiscard.passedSeatIndexes.push(seatIndex);
 
-    if (nextPendingDiscard.respondentCursor >= nextPendingDiscard.respondentSeatIndexes.length) {
+    const nextRespondentSeatIndex = findBestRespondentSeatIndex(nextState);
+
+    if (nextRespondentSeatIndex === undefined) {
       const nextSeatIndex = nextPendingDiscard.nextSeatIndex;
       delete nextState.pendingDiscard;
       nextState.currentTurn = nextSeatIndex;
@@ -298,7 +323,7 @@ function applyClaimAction(state: MahjongGameState, seatIndex: number, action: Ac
       return { ok: true, state: nextState };
     }
 
-    nextState.currentTurn = nextPendingDiscard.respondentSeatIndexes[nextPendingDiscard.respondentCursor] ?? nextState.currentTurn;
+    nextState.currentTurn = nextRespondentSeatIndex;
     return { ok: true, state: nextState };
   }
 
@@ -310,6 +335,8 @@ function applyClaimAction(state: MahjongGameState, seatIndex: number, action: Ac
       return { ok: false, error: "Claimed discard cannot complete a winning hand", state };
     }
 
+    const score = calculateScore([...player.handTiles, pendingDiscard.tile], state.rules);
+
     return {
       ok: true,
       state: {
@@ -317,6 +344,7 @@ function applyClaimAction(state: MahjongGameState, seatIndex: number, action: Ac
         phase: "ended",
         winnerSeatIndex: seatIndex,
         winningTile: pendingDiscard.tile,
+        score,
         endReason: "hu"
       }
     };
@@ -368,6 +396,129 @@ function applyClaimAction(state: MahjongGameState, seatIndex: number, action: Ac
   }
 
   return { ok: true, state: nextState };
+}
+
+function getTurnGangActions(state: MahjongGameState, seatIndex: number): Action[] {
+  const player = getPlayer(state, seatIndex);
+  const actions: Action[] = [];
+  const handGroups = new Map<string, Tile[]>();
+
+  for (const tile of player.handTiles) {
+    const tiles = handGroups.get(tile.code) ?? [];
+    tiles.push(tile);
+    handGroups.set(tile.code, tiles);
+  }
+
+  if (state.rules.allowGang) {
+    for (const tiles of handGroups.values()) {
+      if (tiles.length === 4) {
+        actions.push({ type: "gang", tileIds: tiles.map((tile) => tile.id) });
+      }
+    }
+
+    for (const meld of player.publicMelds) {
+      if (meld.type !== "peng") {
+        continue;
+      }
+
+      const firstMeldTile = meld.tiles[0];
+      const handTile = firstMeldTile ? player.handTiles.find((tile) => isSameTileType(tile, firstMeldTile as Tile)) : undefined;
+
+      if (handTile) {
+        actions.push({ type: "gang", tileIds: [handTile.id] });
+      }
+    }
+  }
+
+  return actions;
+}
+
+function applyTurnGangAction(state: MahjongGameState, seatIndex: number, action: Action): ApplyActionResult {
+  if (!action.tileIds || action.tileIds.length === 0) {
+    return { ok: false, error: "Gang action must include tileIds", state };
+  }
+
+  const gangTileIds = action.tileIds;
+  const legalAction = getTurnGangActions(state, seatIndex).find((candidate) => haveSameTileIds(candidate.tileIds, gangTileIds));
+
+  if (!legalAction) {
+    return { ok: false, error: "Illegal gang action", state };
+  }
+
+  const nextState = cloneState(state);
+  const player = getPlayer(nextState, seatIndex);
+  const removedTiles = removeTilesFromHand(player, gangTileIds);
+
+  if (!removedTiles) {
+    return { ok: false, error: "Gang action references tiles outside player's hand", state };
+  }
+
+  if (removedTiles.length === 4) {
+    player.publicMelds.push({
+      type: "gang",
+      ownerSeatIndex: seatIndex,
+      tiles: removedTiles.sort(compareTiles)
+    });
+  } else if (removedTiles.length === 1) {
+    const tile = removedTiles[0];
+    const meld = tile
+      ? player.publicMelds.find((candidate) => candidate.type === "peng" && candidate.tiles.some((meldTile) => isSameTileType(meldTile as Tile, tile)))
+      : undefined;
+
+    if (!tile || !meld) {
+      return { ok: false, error: "Added gang requires an existing peng meld", state };
+    }
+
+    meld.type = "gang";
+    meld.tiles = [...meld.tiles, tile].sort((a, b) => compareTiles(a as Tile, b as Tile));
+  }
+
+  drawOrEnd(nextState, seatIndex);
+  return { ok: true, state: nextState };
+}
+
+function findBestRespondentSeatIndex(state: MahjongGameState): number | undefined {
+  const pendingDiscard = state.pendingDiscard;
+
+  if (!pendingDiscard) {
+    return undefined;
+  }
+
+  let bestSeatIndex: number | undefined;
+  let bestPriority = 0;
+
+  for (const seatIndex of pendingDiscard.respondentSeatIndexes) {
+    const priority = Math.max(0, ...getAvailableClaimActionsForSeat(state, seatIndex).map(getClaimPriority));
+
+    if (priority > bestPriority) {
+      bestSeatIndex = seatIndex;
+      bestPriority = priority;
+    }
+  }
+
+  return bestSeatIndex;
+}
+
+function filterHighestPriorityClaimActions(actions: Action[]): Action[] {
+  const maxPriority = Math.max(0, ...actions.map(getClaimPriority));
+
+  return actions.filter((action) => action.type === "pass" || getClaimPriority(action) === maxPriority);
+}
+
+function getClaimPriority(action: Action): number {
+  if (action.type === "hu") {
+    return 3;
+  }
+
+  if (action.type === "peng" || action.type === "gang") {
+    return 2;
+  }
+
+  if (action.type === "chi") {
+    return 1;
+  }
+
+  return 0;
 }
 
 function getChiActions(handTiles: readonly Tile[], discardedTile: Tile): Action[] {
@@ -492,7 +643,8 @@ function cloneState(state: MahjongGameState): MahjongGameState {
       ? {
           pendingDiscard: {
             ...state.pendingDiscard,
-            respondentSeatIndexes: [...state.pendingDiscard.respondentSeatIndexes] as [number, number, number]
+            respondentSeatIndexes: [...state.pendingDiscard.respondentSeatIndexes] as [number, number, number],
+            passedSeatIndexes: [...state.pendingDiscard.passedSeatIndexes]
           }
         }
       : {})

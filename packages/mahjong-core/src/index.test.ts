@@ -224,13 +224,10 @@ describe("mahjong-core game reducer", () => {
       throw new Error(discardResult.error);
     }
 
-    const passResult = applyAction(discardResult.state, 1, { type: "pass" });
+    expect(discardResult.state.currentTurn).toBe(2);
+    expect(getLegalActions(discardResult.state, 1)).toEqual([]);
 
-    if (!passResult.ok) {
-      throw new Error(passResult.error);
-    }
-
-    const pengAction = getLegalActions(passResult.state, 2).find((action) => action.type === "peng");
+    const pengAction = getLegalActions(discardResult.state, 2).find((action) => action.type === "peng");
 
     expect(pengAction).toBeDefined();
 
@@ -238,7 +235,7 @@ describe("mahjong-core game reducer", () => {
       return;
     }
 
-    const pengResult = applyAction(passResult.state, 2, pengAction);
+    const pengResult = applyAction(discardResult.state, 2, pengAction);
 
     expect(pengResult.ok).toBe(true);
 
@@ -269,19 +266,9 @@ describe("mahjong-core game reducer", () => {
       throw new Error(discardResult.error);
     }
 
-    const firstPass = applyAction(discardResult.state, 1, { type: "pass" });
+    expect(discardResult.state.currentTurn).toBe(3);
 
-    if (!firstPass.ok) {
-      throw new Error(firstPass.error);
-    }
-
-    const secondPass = applyAction(firstPass.state, 2, { type: "pass" });
-
-    if (!secondPass.ok) {
-      throw new Error(secondPass.error);
-    }
-
-    const gangAction = getLegalActions(secondPass.state, 3).find((action) => action.type === "gang");
+    const gangAction = getLegalActions(discardResult.state, 3).find((action) => action.type === "gang");
 
     expect(gangAction).toBeDefined();
 
@@ -289,7 +276,7 @@ describe("mahjong-core game reducer", () => {
       return;
     }
 
-    const gangResult = applyAction(secondPass.state, 3, gangAction);
+    const gangResult = applyAction(discardResult.state, 3, gangAction);
 
     expect(gangResult.ok).toBe(true);
 
@@ -300,6 +287,123 @@ describe("mahjong-core game reducer", () => {
     expect(gangResult.state.players[3].publicMelds[0]?.type).toBe("gang");
     expect(gangResult.state.players[3].handTiles).toHaveLength(1);
     expect(gangResult.state.players[3].handTiles[0]?.code).toBe("east");
+  });
+
+  it("prioritizes hu over peng and chi, then falls back after pass", () => {
+    const state = createClaimScenario("red", {
+      1: ["m1", "m2"],
+      2: ["red", "red"],
+      3: ["m1", "m2", "m3", "m4", "m5", "m6", "p2", "p3", "p4", "s7", "s8", "s9", "red"]
+    });
+    const discardedTileId = state.players[0].handTiles[0]?.id;
+
+    if (!discardedTileId) {
+      throw new Error("Expected discarder to have a tile");
+    }
+
+    const discardResult = applyAction(state, 0, { type: "discard", tileId: discardedTileId });
+
+    if (!discardResult.ok) {
+      throw new Error(discardResult.error);
+    }
+
+    expect(discardResult.state.currentTurn).toBe(3);
+    expect(getLegalActions(discardResult.state, 3).map((action) => action.type)).toEqual(["pass", "hu"]);
+    expect(getLegalActions(discardResult.state, 2)).toEqual([]);
+
+    const passResult = applyAction(discardResult.state, 3, { type: "pass" });
+
+    if (!passResult.ok) {
+      throw new Error(passResult.error);
+    }
+
+    expect(passResult.state.currentTurn).toBe(2);
+    expect(getLegalActions(passResult.state, 2).some((action) => action.type === "peng")).toBe(true);
+  });
+
+  it("attaches score when a player wins", () => {
+    const state = createInitialGame({ seed: 7 });
+
+    state.currentTurn = 0;
+    state.players[0].handTiles = handFromCodes(["m2", "m3", "m4", "m3", "m4", "m5", "p4", "p5", "p6", "s6", "s7", "s8", "p8", "p8"]);
+
+    const result = applyAction(state, 0, { type: "hu" });
+
+    expect(result.ok).toBe(true);
+
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.state.phase).toBe("ended");
+    expect(result.state.score).toMatchObject({
+      canHu: true,
+      fanTotal: 2,
+      totalPoints: 40
+    });
+  });
+
+  it("allows concealed gang and draws a supplement tile", () => {
+    const state = createInitialGame({ seed: 8 });
+
+    state.currentTurn = 0;
+    state.wall = [createTile("south", 0)];
+    state.players[0].handTiles = handFromCodes(["east", "east", "east", "east"]);
+
+    const gangAction = getLegalActions(state, 0).find((action) => action.type === "gang");
+
+    expect(gangAction).toBeDefined();
+
+    if (!gangAction) {
+      return;
+    }
+
+    const result = applyAction(state, 0, gangAction);
+
+    expect(result.ok).toBe(true);
+
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.state.players[0].publicMelds[0]?.type).toBe("gang");
+    expect(result.state.players[0].handTiles[0]?.code).toBe("south");
+  });
+
+  it("allows added gang from an existing peng meld", () => {
+    const state = createInitialGame({ seed: 9 });
+    const pengTiles = handFromCodes(["red", "red", "red"]);
+
+    state.currentTurn = 0;
+    state.wall = [createTile("east", 0)];
+    state.players[0].handTiles = handFromCodes(["red"]);
+    state.players[0].publicMelds = [
+      {
+        type: "peng",
+        ownerSeatIndex: 0,
+        tiles: pengTiles
+      }
+    ];
+
+    const gangAction = getLegalActions(state, 0).find((action) => action.type === "gang");
+
+    expect(gangAction).toBeDefined();
+
+    if (!gangAction) {
+      return;
+    }
+
+    const result = applyAction(state, 0, gangAction);
+
+    expect(result.ok).toBe(true);
+
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.state.players[0].publicMelds[0]?.type).toBe("gang");
+    expect(result.state.players[0].publicMelds[0]?.tiles).toHaveLength(4);
+    expect(result.state.players[0].handTiles[0]?.code).toBe("east");
   });
 
   it("draws for the next player when every respondent passes", () => {
@@ -318,19 +422,17 @@ describe("mahjong-core game reducer", () => {
       throw new Error(discardResult.error);
     }
 
-    const firstPass = applyAction(discardResult.state, 1, { type: "pass" });
-    const secondPass = firstPass.ok ? applyAction(firstPass.state, 2, { type: "pass" }) : firstPass;
-    const thirdPass = secondPass.ok ? applyAction(secondPass.state, 3, { type: "pass" }) : secondPass;
+    const passResult = applyAction(discardResult.state, 1, { type: "pass" });
 
-    expect(thirdPass.ok).toBe(true);
+    expect(passResult.ok).toBe(true);
 
-    if (!thirdPass.ok) {
+    if (!passResult.ok) {
       return;
     }
 
-    expect(thirdPass.state.pendingDiscard).toBeUndefined();
-    expect(thirdPass.state.currentTurn).toBe(1);
-    expect(thirdPass.state.players[1].handTiles[0]?.code).toBe("south");
+    expect(passResult.state.pendingDiscard).toBeUndefined();
+    expect(passResult.state.currentTurn).toBe(1);
+    expect(passResult.state.players[1].handTiles[0]?.code).toBe("south");
   });
 });
 
@@ -346,6 +448,17 @@ describe("mahjong-core basic bot", () => {
 
     expect(results.every((result) => result.state.phase === "ended")).toBe(true);
     expect(results.every((result) => result.turnCount <= 336)).toBe(true);
+  });
+
+  it("runs long bot simulations without deadlocks", () => {
+    const results = Array.from({ length: 50 }, (_, index) => runBasicBotGame(index + 101));
+    const endedCount = results.filter((result) => result.state.phase === "ended").length;
+    const winCount = results.filter((result) => result.state.endReason === "hu").length;
+    const drawCount = results.filter((result) => result.state.endReason === "draw").length;
+
+    expect(endedCount).toBe(50);
+    expect(winCount + drawCount).toBe(50);
+    expect(Math.max(...results.map((result) => result.turnCount))).toBeLessThanOrEqual(336);
   });
 });
 
