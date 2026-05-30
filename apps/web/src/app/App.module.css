@@ -1,5 +1,6 @@
 .shell,
-.adminShell {
+.adminShell,
+.lobbyShell {
   background: #f3f6f8;
   color: #17202a;
   min-height: 100vh;
@@ -12,7 +13,8 @@
   padding: 24px;
 }
 
-.adminShell {
+.adminShell,
+.lobbyShell {
   padding: 28px;
 }
 
@@ -38,7 +40,8 @@
 
 .loginCopy h1,
 .noticePanel h1,
-.adminHeader h1 {
+.adminHeader h1,
+.lobbyHeader h1 {
   font-size: 2.25rem;
   line-height: 1.15;
   margin: 0 0 12px;
@@ -159,7 +162,8 @@
   color: #526171;
 }
 
-.adminHeader {
+.adminHeader,
+.lobbyHeader {
   align-items: center;
   display: flex;
   gap: 20px;
@@ -219,6 +223,61 @@
   grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
   margin: 0 auto;
   max-width: 1120px;
+}
+
+.lobbyGrid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+  margin: 0 auto;
+  max-width: 1120px;
+}
+
+.lobbyPanel {
+  background: #ffffff;
+  border: 1px solid #d7dee8;
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgb(20 31 43 / 8%);
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+  padding: 22px;
+}
+
+.lobbyPanel h2 {
+  font-size: 1.5rem;
+  line-height: 1.2;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.panelLabel {
+  color: #0f766e;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.panelHeader {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.statusBadge {
+  background: #fef3c7;
+  border-radius: 999px;
+  color: #92400e;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.actionStack {
+  display: grid;
+  gap: 10px;
 }
 
 .tablePanel {
@@ -294,17 +353,20 @@
 
 @media (max-width: 760px) {
   .shell,
-  .adminShell {
+  .adminShell,
+  .lobbyShell {
     padding: 16px;
   }
 
   .loginLayout,
   .adminGrid,
+  .lobbyGrid,
   .accountSummary {
     grid-template-columns: 1fr;
   }
 
   .adminHeader,
+  .lobbyHeader,
   .tableHeader,
   .playerRow {
     align-items: stretch;
