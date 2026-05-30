@@ -2,7 +2,7 @@ import type { UserSummary } from "@mahjong/shared";
 import { describe, expect, it } from "vitest";
 
 import { createApp } from "../app.js";
-import { hashPassword } from "../modules/auth/password.js";
+import { hashPassword, verifyPassword } from "../modules/auth/password.js";
 import type {
   CreateUserInput,
   StoredUser,
@@ -55,6 +55,9 @@ class MemoryUserRepository implements UserRepository {
   async listPlayers(): Promise<UserSummary[]> {
     return [...this.users.values()]
       .filter((user) => user.role === "player")
+      .sort((leftUser, rightUser) =>
+        leftUser.username.localeCompare(rightUser.username)
+      )
       .map((user) => ({
         id: user.id,
         username: user.username,
@@ -62,6 +65,23 @@ class MemoryUserRepository implements UserRepository {
         createdAt: user.createdAt,
         updatedAt: user.updatedAt
       }));
+  }
+
+  async updatePlayerPassword(
+    id: number,
+    passwordHash: string
+  ): Promise<boolean> {
+    const user = this.users.get(id);
+    if (!user || user.role !== "player") {
+      return false;
+    }
+
+    this.users.set(id, {
+      ...user,
+      passwordHash,
+      updatedAt: new Date().toISOString()
+    });
+    return true;
   }
 }
 
@@ -227,6 +247,91 @@ describe("routes", () => {
       url: `/admin/players/${createdPlayer.id}`
     });
     expect(deleteResponse.statusCode).toBe(204);
+
+    await app.close();
+  });
+
+  it("allows admins to reset player passwords", async () => {
+    const { app, userRepository } = await createTestApp();
+    const loginResponse = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: {
+        username: "admin",
+        password: "admin123"
+      }
+    });
+    const token = loginResponse.json<{ token: string }>().token;
+    const player = await userRepository.findByUsername("player1");
+
+    const resetResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${token}`
+      },
+      method: "PATCH",
+      url: `/admin/players/${player?.id ?? 0}/password`,
+      payload: {
+        password: "newpass123"
+      }
+    });
+
+    expect(resetResponse.statusCode).toBe(200);
+    expect(resetResponse.json()).toEqual({ ok: true });
+
+    const updatedPlayer = await userRepository.findByUsername("player1");
+    expect(updatedPlayer).not.toBeNull();
+    expect(
+      await verifyPassword("newpass123", updatedPlayer?.passwordHash ?? "")
+    ).toBe(true);
+
+    const playerLoginResponse = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: {
+        username: "player1",
+        password: "newpass123"
+      }
+    });
+    expect(playerLoginResponse.statusCode).toBe(200);
+
+    await app.close();
+  });
+
+  it("rejects invalid player password reset requests", async () => {
+    const { app } = await createTestApp();
+    const loginResponse = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: {
+        username: "admin",
+        password: "admin123"
+      }
+    });
+    const token = loginResponse.json<{ token: string }>().token;
+
+    const invalidResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${token}`
+      },
+      method: "PATCH",
+      url: "/admin/players/2/password",
+      payload: {
+        password: "123"
+      }
+    });
+    expect(invalidResponse.statusCode).toBe(400);
+
+    const notFoundResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${token}`
+      },
+      method: "PATCH",
+      url: "/admin/players/999/password",
+      payload: {
+        password: "newpass123"
+      }
+    });
+    expect(notFoundResponse.statusCode).toBe(404);
 
     await app.close();
   });

@@ -1,4 +1,8 @@
-import type { CreatePlayerRequest, UserSummary } from "@mahjong/shared";
+import type {
+  CreatePlayerRequest,
+  ResetPlayerPasswordRequest,
+  UserSummary
+} from "@mahjong/shared";
 
 import { hashPassword } from "../auth/password.js";
 import type { UserRepository } from "./userRepository.js";
@@ -47,6 +51,22 @@ export function createUserService(userRepository: UserRepository) {
 
     async listPlayers(): Promise<UserSummary[]> {
       return userRepository.listPlayers();
+    },
+
+    async resetPlayerPassword(
+      id: number,
+      input: ResetPlayerPasswordRequest
+    ): Promise<"ok" | "invalid_input" | "not_found"> {
+      if (!isValidPassword(input.password)) {
+        return "invalid_input";
+      }
+
+      const updated = await userRepository.updatePlayerPassword(
+        id,
+        await hashPassword(input.password)
+      );
+
+      return updated ? "ok" : "not_found";
     }
   };
 }

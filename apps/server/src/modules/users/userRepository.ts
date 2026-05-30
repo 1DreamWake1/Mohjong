@@ -19,6 +19,7 @@ export type UserRepository = {
   findById(id: number): Promise<StoredUser | null>;
   findByUsername(username: string): Promise<StoredUser | null>;
   listPlayers(): Promise<UserSummary[]>;
+  updatePlayerPassword(id: number, passwordHash: string): Promise<boolean>;
 };
 
 type PrismaUser = Awaited<ReturnType<PrismaClient["user"]["findUnique"]>>;
@@ -93,11 +94,23 @@ export function createPrismaUserRepository(
 
     async listPlayers() {
       const users = await client.user.findMany({
-        orderBy: { createdAt: "desc" },
+        orderBy: { username: "asc" },
         where: { role: "player" }
       });
 
       return users.map((user) => toUserSummary(toStoredUser(user)));
+    },
+
+    async updatePlayerPassword(id, passwordHash) {
+      const updated = await client.user.updateMany({
+        data: { passwordHash },
+        where: {
+          id,
+          role: "player"
+        }
+      });
+
+      return updated.count > 0;
     }
   };
 }

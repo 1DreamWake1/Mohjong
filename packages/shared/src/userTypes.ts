@@ -13,6 +13,10 @@ export type CreatePlayerRequest = {
   password: string;
 };
 
+export type ResetPlayerPasswordRequest = {
+  password: string;
+};
+
 export type PlayerListResponse = {
   players: UserSummary[];
 };

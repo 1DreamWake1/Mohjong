@@ -8,7 +8,8 @@ import {
   getCurrentUser,
   listPlayers,
   login,
-  logout
+  logout,
+  resetPlayerPassword
 } from "../api/client.js";
 import styles from "./App.module.css";
 
@@ -211,6 +212,7 @@ function AdminUsersPage(props: {
   user: AuthUser;
 }): JSX.Element {
   const [players, setPlayers] = useState<UserSummary[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
@@ -220,10 +222,26 @@ function AdminUsersPage(props: {
   const [deletingPlayerIds, setDeletingPlayerIds] = useState<Set<number>>(
     () => new Set()
   );
-  const playerCountText = useMemo(
-    () => `${players.length} 个玩家账号`,
-    [players.length]
+  const [resettingPlayerIds, setResettingPlayerIds] = useState<Set<number>>(
+    () => new Set()
   );
+  const filteredPlayers = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const sortedPlayers = [...players].sort((leftPlayer, rightPlayer) =>
+      leftPlayer.username.localeCompare(rightPlayer.username)
+    );
+
+    if (!normalizedQuery) {
+      return sortedPlayers;
+    }
+
+    return sortedPlayers.filter((player) =>
+      player.username.toLowerCase().includes(normalizedQuery)
+    );
+  }, [players, searchQuery]);
+  const playerCountText = searchQuery.trim()
+    ? `${filteredPlayers.length} / ${players.length} 个玩家账号`
+    : `${players.length} 个玩家账号`;
 
   async function refreshPlayers(): Promise<void> {
     setError(null);
@@ -302,6 +320,39 @@ function AdminUsersPage(props: {
     }
   }
 
+  async function handleResetPassword(player: UserSummary): Promise<void> {
+    const nextPassword = window.prompt(
+      `请输入玩家 ${player.username} 的新密码（至少 6 位）`
+    );
+    if (nextPassword === null) {
+      return;
+    }
+
+    setError(null);
+    setNotice(null);
+    setResettingPlayerIds((currentIds) => new Set(currentIds).add(player.id));
+
+    try {
+      await resetPlayerPassword(props.token, player.id, {
+        password: nextPassword
+      });
+      setNotice(`已重置玩家 ${player.username} 的密码`);
+    } catch (resetError) {
+      if (isUnauthorizedError(resetError)) {
+        props.onAuthExpired();
+        return;
+      }
+
+      setError(getErrorMessage(resetError));
+    } finally {
+      setResettingPlayerIds((currentIds) => {
+        const nextIds = new Set(currentIds);
+        nextIds.delete(player.id);
+        return nextIds;
+      });
+    }
+  }
+
   return (
     <main className={styles.adminShell}>
       <header className={styles.adminHeader}>
@@ -355,34 +406,54 @@ function AdminUsersPage(props: {
               <h2>玩家列表</h2>
               <p>{playerCountText}</p>
             </div>
-            <button
-              className={styles.secondaryButton}
-              disabled={isLoading}
-              onClick={refreshPlayers}
-            >
-              {isLoading ? "刷新中" : "刷新"}
-            </button>
+            <div className={styles.tableTools}>
+              <input
+                aria-label="搜索玩家"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="搜索玩家"
+                type="search"
+                value={searchQuery}
+              />
+              <button
+                className={styles.secondaryButton}
+                disabled={isLoading}
+                onClick={refreshPlayers}
+              >
+                {isLoading ? "刷新中" : "刷新"}
+              </button>
+            </div>
           </div>
 
           {isLoading ? (
             <p className={styles.emptyState}>正在加载玩家列表</p>
           ) : players.length === 0 ? (
             <p className={styles.emptyState}>还没有玩家账号</p>
+          ) : filteredPlayers.length === 0 ? (
+            <p className={styles.emptyState}>没有匹配的玩家账号</p>
           ) : (
             <div className={styles.playerList}>
-              {players.map((player) => (
+              {filteredPlayers.map((player) => (
                 <article className={styles.playerRow} key={player.id}>
-                  <div>
+                  <div className={styles.playerInfo}>
                     <strong>{player.username}</strong>
                     <span>创建于 {new Date(player.createdAt).toLocaleString()}</span>
                   </div>
-                  <button
-                    className={styles.dangerButton}
-                    disabled={deletingPlayerIds.has(player.id)}
-                    onClick={() => void handleDeletePlayer(player)}
-                  >
-                    {deletingPlayerIds.has(player.id) ? "删除中" : "删除"}
-                  </button>
+                  <div className={styles.playerActions}>
+                    <button
+                      className={styles.secondaryButton}
+                      disabled={resettingPlayerIds.has(player.id)}
+                      onClick={() => void handleResetPassword(player)}
+                    >
+                      {resettingPlayerIds.has(player.id) ? "重置中" : "重置密码"}
+                    </button>
+                    <button
+                      className={styles.dangerButton}
+                      disabled={deletingPlayerIds.has(player.id)}
+                      onClick={() => void handleDeletePlayer(player)}
+                    >
+                      {deletingPlayerIds.has(player.id) ? "删除中" : "删除"}
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>

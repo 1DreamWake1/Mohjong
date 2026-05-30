@@ -5,6 +5,7 @@ import type {
   LoginResponse,
   LogoutResponse,
   PlayerListResponse,
+  ResetPlayerPasswordRequest,
   UserSummary
 } from "@mahjong/shared";
 
@@ -99,6 +100,18 @@ export async function deletePlayer(
 ): Promise<void> {
   await request<void>(`/admin/players/${playerId}`, {
     method: "DELETE",
+    token
+  });
+}
+
+export async function resetPlayerPassword(
+  token: string,
+  playerId: number,
+  input: ResetPlayerPasswordRequest
+): Promise<void> {
+  await request<{ ok: true }>(`/admin/players/${playerId}/password`, {
+    body: JSON.stringify(input),
+    method: "PATCH",
     token
   });
 }

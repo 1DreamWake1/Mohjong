@@ -2,7 +2,8 @@ import type { FastifyInstance } from "fastify";
 import type {
   CreatePlayerRequest,
   LoginRequest,
-  LogoutResponse
+  LogoutResponse,
+  ResetPlayerPasswordRequest
 } from "@mahjong/shared";
 
 import type { AuthService } from "../modules/auth/authService.js";
@@ -47,6 +48,21 @@ function parseCreatePlayerRequest(value: unknown): CreatePlayerRequest | null {
   }
 
   return { username, password };
+}
+
+function parseResetPlayerPasswordRequest(
+  value: unknown
+): ResetPlayerPasswordRequest | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const { password } = value;
+  if (typeof password !== "string") {
+    return null;
+  }
+
+  return { password };
 }
 
 function parseIdParam(value: unknown): number | null {
@@ -200,5 +216,40 @@ export async function registerRoutes(
     return deleted
       ? reply.code(204).send()
       : reply.code(404).send({ message: "Player not found" });
+  });
+
+  app.patch("/admin/players/:id/password", async (request, reply) => {
+    const user = await requireUser(
+      app,
+      services,
+      request.headers.authorization
+    );
+
+    if (!user) {
+      return reply.code(401).send({ message: "Unauthorized" });
+    }
+    if (user.role !== "admin") {
+      return reply.code(403).send({ message: "Forbidden" });
+    }
+
+    const id = parseIdParam(request.params);
+    if (!id) {
+      return reply.code(400).send({ message: "Invalid player id" });
+    }
+
+    const input = parseResetPlayerPasswordRequest(request.body);
+    if (!input) {
+      return reply.code(400).send({ message: "Invalid password request" });
+    }
+
+    const result = await services.userService.resetPlayerPassword(id, input);
+    if (result === "invalid_input") {
+      return reply.code(400).send({ message: "Invalid password" });
+    }
+    if (result === "not_found") {
+      return reply.code(404).send({ message: "Player not found" });
+    }
+
+    return { ok: true };
   });
 }
