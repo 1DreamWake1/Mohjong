@@ -1,14 +1,32 @@
+.shell,
+.adminShell {
+  background: #f3f6f8;
+  color: #17202a;
+  min-height: 100vh;
+}
+
 .shell {
   align-items: center;
-  background: #eef2f6;
-  color: #17202a;
   display: flex;
-  min-height: 100vh;
+  justify-content: center;
   padding: 24px;
 }
 
-.panel {
-  max-width: 720px;
+.adminShell {
+  padding: 28px;
+}
+
+.loginLayout {
+  align-items: center;
+  display: grid;
+  gap: 40px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  max-width: 960px;
+  width: 100%;
+}
+
+.loginCopy {
+  max-width: 520px;
 }
 
 .kicker {
@@ -18,40 +36,218 @@
   margin: 0 0 8px;
 }
 
-.panel h1 {
+.loginCopy h1,
+.noticePanel h1,
+.adminHeader h1 {
   font-size: 2.25rem;
   line-height: 1.15;
   margin: 0 0 12px;
 }
 
-.panel p {
+.loginCopy p,
+.noticePanel p {
+  color: #526171;
   font-size: 1rem;
   line-height: 1.7;
   margin: 0 0 24px;
 }
 
-.statusList {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(2, minmax(0, 160px));
-  margin: 0;
-}
-
-.statusList div {
+.formPanel,
+.tablePanel,
+.noticePanel {
   background: #ffffff;
   border: 1px solid #d7dee8;
   border-radius: 8px;
-  padding: 12px;
+  box-shadow: 0 16px 40px rgb(20 31 43 / 8%);
 }
 
-.statusList dt {
-  color: #526171;
-  font-size: 0.8125rem;
-  margin-bottom: 4px;
+.formPanel,
+.noticePanel {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
 }
 
-.statusList dd {
+.formPanel h2,
+.tablePanel h2 {
   font-size: 1.125rem;
-  font-weight: 700;
   margin: 0;
+}
+
+.formPanel label {
+  color: #374454;
+  display: grid;
+  font-size: 0.875rem;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.formPanel input {
+  border: 1px solid #c7d1dc;
+  border-radius: 6px;
+  color: #17202a;
+  min-height: 44px;
+  padding: 10px 12px;
+}
+
+.formPanel input:focus {
+  border-color: #0f766e;
+  outline: 3px solid rgb(15 118 110 / 14%);
+}
+
+.primaryButton,
+.secondaryButton,
+.dangerButton {
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 700;
+  min-height: 40px;
+  padding: 10px 14px;
+}
+
+.primaryButton {
+  background: #0f766e;
+  color: #ffffff;
+}
+
+.primaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
+.secondaryButton {
+  background: #e7edf2;
+  color: #243241;
+}
+
+.dangerButton {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.error,
+.notice,
+.emptyState,
+.loading {
+  border-radius: 6px;
+  font-size: 0.875rem;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.notice {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.emptyState,
+.loading {
+  background: #eef2f6;
+  color: #526171;
+}
+
+.adminHeader {
+  align-items: center;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  margin: 0 auto 24px;
+  max-width: 1120px;
+}
+
+.headerActions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.headerActions span {
+  color: #526171;
+  font-weight: 700;
+}
+
+.adminGrid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  margin: 0 auto;
+  max-width: 1120px;
+}
+
+.tablePanel {
+  min-width: 0;
+  padding: 20px;
+}
+
+.tableHeader {
+  align-items: center;
+  border-bottom: 1px solid #e1e7ee;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+}
+
+.tableHeader p {
+  color: #526171;
+  margin: 6px 0 0;
+}
+
+.playerList {
+  display: grid;
+  gap: 10px;
+}
+
+.playerRow {
+  align-items: center;
+  border: 1px solid #e1e7ee;
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.playerRow div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.playerRow strong {
+  overflow-wrap: anywhere;
+}
+
+.playerRow span {
+  color: #657386;
+  font-size: 0.8125rem;
+}
+
+@media (max-width: 760px) {
+  .shell,
+  .adminShell {
+    padding: 16px;
+  }
+
+  .loginLayout,
+  .adminGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .adminHeader,
+  .tableHeader,
+  .playerRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .headerActions {
+    justify-content: space-between;
+  }
 }
