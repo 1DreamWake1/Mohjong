@@ -6,7 +6,7 @@ export type SimulationResult = {
   turnCount: number;
 };
 
-export function runBasicBotGame(seed: number, maxTurns = 300): SimulationResult {
+export function runBasicBotGame(seed: number, maxTurns = 400): SimulationResult {
   let state = createInitialGame({ seed });
   let turnCount = 0;
 

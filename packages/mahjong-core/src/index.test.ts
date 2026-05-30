@@ -80,9 +80,13 @@ describe("mahjong-core game reducer", () => {
     }
 
     expect(result.state.currentTurn).toBe(1);
+    expect(result.state.pendingDiscard).toMatchObject({
+      fromSeatIndex: 0,
+      nextSeatIndex: 1
+    });
     expect(result.state.players[0].handTiles).toHaveLength(13);
     expect(result.state.players[0].discardTiles).toHaveLength(1);
-    expect(result.state.players[1].handTiles).toHaveLength(14);
+    expect(result.state.players[1].handTiles).toHaveLength(13);
   });
 
   it("rejects an illegal discard from another player's hand", () => {
@@ -107,6 +111,175 @@ describe("mahjong-core game reducer", () => {
     expect(legalActions.length).toBeGreaterThan(0);
     expect(legalActions.every((action) => action.type === "discard" || action.type === "hu")).toBe(true);
   });
+
+  it("allows the next player to chi a discarded suited tile", () => {
+    const state = createClaimScenario("m3", {
+      1: ["m1", "m2"]
+    });
+    const discardedTileId = state.players[0].handTiles[0]?.id;
+
+    if (!discardedTileId) {
+      throw new Error("Expected discarder to have a tile");
+    }
+
+    const discardResult = applyAction(state, 0, { type: "discard", tileId: discardedTileId });
+
+    expect(discardResult.ok).toBe(true);
+
+    if (!discardResult.ok) {
+      return;
+    }
+
+    const chiAction = getLegalActions(discardResult.state, 1).find((action) => action.type === "chi");
+
+    expect(chiAction).toBeDefined();
+
+    if (!chiAction) {
+      return;
+    }
+
+    const chiResult = applyAction(discardResult.state, 1, chiAction);
+
+    expect(chiResult.ok).toBe(true);
+
+    if (!chiResult.ok) {
+      return;
+    }
+
+    expect(chiResult.state.pendingDiscard).toBeUndefined();
+    expect(chiResult.state.currentTurn).toBe(1);
+    expect(chiResult.state.players[1].publicMelds[0]).toMatchObject({
+      type: "chi",
+      ownerSeatIndex: 1,
+      fromSeatIndex: 0
+    });
+    expect(chiResult.state.players[0].discardTiles).toHaveLength(0);
+  });
+
+  it("allows a later respondent to peng after earlier players pass", () => {
+    const state = createClaimScenario("red", {
+      2: ["red", "red"]
+    });
+    const discardedTileId = state.players[0].handTiles[0]?.id;
+
+    if (!discardedTileId) {
+      throw new Error("Expected discarder to have a tile");
+    }
+
+    const discardResult = applyAction(state, 0, { type: "discard", tileId: discardedTileId });
+
+    if (!discardResult.ok) {
+      throw new Error(discardResult.error);
+    }
+
+    const passResult = applyAction(discardResult.state, 1, { type: "pass" });
+
+    if (!passResult.ok) {
+      throw new Error(passResult.error);
+    }
+
+    const pengAction = getLegalActions(passResult.state, 2).find((action) => action.type === "peng");
+
+    expect(pengAction).toBeDefined();
+
+    if (!pengAction) {
+      return;
+    }
+
+    const pengResult = applyAction(passResult.state, 2, pengAction);
+
+    expect(pengResult.ok).toBe(true);
+
+    if (!pengResult.ok) {
+      return;
+    }
+
+    expect(pengResult.state.currentTurn).toBe(2);
+    expect(pengResult.state.players[2].publicMelds[0]?.type).toBe("peng");
+    expect(pengResult.state.players[2].handTiles).toHaveLength(0);
+  });
+
+  it("allows claiming a discard for gang and draws a supplement tile", () => {
+    const state = createClaimScenario("white", {
+      3: ["white", "white", "white"]
+    });
+    const discardedTileId = state.players[0].handTiles[0]?.id;
+
+    state.wall = [createTile("east", 0)];
+
+    if (!discardedTileId) {
+      throw new Error("Expected discarder to have a tile");
+    }
+
+    const discardResult = applyAction(state, 0, { type: "discard", tileId: discardedTileId });
+
+    if (!discardResult.ok) {
+      throw new Error(discardResult.error);
+    }
+
+    const firstPass = applyAction(discardResult.state, 1, { type: "pass" });
+
+    if (!firstPass.ok) {
+      throw new Error(firstPass.error);
+    }
+
+    const secondPass = applyAction(firstPass.state, 2, { type: "pass" });
+
+    if (!secondPass.ok) {
+      throw new Error(secondPass.error);
+    }
+
+    const gangAction = getLegalActions(secondPass.state, 3).find((action) => action.type === "gang");
+
+    expect(gangAction).toBeDefined();
+
+    if (!gangAction) {
+      return;
+    }
+
+    const gangResult = applyAction(secondPass.state, 3, gangAction);
+
+    expect(gangResult.ok).toBe(true);
+
+    if (!gangResult.ok) {
+      return;
+    }
+
+    expect(gangResult.state.players[3].publicMelds[0]?.type).toBe("gang");
+    expect(gangResult.state.players[3].handTiles).toHaveLength(1);
+    expect(gangResult.state.players[3].handTiles[0]?.code).toBe("east");
+  });
+
+  it("draws for the next player when every respondent passes", () => {
+    const state = createClaimScenario("m9", {});
+    const discardedTileId = state.players[0].handTiles[0]?.id;
+
+    state.wall = [createTile("south", 0)];
+
+    if (!discardedTileId) {
+      throw new Error("Expected discarder to have a tile");
+    }
+
+    const discardResult = applyAction(state, 0, { type: "discard", tileId: discardedTileId });
+
+    if (!discardResult.ok) {
+      throw new Error(discardResult.error);
+    }
+
+    const firstPass = applyAction(discardResult.state, 1, { type: "pass" });
+    const secondPass = firstPass.ok ? applyAction(firstPass.state, 2, { type: "pass" }) : firstPass;
+    const thirdPass = secondPass.ok ? applyAction(secondPass.state, 3, { type: "pass" }) : secondPass;
+
+    expect(thirdPass.ok).toBe(true);
+
+    if (!thirdPass.ok) {
+      return;
+    }
+
+    expect(thirdPass.state.pendingDiscard).toBeUndefined();
+    expect(thirdPass.state.currentTurn).toBe(1);
+    expect(thirdPass.state.players[1].handTiles[0]?.code).toBe("south");
+  });
 });
 
 describe("mahjong-core basic bot", () => {
@@ -120,7 +293,7 @@ describe("mahjong-core basic bot", () => {
     const results = Array.from({ length: 10 }, (_, index) => runBasicBotGame(index + 1));
 
     expect(results.every((result) => result.state.phase === "ended")).toBe(true);
-    expect(results.every((result) => result.turnCount <= 84)).toBe(true);
+    expect(results.every((result) => result.turnCount <= 336)).toBe(true);
   });
 });
 
@@ -132,4 +305,21 @@ function handFromCodes(codes: TileCode[]): Tile[] {
     copyCounters.set(code, copyIndex + 1);
     return createTile(code, copyIndex);
   });
+}
+
+function createClaimScenario(discardCode: TileCode, playerHands: Partial<Record<0 | 1 | 2 | 3, TileCode[]>>) {
+  const state = createInitialGame({ seed: 99 });
+
+  state.currentTurn = 0;
+  delete state.pendingDiscard;
+  state.wall = [];
+
+  for (const player of state.players) {
+    const codes = player.seatIndex === 0 ? [discardCode] : (playerHands[player.seatIndex as 0 | 1 | 2 | 3] ?? []);
+    player.handTiles = handFromCodes(codes);
+    player.discardTiles = [];
+    player.publicMelds = [];
+  }
+
+  return state;
 }

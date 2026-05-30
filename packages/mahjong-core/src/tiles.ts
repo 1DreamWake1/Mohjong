@@ -88,3 +88,7 @@ export function compareTiles(a: Tile, b: Tile): number {
 export function isSuited(tile: TileDefinition): boolean {
   return tile.suit === "characters" || tile.suit === "dots" || tile.suit === "bamboo";
 }
+
+export function isSameTileType(a: TileDefinition, b: TileDefinition): boolean {
+  return a.code === b.code;
+}

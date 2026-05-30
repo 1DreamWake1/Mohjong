@@ -28,6 +28,7 @@ export type PlayerActionType = "discard" | "chi" | "peng" | "gang" | "hu" | "pas
 export type Action = {
   type: PlayerActionType;
   tileId?: string;
+  tileIds?: string[];
 };
 
 export type OtherPlayerView = {
