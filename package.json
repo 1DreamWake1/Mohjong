@@ -13,7 +13,7 @@
     "format:check": "prettier --check .",
     "test": "pnpm -r --if-present test",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "mkdir -p data && DATABASE_URL=file:../data/dev.db prisma migrate dev"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0"

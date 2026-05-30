@@ -68,6 +68,11 @@
   padding: 24px;
 }
 
+.noticePanel {
+  max-width: 560px;
+  width: 100%;
+}
+
 .formPanel h2,
 .tablePanel h2 {
   font-size: 1.125rem;
@@ -172,6 +177,40 @@
   font-weight: 700;
 }
 
+.roleBadge {
+  background: #dcfce7;
+  border-radius: 999px;
+  color: #166534;
+  font-size: 0.8125rem;
+  padding: 6px 10px;
+}
+
+.accountSummary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.accountSummary div {
+  background: #f7fafc;
+  border: 1px solid #e1e7ee;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.accountSummary dt {
+  color: #657386;
+  font-size: 0.8125rem;
+  margin-bottom: 4px;
+}
+
+.accountSummary dd {
+  font-weight: 700;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .adminGrid {
   display: grid;
   gap: 20px;
@@ -236,7 +275,8 @@
   }
 
   .loginLayout,
-  .adminGrid {
+  .adminGrid,
+  .accountSummary {
     grid-template-columns: 1fr;
   }
 

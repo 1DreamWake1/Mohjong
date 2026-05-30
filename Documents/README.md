@@ -1,12 +1,13 @@
 # 在线麻将项目文档索引
 
-当前文档按五个主题组织：
+当前文档按六个主题组织：
 
 1. 需求
 2. 架构设计
 3. 技术路线
 4. 开发计划
 5. 环境准备
+6. 阶段运行手册
 
 ## 1. 需求
 
@@ -110,17 +111,29 @@ ORM：Prisma
 - 汇总开发、测试和本地部署需要安装或确认的依赖。
 - 给出 pnpm、SQLite、端口、防火墙和后续可选部署组件建议。
 
-## 6. 历史参考文档
+## 6. 阶段运行手册
+
+主文档：
+
+- [phase-2-runbook.md](./phase-2-runbook.md)
+
+说明：
+
+- 记录第二阶段账号管理闭环的数据库初始化、管理员初始化、开发服务启动和浏览器验证步骤。
+- 说明 Ubuntu 虚拟机中前后端访问地址和代理注意事项。
+
+## 7. 历史参考文档
 
 以下文档为前期讨论沉淀，后续可以作为参考，不作为当前主线入口：
 
 - [initial-local-test-requirements-and-development-plan.md](./initial-local-test-requirements-and-development-plan.md)
 - [online-mahjong-architecture-and-development-plan.md](./online-mahjong-architecture-and-development-plan.md)
 
-后续如果文档继续扩展，建议优先更新五个主文档：
+后续如果文档继续扩展，建议优先更新六个主文档：
 
 - `requirements.md`
 - `architecture-design.md`
 - `technical-architecture.md`
 - `development-plan.md`
 - `environment-setup.md`
+- `phase-2-runbook.md`

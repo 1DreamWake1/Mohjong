@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 export type ServerEnv = {
   authTokenSecret: string;
@@ -9,13 +9,33 @@ export type ServerEnv = {
 
 let envLoaded = false;
 
+function findEnvPath(startDir: string): string | null {
+  let currentDir = startDir;
+
+  for (let depth = 0; depth < 6; depth += 1) {
+    const envPath = resolve(currentDir, ".env");
+    if (existsSync(envPath)) {
+      return envPath;
+    }
+
+    const parentDir = dirname(currentDir);
+    if (parentDir === currentDir) {
+      break;
+    }
+
+    currentDir = parentDir;
+  }
+
+  return null;
+}
+
 export function loadEnv(): void {
   if (envLoaded) {
     return;
   }
 
-  const envPath = resolve(process.cwd(), ".env");
-  if (existsSync(envPath)) {
+  const envPath = findEnvPath(process.cwd());
+  if (envPath) {
     process.loadEnvFile(envPath);
   }
 

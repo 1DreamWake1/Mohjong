@@ -9,7 +9,16 @@ export type AuthTokenPayload = {
   username: string;
 };
 
+type JwtHeader = {
+  alg: "HS256";
+  typ: "JWT";
+};
+
 const TOKEN_TTL_SECONDS = 60 * 60 * 12;
+const JWT_HEADER: JwtHeader = {
+  alg: "HS256",
+  typ: "JWT"
+};
 
 function encodeBase64Url(value: string): string {
   return Buffer.from(value).toString("base64url");
@@ -21,6 +30,15 @@ function decodeBase64Url(value: string): string {
 
 function signPayload(payload: string, secret: string): string {
   return createHmac("sha256", secret).update(payload).digest("base64url");
+}
+
+function isJwtHeader(value: unknown): value is JwtHeader {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const header = value as Record<string, unknown>;
+  return header.alg === "HS256" && header.typ === "JWT";
 }
 
 function isPayload(value: unknown): value is AuthTokenPayload {
@@ -45,22 +63,25 @@ export function createAuthToken(
     ...input,
     exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS
   };
+  const encodedHeader = encodeBase64Url(JSON.stringify(JWT_HEADER));
   const encodedPayload = encodeBase64Url(JSON.stringify(payload));
-  const signature = signPayload(encodedPayload, secret);
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+  const signature = signPayload(signingInput, secret);
 
-  return `${encodedPayload}.${signature}`;
+  return `${signingInput}.${signature}`;
 }
 
 export function verifyAuthToken(
   token: string,
   secret: string
 ): AuthTokenPayload | null {
-  const [encodedPayload, signature, extra] = token.split(".");
-  if (!encodedPayload || !signature || extra !== undefined) {
+  const [encodedHeader, encodedPayload, signature, extra] = token.split(".");
+  if (!encodedHeader || !encodedPayload || !signature || extra !== undefined) {
     return null;
   }
 
-  const expectedSignature = signPayload(encodedPayload, secret);
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+  const expectedSignature = signPayload(signingInput, secret);
   const received = Buffer.from(signature);
   const expected = Buffer.from(expectedSignature);
 
@@ -72,6 +93,11 @@ export function verifyAuthToken(
   }
 
   try {
+    const header = JSON.parse(decodeBase64Url(encodedHeader)) as unknown;
+    if (!isJwtHeader(header)) {
+      return null;
+    }
+
     const payload = JSON.parse(decodeBase64Url(encodedPayload)) as unknown;
     if (!isPayload(payload) || payload.exp < Math.floor(Date.now() / 1000)) {
       return null;

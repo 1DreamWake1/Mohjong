@@ -217,6 +217,47 @@ describe("routes", () => {
     await app.close();
   });
 
+  it("rejects duplicate and invalid player creation requests", async () => {
+    const { app } = await createTestApp();
+    const loginResponse = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: {
+        username: "admin",
+        password: "admin123"
+      }
+    });
+    const token = loginResponse.json<{ token: string }>().token;
+
+    const duplicateResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${token}`
+      },
+      method: "POST",
+      url: "/admin/players",
+      payload: {
+        username: "player1",
+        password: "player123"
+      }
+    });
+    expect(duplicateResponse.statusCode).toBe(409);
+
+    const invalidResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${token}`
+      },
+      method: "POST",
+      url: "/admin/players",
+      payload: {
+        username: "x",
+        password: "123"
+      }
+    });
+    expect(invalidResponse.statusCode).toBe(400);
+
+    await app.close();
+  });
+
   it("forbids players from using admin account management routes", async () => {
     const { app } = await createTestApp();
     const loginResponse = await app.inject({

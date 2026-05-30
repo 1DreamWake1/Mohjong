@@ -29,6 +29,10 @@ function getErrorMessage(error: unknown): string {
   return "操作失败，请稍后重试";
 }
 
+function isUnauthorizedError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
+}
+
 export function App(): JSX.Element {
   const [authState, setAuthState] = useState<AuthState>({ status: "checking" });
 
@@ -77,10 +81,24 @@ export function App(): JSX.Element {
         <section className={styles.noticePanel}>
           <p className={styles.kicker}>在线麻将</p>
           <h1>玩家入口</h1>
-          <p>当前账号已登录，玩家大厅会在下一阶段完善。</p>
-          <button className={styles.secondaryButton} onClick={handleLogout}>
-            退出登录
-          </button>
+          <p>
+            {authState.user.username} 已登录。玩家大厅和牌桌会在后续阶段接入。
+          </p>
+          <dl className={styles.accountSummary}>
+            <div>
+              <dt>账号身份</dt>
+              <dd>玩家</dd>
+            </div>
+            <div>
+              <dt>账号创建时间</dt>
+              <dd>{new Date(authState.user.createdAt).toLocaleString()}</dd>
+            </div>
+          </dl>
+          <div>
+            <button className={styles.secondaryButton} onClick={handleLogout}>
+              退出登录
+            </button>
+          </div>
         </section>
       </main>
     );
@@ -91,6 +109,7 @@ export function App(): JSX.Element {
       token={authState.token}
       user={authState.user}
       onLogout={handleLogout}
+      onAuthExpired={handleLogout}
     />
   );
 }
@@ -158,6 +177,7 @@ function LoginPage(props: {
 }
 
 function AdminUsersPage(props: {
+  onAuthExpired: () => void;
   onLogout: () => void;
   token: string;
   user: AuthUser;
@@ -181,6 +201,11 @@ function AdminUsersPage(props: {
     try {
       setPlayers(await listPlayers(props.token));
     } catch (loadError) {
+      if (isUnauthorizedError(loadError)) {
+        props.onAuthExpired();
+        return;
+      }
+
       setError(getErrorMessage(loadError));
     } finally {
       setIsLoading(false);
@@ -204,6 +229,11 @@ function AdminUsersPage(props: {
       setPassword("");
       setNotice(`已创建玩家 ${player.username}`);
     } catch (createError) {
+      if (isUnauthorizedError(createError)) {
+        props.onAuthExpired();
+        return;
+      }
+
       setError(getErrorMessage(createError));
     } finally {
       setIsCreating(false);
@@ -211,6 +241,10 @@ function AdminUsersPage(props: {
   }
 
   async function handleDeletePlayer(player: UserSummary): Promise<void> {
+    if (!window.confirm(`确认删除玩家 ${player.username}？`)) {
+      return;
+    }
+
     setError(null);
     setNotice(null);
 
@@ -221,6 +255,11 @@ function AdminUsersPage(props: {
       );
       setNotice(`已删除玩家 ${player.username}`);
     } catch (deleteError) {
+      if (isUnauthorizedError(deleteError)) {
+        props.onAuthExpired();
+        return;
+      }
+
       setError(getErrorMessage(deleteError));
     }
   }
@@ -233,6 +272,7 @@ function AdminUsersPage(props: {
           <h1>玩家账号管理</h1>
         </div>
         <div className={styles.headerActions}>
+          <span className={styles.roleBadge}>管理员</span>
           <span>{props.user.username}</span>
           <button className={styles.secondaryButton} onClick={props.onLogout}>
             退出
