@@ -25,14 +25,14 @@
 
 以下技术决策在阶段 0 确定，各阶段遵循执行：
 
-| 决策项 | 选择 | 理由 |
-|--------|------|------|
-| 测试框架 | **Vitest** | 与 Vite 生态一致，原生 TypeScript 支持，执行速度快 |
-| CSS 方案 | **CSS Modules** | 避免类名冲突，TypeScript 类型提示，适合组件化开发 |
-| 日志库 | **pino** | Node.js 最快日志库，结构化 JSON 输出，适合调试和后续日志分析 |
-| 密码哈希 | **bcrypt** | 成熟的密码哈希库，防止彩虹表攻击 |
-| HTTP 客户端（测试） | **supertest** | Fastify 集成测试标准工具 |
-| Monorepo | **pnpm workspaces** | 原生支持，无需额外依赖，适合当前规模 |
+| 决策项              | 选择                | 理由                                                         |
+| ------------------- | ------------------- | ------------------------------------------------------------ |
+| 测试框架            | **Vitest**          | 与 Vite 生态一致，原生 TypeScript 支持，执行速度快           |
+| CSS 方案            | **CSS Modules**     | 避免类名冲突，TypeScript 类型提示，适合组件化开发            |
+| 日志库              | **pino**            | Node.js 最快日志库，结构化 JSON 输出，适合调试和后续日志分析 |
+| 密码哈希            | **bcrypt**          | 成熟的密码哈希库，防止彩虹表攻击                             |
+| HTTP 客户端（测试） | **supertest**       | Fastify 集成测试标准工具                                     |
+| Monorepo            | **pnpm workspaces** | 原生支持，无需额外依赖，适合当前规模                         |
 
 ## 3. 阶段 0：项目初始化
 
@@ -211,9 +211,9 @@ pnpm build
 
 ### 4.6 测试策略
 
-| 测试类型 | 工具 | 覆盖范围 |
-|----------|------|----------|
-| 单元测试 | Vitest | 每种牌型判定、每个动作合法性校验、RuleConfig 行为 |
+| 测试类型 | 工具   | 覆盖范围                                                   |
+| -------- | ------ | ---------------------------------------------------------- |
+| 单元测试 | Vitest | 每种牌型判定、每个动作合法性校验、RuleConfig 行为          |
 | 模拟对局 | Vitest | 4 个 basicBot 自动对局 ≥ 10 局，统计胡牌率、流局率、无死锁 |
 
 ---
@@ -255,14 +255,14 @@ pnpm build
 
 `User` 表（Prisma schema）：
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| id | Int (auto) | 主键 |
-| username | String (unique) | 用户名 |
-| passwordHash | String | bcrypt 哈希 |
-| role | String | "admin" 或 "player" |
-| createdAt | DateTime | 创建时间 |
-| updatedAt | DateTime | 更新时间 |
+| 字段         | 类型            | 说明                |
+| ------------ | --------------- | ------------------- |
+| id           | Int (auto)      | 主键                |
+| username     | String (unique) | 用户名              |
+| passwordHash | String          | bcrypt 哈希         |
+| role         | String          | "admin" 或 "player" |
+| createdAt    | DateTime        | 创建时间            |
+| updatedAt    | DateTime        | 更新时间            |
 
 账户存储要求：
 
@@ -303,11 +303,11 @@ pnpm build
 
 ### 5.6 测试策略
 
-| 测试类型 | 工具 | 覆盖范围 |
-|----------|------|----------|
-| 单元测试 | Vitest | password 哈希/验证、authService 逻辑 |
-| 集成测试 | Vitest + supertest | 全部 HTTP API 端点、登录态、权限校验 |
-| 浏览器冒烟测试 | 手动验证 | 管理员登录、玩家创建、玩家删除、刷新后登录态恢复 |
+| 测试类型       | 工具               | 覆盖范围                                         |
+| -------------- | ------------------ | ------------------------------------------------ |
+| 单元测试       | Vitest             | password 哈希/验证、authService 逻辑             |
+| 集成测试       | Vitest + supertest | 全部 HTTP API 端点、登录态、权限校验             |
+| 浏览器冒烟测试 | 手动验证           | 管理员登录、玩家创建、玩家删除、刷新后登录态恢复 |
 
 ### 5.7 完成记录
 
@@ -390,8 +390,8 @@ pnpm build
 
 ### 6.5 测试策略
 
-| 测试类型 | 工具 | 覆盖范围 |
-|----------|------|----------|
+| 测试类型 | 工具               | 覆盖范围                             |
+| -------- | ------------------ | ------------------------------------ |
 | 集成测试 | Vitest + supertest | 前端需配合服务端，验证登录流程端到端 |
 
 ---
@@ -441,13 +441,13 @@ pnpm build
 // packages/shared/src/gameTypes.ts（框架）
 interface PlayerView {
   seatIndex: number;
-  handTiles: TileInfo[];        // 自己的手牌（仅当前玩家有完整数据）
+  handTiles: TileInfo[]; // 自己的手牌（仅当前玩家有完整数据）
   otherPlayers: OtherPlayerView[];
-  discardAreas: DiscardPile[];  // 各玩家弃牌区
-  publicMelds: MeldInfo[];      // 公开的吃碰杠组合
-  currentTurn: number;          // 当前操作玩家 seatIndex
-  availableActions: Action[];   // 当前玩家可执行的动作
-  phase: GamePhase;             // 当前阶段
+  discardAreas: DiscardPile[]; // 各玩家弃牌区
+  publicMelds: MeldInfo[]; // 公开的吃碰杠组合
+  currentTurn: number; // 当前操作玩家 seatIndex
+  availableActions: Action[]; // 当前玩家可执行的动作
+  phase: GamePhase; // 当前阶段
 }
 ```
 
@@ -527,16 +527,18 @@ interface PlayerView {
   │
   └──→ 阶段 2 服务端 + 账号管理
          │
-         ├──→ 阶段 3 登录前端 + 管理员页面
-         │
-         └──→ 阶段 4 麻将前端画面（可与阶段 3 并行）
+         └──→ 阶段 3 玩家入口页面 + 前端体验完善
                 │
-                └──→ 阶段 5 核心业务合并
+                └──→ 阶段 4 麻将前端画面
+                       │
+                       └──→ 阶段 5 核心业务合并
 ```
 
 并行机会：
+
 - 阶段 0 完成后，阶段 1（核心算法）和阶段 2（服务端）可以**并行推进**。
-- 阶段 2 完成后，阶段 3（登录页面）和阶段 4（麻将前端画面）可以**部分并行**，共享前端基础设施。
+- 阶段 2 完成后，阶段 3 需要先整理登录态、页面分流、玩家大厅和前端体验，为阶段 4 的麻将桌页面提供稳定入口。
+- 阶段 3 完成后，阶段 4 可以专注麻将桌 UI、模拟牌局视图和游戏状态展示。
 - 阶段 4 开始前，需要先在 shared 包中定义 PlayerView 等游戏类型，避免接口不一致。
 
 ---
@@ -545,16 +547,23 @@ interface PlayerView {
 
 最高优先级：
 
-- 阶段 0：项目初始化（monorepo 脚手架 + 工具链）。
-- 阶段 1：核心算法 + 电脑玩家算法。
-- `RuleConfig` 设计和标准麻将规则最小可用集。
+- 阶段 3：玩家入口页面 + 前端体验完善。
+- 完善 Zustand authStore、页面分流、登录态恢复、退出登录和角色保护。
+- 实现玩家大厅页面，并预留进入游戏入口。
 
 第二优先级：
 
-- 阶段 2：服务端基础 + 账号管理（含 Ubuntu 虚拟机验证）。
-- 阶段 3：登录前端 + 管理员页面。
+- 阶段 4：麻将前端显示画面。
+- 在 shared 包补齐 PlayerView、TileInfo、Action 等前后端共享类型。
+- 用模拟数据完成 PC 和移动端麻将桌展示。
 
 第三优先级：
 
-- 阶段 4：麻将前端显示画面。
 - 阶段 5：核心业务合并。
+- 服务端接入 mahjong-core、gameRoom、Socket.IO 对局事件和断线重连。
+
+后续开发计划确认：
+
+1. 阶段 3 不再重复开发登录页和管理员用户管理的主功能，只做结构拆分、状态管理、路由保护、玩家大厅和体验完善。
+2. 阶段 4 在阶段 3 的前端基础上开发麻将桌页面，先使用模拟数据，不直接接入完整服务端对局。
+3. 阶段 5 再把第一阶段的核心算法、第四阶段的游戏画面和服务端实时通信合并成完整对局闭环。

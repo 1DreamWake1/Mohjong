@@ -1,34 +1,10 @@
 # Ubuntu 26.04 开发与部署环境依赖
 
-本文记录当前 Ubuntu 26.04 虚拟机环境检查结果，并列出本项目后续开发、测试和本地部署需要安装或确认的依赖。
+本文列出在线麻将项目在 Ubuntu 26.04 环境中开发、测试和本地部署需要准备的系统包、运行时、工具和可选组件。
 
-检查日期：2026-05-30
+## 1. 技术栈依赖
 
-## 1. 当前环境检查结果
-
-| 项目 | 当前状态 | 说明 |
-|------|----------|------|
-| 操作系统 | Ubuntu 26.04 LTS `resolute` | 符合本地 Linux 虚拟机测试目标 |
-| 内核 | Linux 7.0.0-22-generic x86_64 | 正常 |
-| Node.js | `v22.22.1` | 已安装，可用于当前 TypeScript/Fastify/Vite 技术栈 |
-| npm | `9.2.0` | 已安装 |
-| Corepack | `0.24.0` | 已安装，可用于启用 pnpm |
-| pnpm | `10.18.3` | 已通过 Corepack 启用，和根 `packageManager` 字段一致 |
-| Git | `2.53.0` | 已安装 |
-| curl | `8.18.0` | 已安装 |
-| build-essential | `12.12ubuntu2` | 已安装 |
-| gcc/g++ | `15.2.0` | 已安装 |
-| make | `4.4.1` | 已安装 |
-| Python | `3.14.4` | 已安装，可支持 Node 原生依赖编译 |
-| OpenSSL | `3.5.5` | 已安装，Prisma 等工具可能依赖 |
-| SQLite CLI | 未安装 | 建议安装，便于查看和调试 SQLite 数据库 |
-| Docker | 未安装 | 初期不需要，后续容器化部署时再安装 |
-| Nginx | 未安装 | 初期不需要，公网或反向代理部署时再安装 |
-| Caddy | 未安装 | 初期不需要，可作为后续 HTTPS/反向代理选项 |
-
-## 2. 必需依赖
-
-当前项目计划使用：
+项目当前技术栈：
 
 ```text
 前端：React + TypeScript + Vite
@@ -38,29 +14,28 @@
 ORM：Prisma
 包管理：pnpm workspace
 测试：Vitest
+密码哈希：bcrypt
+日志：pino
 ```
 
-因此当前环境至少需要：
+## 2. 必需系统依赖
 
-- Node.js 22：已安装。
-- pnpm：已通过 Corepack 启用。
-- Git：已安装。
-- curl：已安装。
-- build-essential、gcc、g++、make、python3：已安装，用于编译 Node 原生依赖。
-- OpenSSL：已安装，Prisma 和部分 Node 依赖可能需要。
-- SQLite 命令行工具：缺失，建议安装。
+Ubuntu 环境需要准备以下系统包：
 
-## 3. 建议安装命令
+| 依赖              | 用途                                                    |
+| ----------------- | ------------------------------------------------------- |
+| `ca-certificates` | HTTPS 证书信任链，供包管理器和 Node 工具访问 HTTPS 资源 |
+| `curl`            | 调试 HTTP API、健康检查和下载工具                       |
+| `git`             | 版本管理                                                |
+| `build-essential` | 提供 gcc、g++、make 等编译工具                          |
+| `python3`         | 支持部分 Node 原生依赖编译                              |
+| `openssl`         | Prisma、Node TLS 和部分依赖需要                         |
+| `sqlite3`         | 查看、调试和维护本地 SQLite 数据库                      |
 
-先更新 apt 索引：
+安装命令：
 
 ```bash
 sudo apt update
-```
-
-安装系统级基础依赖：
-
-```bash
 sudo apt install -y \
   ca-certificates \
   curl \
@@ -71,6 +46,18 @@ sudo apt install -y \
   sqlite3
 ```
 
+## 3. Node.js 与 pnpm
+
+项目需要 Node.js、Corepack 和 pnpm。
+
+推荐要求：
+
+| 工具     | 建议版本                           | 说明                               |
+| -------- | ---------------------------------- | ---------------------------------- |
+| Node.js  | 22 LTS 或更新的稳定 LTS            | 运行 Vite、Fastify、Prisma、Vitest |
+| Corepack | 随 Node.js 安装                    | 管理 pnpm 版本                     |
+| pnpm     | 以根目录 `packageManager` 字段为准 | 管理 monorepo workspace 依赖       |
+
 启用 pnpm：
 
 ```bash
@@ -79,66 +66,84 @@ corepack prepare pnpm@latest --activate
 pnpm --version
 ```
 
-说明：
+项目根目录已有 `packageManager` 字段时，应优先使用该字段指定的 pnpm 版本。
 
-- 当前 Node.js 已包含 Corepack，优先通过 Corepack 管理 pnpm。
-- 阶段 0 创建 `package.json` 时，建议增加 `packageManager` 字段固定 pnpm 版本，避免不同机器使用不同 pnpm 版本。
-- 当前项目根目录已固定为 `pnpm@10.18.3`。
+## 4. 项目依赖安装
 
-## 4. 项目依赖安装方式
-
-阶段 0 脚手架完成后，在项目根目录执行：
+在项目根目录安装 Node 依赖：
 
 ```bash
 pnpm install
 ```
 
-后续预期命令：
+常用开发命令：
 
 ```bash
 pnpm typecheck
 pnpm lint
 pnpm test
+pnpm build
 pnpm -F mahjong-core test
+pnpm -F server test
 pnpm dev
 ```
 
-这些脚本应在阶段 0 的根目录 `package.json` 中创建。
+如果 pnpm 提示依赖构建脚本需要审批，按提示执行：
+
+```bash
+pnpm approve-builds
+```
+
+只批准项目实际使用且可信的依赖构建脚本，例如 Prisma、bcrypt、esbuild 等。
 
 ## 5. 数据库依赖
 
-初期使用 SQLite + Prisma。
+初期数据库使用 SQLite + Prisma。
 
-推荐目录：
+相关路径：
 
 ```text
-data/dev.db
 prisma/schema.prisma
+prisma/migrations/
+data/dev.db
 ```
 
-需要注意：
+需要的工具：
 
-- `sqlite3` 命令行工具不是 Prisma 运行 SQLite 的唯一前提，但安装后便于本地查看、备份和排查数据库。
-- SQLite 数据库文件、journal 文件和迁移生成产物不应手工编辑。
-- 后续如果迁移 PostgreSQL，再单独安装 PostgreSQL 或使用 Docker Compose。
+| 工具          | 用途                             |
+| ------------- | -------------------------------- |
+| Prisma CLI    | 生成 Prisma Client、执行迁移     |
+| SQLite        | 本地开发数据库                   |
+| `sqlite3` CLI | 查看数据、排查迁移和调试账号数据 |
+
+常用命令：
+
+```bash
+pnpm prisma:generate
+pnpm prisma:migrate
+pnpm -F server seed:admin
+```
+
+SQLite 数据库文件、journal 文件、Prisma 生成文件不应手工编辑。
 
 ## 6. 本地开发端口
 
-按当前架构设计，默认端口为：
+默认端口：
 
-| 服务 | 地址 |
-|------|------|
-| Web 前端 | `http://localhost:5173` |
-| Server 后端 | `http://localhost:3000` |
-| 健康检查 | `http://localhost:3000/health` |
+| 服务        | 地址                           |
+| ----------- | ------------------------------ |
+| Web 前端    | `http://localhost:5173`        |
+| Server 后端 | `http://localhost:3000`        |
+| 健康检查    | `http://localhost:3000/health` |
 
-如果从宿主机浏览器访问 Ubuntu 虚拟机，需要确认：
+在虚拟机中开发并从宿主机浏览器访问时，需要：
 
-- Fastify 监听地址使用 `0.0.0.0`，不能只监听 `127.0.0.1`。
+- 后端监听 `0.0.0.0`。
+- Vite dev server 允许局域网访问。
 - 虚拟机网络模式允许宿主机访问虚拟机 IP。
-- 如启用防火墙，需要放行 `3000` 和开发阶段可能使用的 `5173`。
+- 如启用防火墙，放行 `3000/tcp` 和 `5173/tcp`。
 
-防火墙放行命令示例：
+防火墙命令示例：
 
 ```bash
 sudo ufw allow 3000/tcp
@@ -146,21 +151,22 @@ sudo ufw allow 5173/tcp
 sudo ufw status
 ```
 
-## 7. 可选依赖
+## 7. 可选部署依赖
 
-以下依赖初期不要求安装：
+以下组件不是本地开发必需项，按部署方式选择：
 
-| 依赖 | 何时需要 |
-|------|----------|
-| Docker / Docker Compose | 后续需要容器化部署、PostgreSQL、Nginx/Caddy 组合部署时 |
-| Nginx | 后续需要公网反向代理、静态资源代理或域名接入时 |
-| Caddy | 后续需要简化 HTTPS 和反向代理配置时 |
-| PostgreSQL | SQLite 不再满足长期运行、并发写入、统计查询或备份恢复要求时 |
-| PM2 或 systemd 服务配置 | 后续需要后台常驻运行 Node.js 服务时 |
+| 依赖                    | 何时需要                                                     |
+| ----------------------- | ------------------------------------------------------------ |
+| Docker / Docker Compose | 容器化部署、统一运行环境、后续引入 PostgreSQL 或反向代理组合 |
+| Nginx                   | 公网反向代理、静态资源代理、域名接入                         |
+| Caddy                   | 简化 HTTPS 证书和反向代理配置                                |
+| PostgreSQL              | SQLite 无法满足长期运行、并发写入、统计查询或备份恢复需求时  |
+| PM2                     | 简化 Node.js 进程守护和日志管理                              |
+| systemd 服务配置        | 生产或长期运行环境中托管 server 进程                         |
 
-## 8. 验证命令
+## 8. 环境验证命令
 
-安装或启用依赖后，可执行以下命令确认环境：
+安装依赖后可用以下命令确认工具可用：
 
 ```bash
 node --version
@@ -176,20 +182,12 @@ python3 --version
 openssl version
 ```
 
-阶段 0 完成后，再执行：
+项目级验证：
 
 ```bash
 pnpm install
 pnpm typecheck
 pnpm lint
 pnpm test
+pnpm build
 ```
-
-## 9. 当前缺口总结
-
-当前虚拟机已经具备大部分开发基础，主要缺口是：
-
-1. 安装 SQLite 命令行工具 `sqlite3`。
-2. 后续服务端启动时确认监听 `0.0.0.0`，以便宿主机访问 Ubuntu 虚拟机。
-3. 如开启防火墙，需要放行 `3000/tcp` 和开发阶段的 `5173/tcp`。
-4. 如果后续使用 Prisma、bcrypt、esbuild 等带安装脚本的依赖，遇到 pnpm 构建脚本拦截提示时，需要按提示执行 `pnpm approve-builds` 并只批准项目实际使用的依赖。
