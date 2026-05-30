@@ -1,36 +1,13 @@
-import type { PlayerView } from "@mahjong/shared";
-
-export type RuleConfig = {
-  name: string;
-  allowChi: boolean;
-  allowPeng: boolean;
-  allowGang: boolean;
-  allowSevenPairs: boolean;
-  useWinds: boolean;
-  useDragons: boolean;
-  scoringMode: "standard" | "sichuan";
-};
-
-export const standardRuleConfig: RuleConfig = {
-  name: "standard",
-  allowChi: true,
-  allowPeng: true,
-  allowGang: true,
-  allowSevenPairs: true,
-  useWinds: true,
-  useDragons: true,
-  scoringMode: "standard"
-};
-
-export function createEmptyPlayerView(seatIndex: number): PlayerView {
-  return {
-    seatIndex,
-    handTiles: [],
-    otherPlayers: [],
-    discardAreas: [],
-    publicMelds: [],
-    currentTurn: 0,
-    availableActions: [],
-    phase: "waiting"
-  };
-}
+export { chooseBasicBotAction, chooseDiscardTile } from "./bots/basicBot.js";
+export { applyAction, createEmptyPlayerView, createInitialGame, createPlayerView, getLegalActions } from "./game.js";
+export type { ApplyActionResult, CreateGameOptions, MahjongGameState, PlayerState } from "./game.js";
+export { canHu, countTiles, isSevenPairs } from "./hand.js";
+export type { HuPattern, HuResult } from "./hand.js";
+export { standardRuleConfig } from "./rules.js";
+export type { RuleConfig } from "./rules.js";
+export { compareTiles, createTile, getTileDefinition, tileDefinitions } from "./tiles.js";
+export type { Tile, TileCode, TileDefinition } from "./tiles.js";
+export { createSeededRandom, createShuffledWall, createWall, shuffleWall } from "./wall.js";
+export type { RandomSource } from "./wall.js";
+export { runBasicBotGame } from "./simulation.js";
+export type { SimulationResult } from "./simulation.js";
