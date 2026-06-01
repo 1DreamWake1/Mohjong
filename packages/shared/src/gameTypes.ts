@@ -31,6 +31,12 @@ export type Action = {
   tileIds?: string[];
 };
 
+export type GameEventMessage = {
+  id: string;
+  text: string;
+  createdAt: string;
+};
+
 export type OtherPlayerView = {
   seatIndex: number;
   username: string;
@@ -39,7 +45,9 @@ export type OtherPlayerView = {
 };
 
 export type PlayerView = {
+  roomId: string;
   seatIndex: number;
+  username: string;
   handTiles: TileInfo[];
   otherPlayers: OtherPlayerView[];
   discardAreas: DiscardPile[];
@@ -47,4 +55,7 @@ export type PlayerView = {
   currentTurn: number;
   availableActions: Action[];
   phase: GamePhase;
+  wallTileCount: number;
+  eventMessages: GameEventMessage[];
+  winnerSeatIndex?: number;
 };

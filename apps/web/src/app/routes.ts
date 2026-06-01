@@ -2,6 +2,7 @@ import type { UserRole } from "@mahjong/shared";
 
 export const APP_ROUTES = {
   adminUsers: "/admin/players",
+  gameDemo: "/game/demo",
   lobby: "/lobby",
   login: "/login"
 } as const;
@@ -52,7 +53,10 @@ export function getRouteForAuth(state: RouteAuthState, requestedPath?: string): 
     return APP_ROUTES.lobby;
   }
 
-  if (state.role === "admin" && currentPath === APP_ROUTES.lobby) {
+  if (
+    state.role === "admin" &&
+    (currentPath === APP_ROUTES.lobby || currentPath === APP_ROUTES.gameDemo)
+  ) {
     return APP_ROUTES.adminUsers;
   }
 

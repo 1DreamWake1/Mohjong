@@ -49,7 +49,8 @@ export type ApplyActionResult =
   | { ok: false; error: string; state: MahjongGameState };
 
 export function createInitialGame(options: CreateGameOptions = {}): MahjongGameState {
-  const random = options.random ?? (options.seed === undefined ? Math.random : createSeededRandom(options.seed));
+  const random =
+    options.random ?? (options.seed === undefined ? Math.random : createSeededRandom(options.seed));
   const wall = createShuffledWall(random);
   const players: [PlayerState, PlayerState, PlayerState, PlayerState] = [
     createPlayerState(0),
@@ -90,7 +91,10 @@ export function getLegalActions(state: MahjongGameState, seatIndex: number): Act
   }
 
   const player = getPlayer(state, seatIndex);
-  const discardActions: Action[] = player.handTiles.map((tile) => ({ type: "discard", tileId: tile.id }));
+  const discardActions: Action[] = player.handTiles.map((tile) => ({
+    type: "discard",
+    tileId: tile.id
+  }));
   const actions: Action[] = [...getTurnGangActions(state, seatIndex), ...discardActions];
   const huResult = canHu(player.handTiles, state.rules);
 
@@ -101,7 +105,11 @@ export function getLegalActions(state: MahjongGameState, seatIndex: number): Act
   return actions;
 }
 
-export function applyAction(state: MahjongGameState, seatIndex: number, action: Action): ApplyActionResult {
+export function applyAction(
+  state: MahjongGameState,
+  seatIndex: number,
+  action: Action
+): ApplyActionResult {
   if (state.phase !== "playing") {
     return { ok: false, error: "Game has ended", state };
   }
@@ -181,38 +189,56 @@ export function applyAction(state: MahjongGameState, seatIndex: number, action: 
 export function createPlayerView(state: MahjongGameState, seatIndex: number): PlayerView {
   const player = getPlayer(state, seatIndex);
 
-  return {
-    seatIndex,
-    handTiles: [...player.handTiles].sort(compareTiles),
-    otherPlayers: state.players
-      .filter((otherPlayer) => otherPlayer.seatIndex !== seatIndex)
-      .map((otherPlayer) => ({
-        seatIndex: otherPlayer.seatIndex,
-        username: otherPlayer.username,
-        handTileCount: otherPlayer.handTiles.length,
-        isBot: otherPlayer.isBot
-      })),
+  const view: PlayerView = {
+    availableActions: getLegalActions(state, seatIndex),
+    currentTurn: state.currentTurn,
     discardAreas: state.players.map((discardPlayer) => ({
       seatIndex: discardPlayer.seatIndex,
       tiles: discardPlayer.discardTiles
     })),
+    eventMessages: [
+      {
+        createdAt: new Date(0).toISOString(),
+        id: state.phase === "ended" ? "game-ended" : "game-playing",
+        text: state.phase === "ended" ? "牌局结束" : "牌局进行中"
+      }
+    ],
+    handTiles: [...player.handTiles].sort(compareTiles),
+    otherPlayers: state.players
+      .filter((otherPlayer) => otherPlayer.seatIndex !== seatIndex)
+      .map((otherPlayer) => ({
+        handTileCount: otherPlayer.handTiles.length,
+        isBot: otherPlayer.isBot,
+        seatIndex: otherPlayer.seatIndex,
+        username: otherPlayer.username
+      })),
+    phase: state.phase,
     publicMelds: state.players.flatMap((meldPlayer) => meldPlayer.publicMelds),
-    currentTurn: state.currentTurn,
-    availableActions: getLegalActions(state, seatIndex),
-    phase: state.phase
+    roomId: "core-game",
+    seatIndex,
+    username: player.username,
+    wallTileCount: state.wall.length
   };
+
+  return state.winnerSeatIndex === undefined
+    ? view
+    : { ...view, winnerSeatIndex: state.winnerSeatIndex };
 }
 
 export function createEmptyPlayerView(seatIndex: number): PlayerView {
   return {
-    seatIndex,
+    availableActions: [],
+    currentTurn: 0,
+    discardAreas: [],
+    eventMessages: [],
     handTiles: [],
     otherPlayers: [],
-    discardAreas: [],
+    phase: "waiting",
     publicMelds: [],
-    currentTurn: 0,
-    availableActions: [],
-    phase: "waiting"
+    roomId: "",
+    seatIndex,
+    username: "",
+    wallTileCount: 0
   };
 }
 
@@ -244,11 +270,18 @@ function openClaimWindow(state: MahjongGameState, tile: Tile, fromSeatIndex: num
 function getClaimActions(state: MahjongGameState, seatIndex: number): Action[] {
   const pendingDiscard = state.pendingDiscard;
 
-  if (!pendingDiscard || pendingDiscard.passedSeatIndexes.includes(seatIndex) || findBestRespondentSeatIndex(state) !== seatIndex) {
+  if (
+    !pendingDiscard ||
+    pendingDiscard.passedSeatIndexes.includes(seatIndex) ||
+    findBestRespondentSeatIndex(state) !== seatIndex
+  ) {
     return [];
   }
 
-  return filterHighestPriorityClaimActions([{ type: "pass" }, ...getAvailableClaimActionsForSeat(state, seatIndex)]);
+  return filterHighestPriorityClaimActions([
+    { type: "pass" },
+    ...getAvailableClaimActionsForSeat(state, seatIndex)
+  ]);
 }
 
 function getAvailableClaimActionsForSeat(state: MahjongGameState, seatIndex: number): Action[] {
@@ -290,7 +323,11 @@ function getAvailableClaimActionsForSeat(state: MahjongGameState, seatIndex: num
   return actions;
 }
 
-function applyClaimAction(state: MahjongGameState, seatIndex: number, action: Action): ApplyActionResult {
+function applyClaimAction(
+  state: MahjongGameState,
+  seatIndex: number,
+  action: Action
+): ApplyActionResult {
   const pendingDiscard = state.pendingDiscard;
 
   if (!pendingDiscard) {
@@ -360,7 +397,8 @@ function applyClaimAction(state: MahjongGameState, seatIndex: number, action: Ac
 
   const claimTileIds = action.tileIds;
   const legalAction = getClaimActions(state, seatIndex).find(
-    (candidate) => candidate.type === action.type && haveSameTileIds(candidate.tileIds, claimTileIds)
+    (candidate) =>
+      candidate.type === action.type && haveSameTileIds(candidate.tileIds, claimTileIds)
   );
 
   if (!legalAction) {
@@ -422,7 +460,9 @@ function getTurnGangActions(state: MahjongGameState, seatIndex: number): Action[
       }
 
       const firstMeldTile = meld.tiles[0];
-      const handTile = firstMeldTile ? player.handTiles.find((tile) => isSameTileType(tile, firstMeldTile as Tile)) : undefined;
+      const handTile = firstMeldTile
+        ? player.handTiles.find((tile) => isSameTileType(tile, firstMeldTile as Tile))
+        : undefined;
 
       if (handTile) {
         actions.push({ type: "gang", tileIds: [handTile.id] });
@@ -433,13 +473,19 @@ function getTurnGangActions(state: MahjongGameState, seatIndex: number): Action[
   return actions;
 }
 
-function applyTurnGangAction(state: MahjongGameState, seatIndex: number, action: Action): ApplyActionResult {
+function applyTurnGangAction(
+  state: MahjongGameState,
+  seatIndex: number,
+  action: Action
+): ApplyActionResult {
   if (!action.tileIds || action.tileIds.length === 0) {
     return { ok: false, error: "Gang action must include tileIds", state };
   }
 
   const gangTileIds = action.tileIds;
-  const legalAction = getTurnGangActions(state, seatIndex).find((candidate) => haveSameTileIds(candidate.tileIds, gangTileIds));
+  const legalAction = getTurnGangActions(state, seatIndex).find((candidate) =>
+    haveSameTileIds(candidate.tileIds, gangTileIds)
+  );
 
   if (!legalAction) {
     return { ok: false, error: "Illegal gang action", state };
@@ -462,7 +508,11 @@ function applyTurnGangAction(state: MahjongGameState, seatIndex: number, action:
   } else if (removedTiles.length === 1) {
     const tile = removedTiles[0];
     const meld = tile
-      ? player.publicMelds.find((candidate) => candidate.type === "peng" && candidate.tiles.some((meldTile) => isSameTileType(meldTile as Tile, tile)))
+      ? player.publicMelds.find(
+          (candidate) =>
+            candidate.type === "peng" &&
+            candidate.tiles.some((meldTile) => isSameTileType(meldTile as Tile, tile))
+        )
       : undefined;
 
     if (!tile || !meld) {
@@ -488,7 +538,10 @@ function findBestRespondentSeatIndex(state: MahjongGameState): number | undefine
   let bestPriority = 0;
 
   for (const seatIndex of pendingDiscard.respondentSeatIndexes) {
-    const priority = Math.max(0, ...getAvailableClaimActionsForSeat(state, seatIndex).map(getClaimPriority));
+    const priority = Math.max(
+      0,
+      ...getAvailableClaimActionsForSeat(state, seatIndex).map(getClaimPriority)
+    );
 
     if (priority > bestPriority) {
       bestSeatIndex = seatIndex;
@@ -502,7 +555,9 @@ function findBestRespondentSeatIndex(state: MahjongGameState): number | undefine
 function filterHighestPriorityClaimActions(actions: Action[]): Action[] {
   const maxPriority = Math.max(0, ...actions.map(getClaimPriority));
 
-  return actions.filter((action) => action.type === "pass" || getClaimPriority(action) === maxPriority);
+  return actions.filter(
+    (action) => action.type === "pass" || getClaimPriority(action) === maxPriority
+  );
 }
 
 function getClaimPriority(action: Action): number {
@@ -537,8 +592,12 @@ function getChiActions(handTiles: readonly Tile[], discardedTile: Tile): Action[
       return [];
     }
 
-    const firstTile = handTiles.find((tile) => tile.suit === discardedTile.suit && tile.rank === firstRank);
-    const secondTile = handTiles.find((tile) => tile.suit === discardedTile.suit && tile.rank === secondRank);
+    const firstTile = handTiles.find(
+      (tile) => tile.suit === discardedTile.suit && tile.rank === firstRank
+    );
+    const secondTile = handTiles.find(
+      (tile) => tile.suit === discardedTile.suit && tile.rank === secondRank
+    );
 
     if (!firstTile || !secondTile) {
       return [];
@@ -643,7 +702,11 @@ function cloneState(state: MahjongGameState): MahjongGameState {
       ? {
           pendingDiscard: {
             ...state.pendingDiscard,
-            respondentSeatIndexes: [...state.pendingDiscard.respondentSeatIndexes] as [number, number, number],
+            respondentSeatIndexes: [...state.pendingDiscard.respondentSeatIndexes] as [
+              number,
+              number,
+              number
+            ],
             passedSeatIndexes: [...state.pendingDiscard.passedSeatIndexes]
           }
         }

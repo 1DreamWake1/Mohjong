@@ -1,11 +1,12 @@
 import { useEffect } from "react";
 
 import { AdminUsersPage } from "../pages/AdminUsersPage.js";
+import { GamePage } from "../pages/GamePage.js";
 import { LobbyPage } from "../pages/LobbyPage.js";
 import { LoginPage } from "../pages/LoginPage.js";
 import { useAuthStore } from "../stores/authStore.js";
 import styles from "./App.module.css";
-import { getRouteForAuth, replaceRoute } from "./routes.js";
+import { APP_ROUTES, getRouteForAuth, replaceRoute } from "./routes.js";
 import { useCurrentPath } from "./useCurrentPath.js";
 
 export function App(): JSX.Element {
@@ -22,10 +23,7 @@ export function App(): JSX.Element {
   useEffect(() => {
     const route =
       status === "authenticated" && user
-        ? getRouteForAuth(
-            { role: user.role, status: "authenticated" },
-            currentPath
-          )
+        ? getRouteForAuth({ role: user.role, status: "authenticated" }, currentPath)
         : getRouteForAuth({
             status: status === "checking" ? "checking" : "anonymous"
           });
@@ -51,6 +49,10 @@ export function App(): JSX.Element {
 
   if (user.role === "admin") {
     return <AdminUsersPage token={token} user={user} />;
+  }
+
+  if (currentPath === APP_ROUTES.gameDemo) {
+    return <GamePage user={user} />;
   }
 
   return <LobbyPage token={token} user={user} />;

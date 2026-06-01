@@ -2,6 +2,7 @@ import type { AuthUser } from "@mahjong/shared";
 import { useEffect, useMemo } from "react";
 
 import styles from "../app/App.module.css";
+import { APP_ROUTES, replaceRoute } from "../app/routes.js";
 import { useAuthStore } from "../stores/authStore.js";
 import { useSocketStore } from "../stores/socketStore.js";
 import { formatDateTime } from "../utils/date.js";
@@ -16,10 +17,7 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
   const disconnectSocket = useSocketStore((state) => state.disconnectSocket);
   const prepareSocket = useSocketStore((state) => state.prepareSocket);
   const socketStatus = useSocketStore((state) => state.status);
-  const createdAtText = useMemo(
-    () => formatDateTime(props.user.createdAt),
-    [props.user.createdAt]
-  );
+  const createdAtText = useMemo(() => formatDateTime(props.user.createdAt), [props.user.createdAt]);
   const socketStatusText = socketStatus === "ready" ? "已准备" : "未准备";
 
   useEffect(() => {
@@ -39,10 +37,7 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
         <div className={styles.headerActions}>
           <span className={styles.roleBadge}>玩家</span>
           <span>{props.user.username}</span>
-          <button
-            className={styles.secondaryButton}
-            onClick={() => void signOut()}
-          >
+          <button className={styles.secondaryButton} onClick={() => void signOut()}>
             退出
           </button>
         </div>
@@ -79,7 +74,11 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
             <span className={styles.statusBadge}>准备中</span>
           </div>
           <div className={styles.actionStack}>
-            <button className={styles.primaryButton} disabled>
+            <button
+              className={styles.primaryButton}
+              onClick={() => replaceRoute(APP_ROUTES.gameDemo)}
+              type="button"
+            >
               快速开始
             </button>
             <button className={styles.secondaryButton} disabled>

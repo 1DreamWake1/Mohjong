@@ -1,0 +1,202 @@
+.tableSurface {
+  background: #1f6f5b;
+  border: 1px solid #155342;
+  border-radius: 8px;
+  color: #f8fafc;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 18px;
+}
+
+.tableStatus {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.tableStatus h2,
+.tableStatus p {
+  margin: 0;
+}
+
+.tableStatus p {
+  color: #c8f4e7;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.statusItems,
+.playerTitle,
+.actionBar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.statusItems span,
+.playerTitle span {
+  background: rgb(255 255 255 / 14%);
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  padding: 6px 10px;
+}
+
+.playersGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.playerPanel,
+.activePlayer,
+.discardPanel,
+.meldPanel,
+.playerHandPanel {
+  background: rgb(13 47 38 / 44%);
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.activePlayer {
+  border-color: #facc15;
+}
+
+.hiddenHand,
+.discardArea,
+.handTiles,
+.meldList,
+.meld div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hiddenHand {
+  max-height: 72px;
+  overflow: hidden;
+}
+
+.centerArea {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.discardPanel h3,
+.meldPanel h3 {
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.meldList {
+  display: grid;
+}
+
+.meld {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tile {
+  align-items: center;
+  aspect-ratio: 0.72;
+  background: #fffdf5;
+  border: 1px solid #d6c7a1;
+  border-radius: 6px;
+  box-shadow: 0 2px 0 #c8b78c;
+  color: #17202a;
+  display: inline-flex;
+  font-size: 0.875rem;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 42px;
+  padding: 4px;
+  width: 32px;
+}
+
+.tile:disabled {
+  cursor: default;
+}
+
+.tileHidden {
+  background: #134e4a;
+  border-color: #0f3f3b;
+  box-shadow: 0 2px 0 #0b332f;
+}
+
+.tileSelected {
+  border-color: #facc15;
+  transform: translateY(-8px);
+}
+
+.playerHandPanel {
+  background: rgb(8 33 28 / 62%);
+}
+
+.handTiles {
+  align-items: end;
+  min-height: 62px;
+}
+
+.actionButton,
+.winButton {
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 800;
+  min-height: 40px;
+  padding: 10px 16px;
+}
+
+.actionButton {
+  background: #e2e8f0;
+  color: #17202a;
+}
+
+.winButton {
+  background: #facc15;
+  color: #422006;
+}
+
+.actionButton:disabled,
+.winButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.actionHint {
+  color: #d7f7ec;
+  margin: 0;
+}
+
+@media (max-width: 820px) {
+  .tableSurface {
+    padding: 12px;
+  }
+
+  .tableStatus,
+  .meld {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .playersGrid,
+  .centerArea {
+    grid-template-columns: 1fr;
+  }
+
+  .tile {
+    min-height: 38px;
+    width: 29px;
+  }
+}

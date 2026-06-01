@@ -60,10 +60,22 @@ describe("app routes", () => {
     );
   });
 
+  it("keeps players on the demo game table", () => {
+    expect(getRouteForAuth({ role: "player", status: "authenticated" }, APP_ROUTES.gameDemo)).toBe(
+      APP_ROUTES.gameDemo
+    );
+  });
+
   it("prevents players from entering player account management", () => {
     expect(
       getRouteForAuth({ role: "player", status: "authenticated" }, APP_ROUTES.adminUsers)
     ).toBe(APP_ROUTES.lobby);
+  });
+
+  it("prevents administrators from entering the demo game table", () => {
+    expect(getRouteForAuth({ role: "admin", status: "authenticated" }, APP_ROUTES.gameDemo)).toBe(
+      APP_ROUTES.adminUsers
+    );
   });
 
   it("routes unknown paths to the role default page", () => {
