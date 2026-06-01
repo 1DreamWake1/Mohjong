@@ -435,12 +435,17 @@ pnpm build
 
 完成麻将游戏前端显示画面，重点是每个玩家看到的游戏画面。
 
-> **关键前置条件**：本阶段开始前，需在 `packages/shared` 中定义 Socket.IO 事件 payload 类型和牌局视角状态的 TypeScript 类型。前端模拟数据必须遵循这套类型，避免第六阶段合并时因接口不一致而返工。
+> **关键前置条件**：本阶段开始前，需确认 `packages/shared` 中的 Socket.IO 事件 payload 类型和牌局视角状态 TypeScript 类型满足页面展示需要。前端模拟数据必须遵循这套类型，避免第五阶段合并时因接口不一致而返工。
 
-本阶段可以先使用模拟数据驱动页面，不要求马上接入完整业务算法。
+本阶段使用模拟数据驱动页面，不接真实服务端对局，不调用 `mahjong-core` reducer，不实现创建房间或加入房间业务。阶段目标是完成符合 `PlayerView` 合同的游戏 UI，为第五阶段接入真实 gameRoom 和 Socket.IO 状态推送做准备。
 
 ### 7.2 功能点
 
+- 复核并补齐 `packages/shared/src/gameTypes.ts`，确保 `PlayerView` 能表达页面展示需要。
+- 复核 `packages/shared/src/socketEvents.ts`，只保留阶段五联调所需的事件形状，不在阶段四实现真实 socket 业务。
+- 新增玩家游戏页面路由 `/game/demo`。
+- 玩家大厅的"快速开始"入口进入模拟牌桌页面。
+- "创建房间"和"加入房间"保留占位禁用状态。
 - 设计 PC 端麻将桌布局。
 - 设计移动端麻将桌布局（响应式适配）。
 - 展示当前玩家手牌（含牌面图案/文字）。
@@ -457,7 +462,10 @@ pnpm build
 - 实现 DiscardArea 组件（弃牌区）。
 - 实现 ActionBar 组件（操作按钮，根据当前可选动作动态显示）。
 - 实现 Zustand gameStore（管理当前牌局视角状态）。
-- 实现 socketStore（管理 Socket.IO 连接和事件监听，本阶段可先用 setTimeout 模拟）。
+- 复用阶段三已完成的 socketStore，仅保留 Socket.IO Client 准备状态，不接真实事件监听。
+- 提供模拟牌局数据：初始牌局、可操作场景、对局结束场景。
+- 支持切换玩家视角，验证当前玩家手牌可见、其他玩家手牌不可见。
+- 牌面先使用中文文字牌和 CSS 样式实现，不引入图片资源。
 
 ### 7.3 玩家视角要求
 
@@ -469,6 +477,8 @@ pnpm build
 - 当前玩家能看到自己可执行的动作列表。
 
 ### 7.4 shared 类型依赖（本阶段开始前需定义）
+
+当前 `packages/shared/src/gameTypes.ts` 已有 `TileInfo`、`MeldInfo`、`DiscardPile`、`Action`、`OtherPlayerView` 和 `PlayerView` 基础类型。阶段四开始时需要先复核这些类型是否足够支撑 UI；如需增加展示字段，应优先保持字段面向"玩家视角"，不要把服务端内部状态暴露给前端。
 
 ```typescript
 // packages/shared/src/gameTypes.ts（框架）
@@ -484,14 +494,23 @@ interface PlayerView {
 }
 ```
 
+类型补充原则：
+
+- `PlayerView` 是游戏 UI 的唯一视角数据源。
+- 页面不直接依赖 `mahjong-core` 的 `MahjongGameState`。
+- 模拟数据、组件 props 和后续 Socket.IO `game:state` payload 使用同一套 shared 类型。
+- 如果增加房间状态、座位风、事件消息等字段，字段必须能被第五阶段服务端 mapper 稳定生成。
+
 ### 7.5 输出物
 
 - 麻将游戏页面（`GamePage.tsx`）。
 - 全套麻将 UI 组件（MahjongTable、HandTiles、DiscardArea、ActionBar、Tile）。
 - PC 端和移动端响应式布局。
-- 模拟牌局数据（多种场景：初始手牌、听牌、可碰/可杠等）。
+- 模拟牌局数据（多种场景：初始手牌、可碰/可杠/可胡、对局结束）。
 - 不同玩家视角展示 Demo（通过切换模拟数据中的 seatIndex 验证）。
 - Zustand gameStore 完成。
+- 玩家大厅到模拟牌桌的入口。
+- 前端测试覆盖 gameStore、路由分流、核心 UI 组件和模拟数据。
 
 ### 7.6 验收标准
 
@@ -500,8 +519,43 @@ interface PlayerView {
 - 其他玩家手牌不可见（只显示数量或背面）。
 - 公开信息展示正确（弃牌、吃碰杠组合）。
 - 操作按钮根据当前状态正确显示/隐藏。
+- 玩家可以从大厅进入模拟牌桌。
+- 切换视角后，手牌可见性和动作按钮随当前视角变化。
 - PC 浏览器可用。
 - 移动端浏览器可用（布局自适应，牌面可点击）。
+- 阶段四不要求真实创建房间、加入房间、Socket.IO 对局同步或服务端 reducer 校验。
+
+### 7.7 建议实施顺序
+
+1. 复核 shared 游戏视角类型和 Socket 事件类型，必要时补最小展示字段。
+2. 新增模拟牌局数据，覆盖初始、可操作、结束三类场景。
+3. 实现 gameStore，支持加载场景、切换视角、选中手牌。
+4. 增加 `/game/demo` 页面分流，并从玩家大厅"快速开始"进入。
+5. 实现 Tile、HandTiles、DiscardArea、ActionBar、MahjongTable 等组件。
+6. 完成 PC 和移动端 CSS Modules 响应式布局。
+7. 补齐单元测试和浏览器验收。
+
+### 7.8 测试策略
+
+| 测试类型       | 工具       | 覆盖范围                                            |
+| -------------- | ---------- | --------------------------------------------------- |
+| 单元测试       | Vitest     | gameStore 场景切换、视角切换、选中牌、日期/工具函数 |
+| 组件测试       | Vitest     | Tile、ActionBar 等纯展示组件的条件渲染              |
+| 类型检查       | TypeScript | shared 类型、模拟数据、组件 props 一致性            |
+| 浏览器冒烟测试 | 手动验证   | PC/移动端牌桌展示、视角切换、从大厅进入牌桌         |
+
+阶段四完成前需通过：
+
+```bash
+pnpm -F web typecheck
+pnpm -F web lint
+pnpm -F web test
+pnpm -F web build
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+```
 
 ---
 
