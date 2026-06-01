@@ -2,14 +2,10 @@ import type { AuthUser, UserSummary } from "@mahjong/shared";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
-import {
-  createPlayer,
-  deletePlayer,
-  listPlayers,
-  resetPlayerPassword
-} from "../api/client.js";
+import { createPlayer, deletePlayer, listPlayers, resetPlayerPassword } from "../api/client.js";
 import { getErrorMessage, isUnauthorizedError } from "../api/errors.js";
 import styles from "../app/App.module.css";
+import { TileGallery } from "../components/game/TileGallery.js";
 import { useAuthStore } from "../stores/authStore.js";
 import { formatDateTime } from "../utils/date.js";
 
@@ -18,9 +14,12 @@ type AdminUsersPageProps = {
   user: AuthUser;
 };
 
+type AdminView = "players" | "tiles";
+
 export function AdminUsersPage(props: AdminUsersPageProps): JSX.Element {
   const clearSession = useAuthStore((state) => state.clearSession);
   const signOut = useAuthStore((state) => state.signOut);
+  const [activeView, setActiveView] = useState<AdminView>("players");
   const [players, setPlayers] = useState<UserSummary[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [username, setUsername] = useState("");
@@ -29,12 +28,8 @@ export function AdminUsersPage(props: AdminUsersPageProps): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
-  const [deletingPlayerIds, setDeletingPlayerIds] = useState<Set<number>>(
-    () => new Set()
-  );
-  const [resettingPlayerIds, setResettingPlayerIds] = useState<Set<number>>(
-    () => new Set()
-  );
+  const [deletingPlayerIds, setDeletingPlayerIds] = useState<Set<number>>(() => new Set());
+  const [resettingPlayerIds, setResettingPlayerIds] = useState<Set<number>>(() => new Set());
   const filteredPlayers = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     const sortedPlayers = [...players].sort((leftPlayer, rightPlayer) =>
@@ -110,9 +105,7 @@ export function AdminUsersPage(props: AdminUsersPageProps): JSX.Element {
 
     try {
       await deletePlayer(props.token, player.id);
-      setPlayers((currentPlayers) =>
-        currentPlayers.filter((item) => item.id !== player.id)
-      );
+      setPlayers((currentPlayers) => currentPlayers.filter((item) => item.id !== player.id));
       setNotice(`已删除玩家 ${player.username}`);
     } catch (deleteError) {
       if (isUnauthorizedError(deleteError)) {
@@ -131,9 +124,7 @@ export function AdminUsersPage(props: AdminUsersPageProps): JSX.Element {
   }
 
   async function handleResetPassword(player: UserSummary): Promise<void> {
-    const nextPassword = window.prompt(
-      `请输入玩家 ${player.username} 的新密码（至少 6 位）`
-    );
+    const nextPassword = window.prompt(`请输入玩家 ${player.username} 的新密码（至少 6 位）`);
     if (nextPassword === null) {
       return;
     }
@@ -173,106 +164,132 @@ export function AdminUsersPage(props: AdminUsersPageProps): JSX.Element {
         <div className={styles.headerActions}>
           <span className={styles.roleBadge}>管理员</span>
           <span>{props.user.username}</span>
-          <button
-            className={styles.secondaryButton}
-            onClick={() => void signOut()}
-          >
+          <button className={styles.secondaryButton} onClick={() => void signOut()}>
             退出
           </button>
         </div>
       </header>
 
-      <section className={styles.adminGrid}>
-        <form className={styles.formPanel} onSubmit={handleCreatePlayer}>
-          <h2>创建玩家</h2>
-          <label>
-            用户名
-            <input
-              onChange={(event) => setUsername(event.target.value)}
-              pattern="[a-zA-Z0-9_-]{3,32}"
-              placeholder="player_001"
-              required
-              type="text"
-              value={username}
-            />
-          </label>
-          <label>
-            初始密码
-            <input
-              minLength={6}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              type="password"
-              value={password}
-            />
-          </label>
-          <button className={styles.primaryButton} disabled={isCreating}>
-            {isCreating ? "创建中" : "创建账号"}
-          </button>
-          {notice ? <p className={styles.notice}>{notice}</p> : null}
-          {error ? <p className={styles.error}>{error}</p> : null}
-        </form>
+      <nav className={styles.adminTabs} aria-label="管理员功能">
+        <button
+          className={activeView === "players" ? styles.adminTabActive : styles.adminTab}
+          onClick={() => setActiveView("players")}
+          type="button"
+        >
+          玩家账号
+        </button>
+        <button
+          className={activeView === "tiles" ? styles.adminTabActive : styles.adminTab}
+          onClick={() => setActiveView("tiles")}
+          type="button"
+        >
+          牌面样式
+        </button>
+      </nav>
 
-        <section className={styles.tablePanel}>
+      {activeView === "players" ? (
+        <section className={styles.adminGrid}>
+          <form className={styles.formPanel} onSubmit={handleCreatePlayer}>
+            <h2>创建玩家</h2>
+            <label>
+              用户名
+              <input
+                onChange={(event) => setUsername(event.target.value)}
+                pattern="[a-zA-Z0-9_-]{3,32}"
+                placeholder="player_001"
+                required
+                type="text"
+                value={username}
+              />
+            </label>
+            <label>
+              初始密码
+              <input
+                minLength={6}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                type="password"
+                value={password}
+              />
+            </label>
+            <button className={styles.primaryButton} disabled={isCreating}>
+              {isCreating ? "创建中" : "创建账号"}
+            </button>
+            {notice ? <p className={styles.notice}>{notice}</p> : null}
+            {error ? <p className={styles.error}>{error}</p> : null}
+          </form>
+
+          <section className={styles.tablePanel}>
+            <div className={styles.tableHeader}>
+              <div>
+                <h2>玩家列表</h2>
+                <p>{playerCountText}</p>
+              </div>
+              <div className={styles.tableTools}>
+                <input
+                  aria-label="搜索玩家"
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="搜索玩家"
+                  type="search"
+                  value={searchQuery}
+                />
+                <button
+                  className={styles.secondaryButton}
+                  disabled={isLoading}
+                  onClick={refreshPlayers}
+                >
+                  {isLoading ? "刷新中" : "刷新"}
+                </button>
+              </div>
+            </div>
+
+            {isLoading ? (
+              <p className={styles.emptyState}>正在加载玩家列表</p>
+            ) : players.length === 0 ? (
+              <p className={styles.emptyState}>还没有玩家账号</p>
+            ) : filteredPlayers.length === 0 ? (
+              <p className={styles.emptyState}>没有匹配的玩家账号</p>
+            ) : (
+              <div className={styles.playerList}>
+                {filteredPlayers.map((player) => (
+                  <article className={styles.playerRow} key={player.id}>
+                    <div className={styles.playerInfo}>
+                      <strong>{player.username}</strong>
+                      <span>创建于 {formatDateTime(player.createdAt)}</span>
+                    </div>
+                    <div className={styles.playerActions}>
+                      <button
+                        className={styles.secondaryButton}
+                        disabled={resettingPlayerIds.has(player.id)}
+                        onClick={() => void handleResetPassword(player)}
+                      >
+                        {resettingPlayerIds.has(player.id) ? "重置中" : "重置密码"}
+                      </button>
+                      <button
+                        className={styles.dangerButton}
+                        disabled={deletingPlayerIds.has(player.id)}
+                        onClick={() => void handleDeletePlayer(player)}
+                      >
+                        {deletingPlayerIds.has(player.id) ? "删除中" : "删除"}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </section>
+      ) : (
+        <section className={styles.tilePreviewPanel}>
           <div className={styles.tableHeader}>
             <div>
-              <h2>玩家列表</h2>
-              <p>{playerCountText}</p>
-            </div>
-            <div className={styles.tableTools}>
-              <input
-                aria-label="搜索玩家"
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="搜索玩家"
-                type="search"
-                value={searchQuery}
-              />
-              <button
-                className={styles.secondaryButton}
-                disabled={isLoading}
-                onClick={refreshPlayers}
-              >
-                {isLoading ? "刷新中" : "刷新"}
-              </button>
+              <h2>牌面样式</h2>
+              <p>34 种基础牌面渲染预览</p>
             </div>
           </div>
-
-          {isLoading ? (
-            <p className={styles.emptyState}>正在加载玩家列表</p>
-          ) : players.length === 0 ? (
-            <p className={styles.emptyState}>还没有玩家账号</p>
-          ) : filteredPlayers.length === 0 ? (
-            <p className={styles.emptyState}>没有匹配的玩家账号</p>
-          ) : (
-            <div className={styles.playerList}>
-              {filteredPlayers.map((player) => (
-                <article className={styles.playerRow} key={player.id}>
-                  <div className={styles.playerInfo}>
-                    <strong>{player.username}</strong>
-                    <span>创建于 {formatDateTime(player.createdAt)}</span>
-                  </div>
-                  <div className={styles.playerActions}>
-                    <button
-                      className={styles.secondaryButton}
-                      disabled={resettingPlayerIds.has(player.id)}
-                      onClick={() => void handleResetPassword(player)}
-                    >
-                      {resettingPlayerIds.has(player.id) ? "重置中" : "重置密码"}
-                    </button>
-                    <button
-                      className={styles.dangerButton}
-                      disabled={deletingPlayerIds.has(player.id)}
-                      onClick={() => void handleDeletePlayer(player)}
-                    >
-                      {deletingPlayerIds.has(player.id) ? "删除中" : "删除"}
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
+          <TileGallery />
         </section>
-      </section>
+      )}
     </main>
   );
 }
