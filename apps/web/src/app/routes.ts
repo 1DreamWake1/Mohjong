@@ -6,6 +6,18 @@ export const APP_ROUTES = {
   login: "/login"
 } as const;
 
+export const ROUTE_CHANGE_EVENT = "mahjong:route-change";
+
+type BrowserRouteTarget = {
+  dispatchEvent: (event: Event) => boolean;
+  history: {
+    replaceState: (data: unknown, unused: string, url?: string | URL | null) => void;
+  };
+  location: {
+    pathname: string;
+  };
+};
+
 type RouteAuthState =
   | { status: "checking"; role?: never }
   | { status: "anonymous"; role?: never }
@@ -16,18 +28,12 @@ function getDefaultAuthenticatedRoute(role: UserRole): string {
 }
 
 function isKnownRoute(path: string): boolean {
-  return Object.values(APP_ROUTES).includes(
-    path as (typeof APP_ROUTES)[keyof typeof APP_ROUTES]
-  );
+  return Object.values(APP_ROUTES).includes(path as (typeof APP_ROUTES)[keyof typeof APP_ROUTES]);
 }
 
-export function getRouteForAuth(
-  state: RouteAuthState,
-  requestedPath?: string
-): string | null {
+export function getRouteForAuth(state: RouteAuthState, requestedPath?: string): string | null {
   const currentPath =
-    requestedPath ??
-    (typeof window === "undefined" ? APP_ROUTES.login : window.location.pathname);
+    requestedPath ?? (typeof window === "undefined" ? APP_ROUTES.login : window.location.pathname);
 
   if (state.status === "checking") {
     return null;
@@ -53,8 +59,9 @@ export function getRouteForAuth(
   return currentPath;
 }
 
-export function replaceRoute(path: string): void {
-  if (window.location.pathname !== path) {
-    window.history.replaceState(null, "", path);
+export function replaceRoute(path: string, targetWindow: BrowserRouteTarget = window): void {
+  if (targetWindow.location.pathname !== path) {
+    targetWindow.history.replaceState(null, "", path);
+    targetWindow.dispatchEvent(new Event(ROUTE_CHANGE_EVENT));
   }
 }
