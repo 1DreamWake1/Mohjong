@@ -57,6 +57,134 @@ function renderPattern(tile: TileInfo): JSX.Element | null {
   }
 
   if (tile.suit === "dots") {
+    if (tile.rank === 1) {
+      return (
+        <span className={styles.dotPatternSingle} aria-hidden="true">
+          <span />
+        </span>
+      );
+    }
+
+    if (tile.rank === 2) {
+      return (
+        <span className={styles.dotPatternColumn} aria-hidden="true">
+          <span />
+          <span />
+        </span>
+      );
+    }
+
+    if (tile.rank === 3) {
+      return (
+        <span className={styles.dotPatternColumn} aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </span>
+      );
+    }
+
+    if (tile.rank === 4) {
+      return (
+        <span className={styles.dotPatternGrid2x2} aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+        </span>
+      );
+    }
+
+    if (tile.rank === 5) {
+      return (
+        <span className={styles.dotPatternFive} aria-hidden="true">
+          <span className={styles.dotPatternCorner} />
+          <span className={styles.dotPatternCorner} />
+          <span className={styles.dotPatternCorner} />
+          <span className={styles.dotPatternCorner} />
+          <span className={styles.dotPatternCenter} />
+        </span>
+      );
+    }
+
+    if (tile.rank === 6) {
+      return (
+        <span className={styles.dotPatternSix} aria-hidden="true">
+          <span className={styles.dotPatternRow}>
+            <span />
+            <span />
+          </span>
+          <span className={styles.dotPatternRow}>
+            <span />
+            <span />
+          </span>
+          <span className={styles.dotPatternRow}>
+            <span />
+            <span />
+          </span>
+        </span>
+      );
+    }
+
+    if (tile.rank === 7) {
+      return (
+        <span className={styles.dotPatternSeven} aria-hidden="true">
+          <span className={styles.dotPatternSevenRow}>
+            <span />
+            <span />
+            <span />
+          </span>
+          <span className={styles.dotPatternSevenRow}>
+            <span />
+            <span />
+          </span>
+          <span className={styles.dotPatternSevenRow}>
+            <span />
+            <span />
+          </span>
+        </span>
+      );
+    }
+
+    if (tile.rank === 8) {
+      return (
+        <span className={styles.dotPatternEight} aria-hidden="true">
+          <span className={styles.dotPatternEightRow}>
+            <span />
+            <span />
+          </span>
+          <span className={styles.dotPatternEightRow}>
+            <span />
+            <span />
+          </span>
+          <span className={styles.dotPatternEightRow}>
+            <span />
+            <span />
+          </span>
+          <span className={styles.dotPatternEightRow}>
+            <span />
+            <span />
+          </span>
+        </span>
+      );
+    }
+
+    if (tile.rank === 9) {
+      return (
+        <span className={styles.dotPatternNine} aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+        </span>
+      );
+    }
+
     return (
       <span className={styles.dotPattern} aria-hidden="true">
         {Array.from({ length: tile.rank }).map((_, index) => (
@@ -67,6 +195,122 @@ function renderPattern(tile: TileInfo): JSX.Element | null {
   }
 
   if (tile.suit === "bamboo") {
+    if (tile.rank === 2) {
+      return (
+        <span className={styles.bambooPatternTwo} aria-hidden="true">
+          <span />
+          <span />
+        </span>
+      );
+    }
+
+    if (tile.rank === 3) {
+      return (
+        <span className={styles.bambooPatternThree} aria-hidden="true">
+          <span className={styles.bambooPatternThreeTop} />
+          <span className={styles.bambooPatternThreeRow}>
+            <span />
+            <span />
+          </span>
+        </span>
+      );
+    }
+
+    if (tile.rank === 4) {
+      return (
+        <span className={styles.bambooPatternFour} aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+        </span>
+      );
+    }
+
+    if (tile.rank === 5) {
+      return (
+        <span className={styles.bambooPatternFive} aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+          <span className={styles.bambooPatternCenter} />
+        </span>
+      );
+    }
+
+    if (tile.rank === 6) {
+      return (
+        <span className={styles.bambooPatternSix} aria-hidden="true">
+          <span className={styles.bambooPatternRow}>
+            <span />
+            <span />
+            <span />
+          </span>
+          <span className={styles.bambooPatternRow}>
+            <span />
+            <span />
+            <span />
+          </span>
+        </span>
+      );
+    }
+
+    if (tile.rank === 7) {
+      return (
+        <span className={styles.bambooPatternSeven} aria-hidden="true">
+          <span className={styles.bambooPatternSevenTop}>
+            <span />
+          </span>
+          <span className={styles.bambooPatternSevenRow}>
+            <span />
+            <span />
+            <span />
+          </span>
+          <span className={styles.bambooPatternSevenRow}>
+            <span />
+            <span />
+            <span />
+          </span>
+        </span>
+      );
+    }
+
+    if (tile.rank === 8) {
+      return (
+        <span className={styles.bambooPatternEight} aria-hidden="true">
+          <span className={styles.bambooPatternEightRow}>
+            <span />
+            <span />
+            <span />
+            <span />
+          </span>
+          <span className={styles.bambooPatternEightRow}>
+            <span />
+            <span />
+            <span />
+            <span />
+          </span>
+        </span>
+      );
+    }
+
+    if (tile.rank === 9) {
+      return (
+        <span className={styles.bambooPatternNine} aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+        </span>
+      );
+    }
+
     return (
       <span className={styles.bambooPattern} aria-hidden="true">
         {Array.from({ length: tile.rank }).map((_, index) => (
