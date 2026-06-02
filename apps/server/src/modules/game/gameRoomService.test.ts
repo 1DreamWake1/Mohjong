@@ -22,6 +22,28 @@ describe("gameRoomService", () => {
     expect(view.handTiles).toHaveLength(14);
     expect(view.otherPlayers).toHaveLength(3);
     expect(view.otherPlayers.every((otherPlayer) => otherPlayer.isBot)).toBe(true);
+    expect(view.otherPlayers.map((otherPlayer) => otherPlayer.username)).toEqual([
+      "玩家Bot1",
+      "玩家Bot2",
+      "玩家Bot3"
+    ]);
+  });
+
+  it("uses simple suited-only rules for quick rooms", () => {
+    const service = createGameRoomService();
+    const room = service.getOrCreateQuickRoom(player);
+    const allVisibleTiles = [
+      ...room.state.wall,
+      ...room.state.players.flatMap((roomPlayer) => roomPlayer.handTiles)
+    ];
+
+    expect(room.state.rules).toMatchObject({
+      allowChi: false,
+      useDragons: false,
+      useWinds: false
+    });
+    expect(allVisibleTiles.every((tile) => tile.suit !== "winds" && tile.suit !== "dragons")).toBe(true);
+    expect(service.getPlayerView(room).availableActions.some((action) => action.type === "chi")).toBe(false);
   });
 
   it("rejects illegal human actions without changing the active view", () => {
@@ -58,5 +80,19 @@ describe("gameRoomService", () => {
     const progressed = service.applyNextBotAction(room);
     expect(typeof progressed).toBe("boolean");
     expect(service.getPlayerView(room).roomId).toBe(room.id);
+  });
+
+  it("starts a new quick room after the active room has ended", () => {
+    const service = createGameRoomService();
+    const endedRoom = service.getOrCreateQuickRoom(player);
+
+    endedRoom.state.phase = "ended";
+    endedRoom.state.endReason = "draw";
+
+    const nextRoom = service.getOrCreateQuickRoom(player);
+
+    expect(nextRoom.id).not.toBe(endedRoom.id);
+    expect(nextRoom.state.phase).toBe("playing");
+    expect(service.getRoomForUser(player)?.id).toBe(nextRoom.id);
   });
 });

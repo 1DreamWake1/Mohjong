@@ -55,7 +55,8 @@ export type ApplyActionResult =
 export function createInitialGame(options: CreateGameOptions = {}): MahjongGameState {
   const random =
     options.random ?? (options.seed === undefined ? Math.random : createSeededRandom(options.seed));
-  const wall = createShuffledWall(random);
+  const rules = options.rules ?? standardRuleConfig;
+  const wall = createShuffledWall(random, rules);
   const players: [PlayerState, PlayerState, PlayerState, PlayerState] = [
     createPlayerState(0, options.players?.[0]),
     createPlayerState(1, options.players?.[1]),
@@ -81,7 +82,7 @@ export function createInitialGame(options: CreateGameOptions = {}): MahjongGameS
     currentTurn: 0,
     dealerSeatIndex: 0,
     phase: "playing",
-    rules: options.rules ?? standardRuleConfig
+    rules
   };
 }
 
@@ -271,7 +272,15 @@ function openClaimWindow(state: MahjongGameState, tile: Tile, fromSeatIndex: num
     respondentCursor: 0,
     passedSeatIndexes: []
   };
-  state.currentTurn = findBestRespondentSeatIndex(state) ?? nextSeatIndex;
+  const respondentSeatIndex = findBestRespondentSeatIndex(state);
+  if (respondentSeatIndex === undefined) {
+    delete state.pendingDiscard;
+    state.currentTurn = nextSeatIndex;
+    drawOrEnd(state, nextSeatIndex);
+    return;
+  }
+
+  state.currentTurn = respondentSeatIndex;
 }
 
 function getClaimActions(state: MahjongGameState, seatIndex: number): Action[] {

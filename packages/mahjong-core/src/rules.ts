@@ -19,3 +19,14 @@ export const standardRuleConfig: RuleConfig = {
   useDragons: true,
   scoringMode: "standard"
 };
+
+export const simpleRuleConfig: RuleConfig = {
+  name: "simple",
+  allowChi: false,
+  allowPeng: true,
+  allowGang: true,
+  allowSevenPairs: true,
+  useWinds: false,
+  useDragons: false,
+  scoringMode: "standard"
+};

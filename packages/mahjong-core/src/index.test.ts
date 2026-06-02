@@ -12,6 +12,7 @@ import {
   getLegalActions,
   identifyFans,
   runBasicBotGame,
+  simpleRuleConfig,
   standardRuleConfig,
   tileDefinitions
 } from "./index.js";
@@ -25,6 +26,13 @@ describe("mahjong-core tiles and wall", () => {
     expect(tileDefinitions).toHaveLength(34);
     expect(wall).toHaveLength(136);
     expect(uniqueIds.size).toBe(136);
+  });
+
+  it("builds a 108 tile wall for simple suited-only rules", () => {
+    const wall = createWall(simpleRuleConfig);
+
+    expect(wall).toHaveLength(108);
+    expect(wall.every((tile) => tile.suit !== "winds" && tile.suit !== "dragons")).toBe(true);
   });
 });
 
@@ -115,6 +123,18 @@ describe("mahjong-core game reducer", () => {
     expect(state.wall).toHaveLength(83);
   });
 
+  it("deals from a suited-only wall for simple rules", () => {
+    const state = createInitialGame({ rules: simpleRuleConfig, seed: 1 });
+
+    expect(state.players[0].handTiles).toHaveLength(14);
+    expect(state.players[1].handTiles).toHaveLength(13);
+    expect(state.players[2].handTiles).toHaveLength(13);
+    expect(state.players[3].handTiles).toHaveLength(13);
+    expect(state.wall).toHaveLength(55);
+    expect(state.players.flatMap((player) => player.handTiles).every((tile) => tile.suit !== "winds" && tile.suit !== "dragons")).toBe(true);
+    expect(state.wall.every((tile) => tile.suit !== "winds" && tile.suit !== "dragons")).toBe(true);
+  });
+
   it("accepts explicit human and bot player configuration", () => {
     const state = createInitialGame({
       players: [
@@ -134,7 +154,7 @@ describe("mahjong-core game reducer", () => {
     ]);
   });
 
-  it("allows current player to discard and advances the turn with a draw", () => {
+  it("allows current player to discard and lets the next player draw when nobody can respond", () => {
     const state = createInitialGame({ seed: 2 });
     const tileId = state.players[0].handTiles[0]?.id;
 
@@ -151,13 +171,11 @@ describe("mahjong-core game reducer", () => {
     }
 
     expect(result.state.currentTurn).toBe(1);
-    expect(result.state.pendingDiscard).toMatchObject({
-      fromSeatIndex: 0,
-      nextSeatIndex: 1
-    });
+    expect(result.state.pendingDiscard).toBeUndefined();
     expect(result.state.players[0].handTiles).toHaveLength(13);
     expect(result.state.players[0].discardTiles).toHaveLength(1);
-    expect(result.state.players[1].handTiles).toHaveLength(13);
+    expect(result.state.players[1].handTiles).toHaveLength(14);
+    expect(getLegalActions(result.state, 1).some((action) => action.type === "discard")).toBe(true);
   });
 
   it("rejects an illegal discard from another player's hand", () => {
@@ -225,6 +243,34 @@ describe("mahjong-core game reducer", () => {
       fromSeatIndex: 0
     });
     expect(chiResult.state.players[0].discardTiles).toHaveLength(0);
+  });
+
+  it("does not allow chi under simple rules", () => {
+    const state = createClaimScenario(
+      "m3",
+      {
+        1: ["m1", "m2"]
+      },
+      simpleRuleConfig
+    );
+    const discardedTileId = state.players[0].handTiles[0]?.id;
+
+    state.wall = [createTile("p9", 0)];
+
+    if (!discardedTileId) {
+      throw new Error("Expected discarder to have a tile");
+    }
+
+    const discardResult = applyAction(state, 0, { type: "discard", tileId: discardedTileId });
+
+    if (!discardResult.ok) {
+      throw new Error(discardResult.error);
+    }
+
+    expect(discardResult.state.pendingDiscard).toBeUndefined();
+    expect(discardResult.state.currentTurn).toBe(1);
+    expect(getLegalActions(discardResult.state, 1).some((action) => action.type === "chi")).toBe(false);
+    expect(getLegalActions(discardResult.state, 1).some((action) => action.type === "discard")).toBe(true);
   });
 
   it("allows a later respondent to peng after earlier players pass", () => {
@@ -425,8 +471,31 @@ describe("mahjong-core game reducer", () => {
     expect(result.state.players[0].handTiles[0]?.code).toBe("east");
   });
 
-  it("draws for the next player when every respondent passes", () => {
+  it("draws for the next player when no respondent can claim", () => {
     const state = createClaimScenario("m9", {});
+    const discardedTileId = state.players[0].handTiles[0]?.id;
+
+    state.wall = [createTile("south", 0)];
+
+    if (!discardedTileId) {
+      throw new Error("Expected discarder to have a tile");
+    }
+
+    const discardResult = applyAction(state, 0, { type: "discard", tileId: discardedTileId });
+
+    if (!discardResult.ok) {
+      throw new Error(discardResult.error);
+    }
+
+    expect(discardResult.state.pendingDiscard).toBeUndefined();
+    expect(discardResult.state.currentTurn).toBe(1);
+    expect(discardResult.state.players[1].handTiles[0]?.code).toBe("south");
+  });
+
+  it("draws for the next player when every available respondent passes", () => {
+    const state = createClaimScenario("m3", {
+      1: ["m1", "m2"]
+    });
     const discardedTileId = state.players[0].handTiles[0]?.id;
 
     state.wall = [createTile("south", 0)];
@@ -443,15 +512,13 @@ describe("mahjong-core game reducer", () => {
 
     const passResult = applyAction(discardResult.state, 1, { type: "pass" });
 
-    expect(passResult.ok).toBe(true);
-
     if (!passResult.ok) {
-      return;
+      throw new Error(passResult.error);
     }
 
     expect(passResult.state.pendingDiscard).toBeUndefined();
     expect(passResult.state.currentTurn).toBe(1);
-    expect(passResult.state.players[1].handTiles[0]?.code).toBe("south");
+    expect(passResult.state.players[1].handTiles.some((tile) => tile.code === "south")).toBe(true);
   });
 });
 
@@ -491,8 +558,12 @@ function handFromCodes(codes: TileCode[]): Tile[] {
   });
 }
 
-function createClaimScenario(discardCode: TileCode, playerHands: Partial<Record<0 | 1 | 2 | 3, TileCode[]>>) {
-  const state = createInitialGame({ seed: 99 });
+function createClaimScenario(
+  discardCode: TileCode,
+  playerHands: Partial<Record<0 | 1 | 2 | 3, TileCode[]>>,
+  rules = standardRuleConfig
+) {
+  const state = createInitialGame({ rules, seed: 99 });
 
   state.currentTurn = 0;
   delete state.pendingDiscard;

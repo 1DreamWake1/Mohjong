@@ -1,3 +1,4 @@
+import { standardRuleConfig, type RuleConfig } from "./rules.js";
 import { createTile, tileDefinitions, type Tile } from "./tiles.js";
 
 export type RandomSource = () => number;
@@ -11,8 +12,17 @@ export function createSeededRandom(seed: number): RandomSource {
   };
 }
 
-export function createWall(): Tile[] {
-  return tileDefinitions.flatMap((definition) =>
+export function createWall(rules: RuleConfig = standardRuleConfig): Tile[] {
+  return tileDefinitions.filter((definition) => {
+    if (definition.suit === "winds") {
+      return rules.useWinds;
+    }
+    if (definition.suit === "dragons") {
+      return rules.useDragons;
+    }
+
+    return true;
+  }).flatMap((definition) =>
     Array.from({ length: 4 }, (_, index) => createTile(definition.code, index))
   );
 }
@@ -36,6 +46,9 @@ export function shuffleWall(wall: readonly Tile[], random: RandomSource = Math.r
   return shuffled;
 }
 
-export function createShuffledWall(random: RandomSource = Math.random): Tile[] {
-  return shuffleWall(createWall(), random);
+export function createShuffledWall(
+  random: RandomSource = Math.random,
+  rules: RuleConfig = standardRuleConfig
+): Tile[] {
+  return shuffleWall(createWall(rules), random);
 }

@@ -3,6 +3,7 @@ import {
   applyAction,
   chooseBasicBotAction,
   createInitialGame,
+  simpleRuleConfig,
   type MahjongGameState
 } from "mahjong-core";
 
@@ -71,10 +72,11 @@ export function createGameRoomService() {
       state: createInitialGame({
         players: [
           { isBot: false, username: user.username },
-          { isBot: true, username: "东风Bot" },
-          { isBot: true, username: "青竹Bot" },
-          { isBot: true, username: "白露Bot" }
-        ]
+          { isBot: true, username: "玩家Bot1" },
+          { isBot: true, username: "玩家Bot2" },
+          { isBot: true, username: "玩家Bot3" }
+        ],
+        rules: simpleRuleConfig
       })
     };
 
@@ -94,7 +96,12 @@ export function createGameRoomService() {
   }
 
   function getOrCreateQuickRoom(user: AuthUser): GameRoom {
-    return getRoomForUser(user) ?? createQuickRoom(user);
+    const activeRoom = getRoomForUser(user);
+    if (!activeRoom || activeRoom.state.phase === "ended") {
+      return createQuickRoom(user);
+    }
+
+    return activeRoom;
   }
 
   function getPlayerView(room: GameRoom): PlayerView {
