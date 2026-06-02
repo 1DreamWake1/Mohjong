@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
   const disconnect = vi.fn();
+  const on = vi.fn();
   const createGameSocket = vi.fn((token: string) => ({
     auth: { token },
-    disconnect
+    disconnect,
+    on
   }));
 
-  return { createGameSocket, disconnect };
+  return { createGameSocket, disconnect, on };
 });
 
 vi.mock("../socket/socketClient.js", () => ({
@@ -34,6 +36,8 @@ describe("socketStore", () => {
       preparedToken: "token-a",
       status: "ready"
     });
+    expect(mocks.on).toHaveBeenCalledWith("connect", expect.any(Function));
+    expect(mocks.on).toHaveBeenCalledWith("disconnect", expect.any(Function));
   });
 
   it("reuses the prepared socket for the same token", () => {

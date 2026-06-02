@@ -57,6 +57,9 @@ importers:
       fastify:
         specifier: ^5.0.0
         version: 5.8.5
+      mahjong-core:
+        specifier: workspace:*
+        version: link:../../packages/mahjong-core
       pino:
         specifier: ^9.5.0
         version: 9.14.0

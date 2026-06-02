@@ -14,6 +14,7 @@ const actionLabels: Record<Action["type"], string> = {
 type ActionBarProps = {
   actions: Action[];
   disabled?: boolean;
+  onAction?: (action: Action) => void;
 };
 
 export function ActionBar(props: ActionBarProps): JSX.Element {
@@ -28,6 +29,7 @@ export function ActionBar(props: ActionBarProps): JSX.Element {
           className={action.type === "hu" ? styles.winButton : styles.actionButton}
           disabled={props.disabled}
           key={`${action.type}-${action.tileId ?? index}`}
+          onClick={() => props.onAction?.(action)}
           type="button"
         >
           {actionLabels[action.type]}

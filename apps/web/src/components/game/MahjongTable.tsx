@@ -1,4 +1,4 @@
-import type { PlayerView } from "@mahjong/shared";
+import type { Action, PlayerView } from "@mahjong/shared";
 
 import styles from "./gameComponents.module.css";
 import { ActionBar } from "./ActionBar.js";
@@ -9,6 +9,7 @@ import { Tile } from "./Tile.js";
 type MahjongTableProps = {
   selectedTileId: string | null;
   view: PlayerView;
+  onAction: (action: Action) => void;
   onSelectTile: (tileId: string) => void;
 };
 
@@ -20,6 +21,15 @@ export function MahjongTable(props: MahjongTableProps): JSX.Element {
       ? props.view.username
       : props.view.otherPlayers.find((player) => player.seatIndex === props.view.currentTurn)
           ?.username;
+
+  const discardActions = props.view.availableActions.filter((action) => action.type === "discard");
+  const selectedDiscardAction = props.selectedTileId
+    ? discardActions.find((action) => action.tileId === props.selectedTileId)
+    : undefined;
+  const visibleActions = [
+    ...props.view.availableActions.filter((action) => action.type !== "discard"),
+    ...(selectedDiscardAction ? [selectedDiscardAction] : discardActions.length > 0 ? [{ type: "discard" } as Action] : [])
+  ];
 
   return (
     <section className={styles.tableSurface}>
@@ -92,7 +102,11 @@ export function MahjongTable(props: MahjongTableProps): JSX.Element {
           selectedTileId={props.selectedTileId}
           tiles={props.view.handTiles}
         />
-        <ActionBar actions={props.view.availableActions} disabled={props.view.phase === "ended"} />
+        <ActionBar
+          actions={visibleActions}
+          disabled={props.view.phase === "ended"}
+          onAction={props.onAction}
+        />
       </footer>
     </section>
   );

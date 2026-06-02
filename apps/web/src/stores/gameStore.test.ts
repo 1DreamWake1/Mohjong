@@ -5,8 +5,10 @@ import { useGameStore } from "./gameStore.js";
 describe("gameStore", () => {
   beforeEach(() => {
     useGameStore.setState({
+      errorMessage: null,
       scenarioId: "initial",
       selectedTileId: null,
+      status: "idle",
       view: useGameStore.getState().view
     });
     useGameStore.getState().setScenario("initial");
@@ -48,5 +50,31 @@ describe("gameStore", () => {
 
     useGameStore.getState().selectTile("c1-a");
     expect(useGameStore.getState().selectedTileId).toBeNull();
+  });
+
+  it("stores live player views and clears selected tile", () => {
+    useGameStore.getState().selectTile("c1-a");
+    useGameStore.getState().setView({
+      ...useGameStore.getState().view,
+      phase: "playing",
+      roomId: "quick-0001"
+    });
+
+    expect(useGameStore.getState()).toMatchObject({
+      errorMessage: null,
+      selectedTileId: null,
+      status: "active"
+    });
+    expect(useGameStore.getState().view.roomId).toBe("quick-0001");
+  });
+
+  it("tracks game errors", () => {
+    useGameStore.getState().setErrorMessage("Illegal action");
+
+    expect(useGameStore.getState().errorMessage).toBe("Illegal action");
+
+    useGameStore.getState().clearError();
+
+    expect(useGameStore.getState().errorMessage).toBeNull();
   });
 });

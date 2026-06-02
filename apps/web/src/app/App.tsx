@@ -52,7 +52,7 @@ export function App(): JSX.Element {
   }
 
   if (currentPath === APP_ROUTES.gameDemo) {
-    return <GamePage user={user} />;
+    return <GamePage token={token} user={user} />;
   }
 
   return <LobbyPage token={token} user={user} />;

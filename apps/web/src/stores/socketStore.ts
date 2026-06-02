@@ -1,13 +1,12 @@
-import type { Socket } from "socket.io-client";
 import { create } from "zustand";
 
-import { createGameSocket } from "../socket/socketClient.js";
+import { createGameSocket, type GameSocket } from "../socket/socketClient.js";
 
-type SocketStatus = "idle" | "ready";
+type SocketStatus = "idle" | "ready" | "connected";
 
 type SocketStore = {
   preparedToken: string | null;
-  socket: Socket | null;
+  socket: GameSocket | null;
   status: SocketStatus;
   prepareSocket: (token: string) => void;
   disconnectSocket: () => void;
@@ -30,9 +29,19 @@ export const useSocketStore = create<SocketStore>((set, get) => ({
     }
 
     currentState.socket?.disconnect();
+    const socket = createGameSocket(token);
+    socket.on("connect", () => {
+      set({ status: "connected" });
+    });
+    socket.on("disconnect", () => {
+      if (get().socket === socket) {
+        set({ status: "ready" });
+      }
+    });
+
     set({
       preparedToken: token,
-      socket: createGameSocket(token),
+      socket,
       status: "ready"
     });
   }

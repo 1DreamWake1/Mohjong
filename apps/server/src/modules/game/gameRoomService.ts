@@ -1,0 +1,162 @@
+import type { Action, AuthUser, GameEventMessage, PlayerView } from "@mahjong/shared";
+import {
+  applyAction,
+  chooseBasicBotAction,
+  createInitialGame,
+  type MahjongGameState
+} from "mahjong-core";
+
+import { createRoomPlayerView } from "./gameStateMapper.js";
+
+type GameRoom = {
+  events: GameEventMessage[];
+  humanSeatIndex: number;
+  id: string;
+  playerUserId: number;
+  state: MahjongGameState;
+};
+
+export type GameRoomService = ReturnType<typeof createGameRoomService>;
+
+let nextRoomNumber = 1;
+let nextEventNumber = 1;
+
+function createRoomId(): string {
+  const roomNumber = nextRoomNumber;
+  nextRoomNumber += 1;
+  return `quick-${roomNumber.toString().padStart(4, "0")}`;
+}
+
+function createEvent(text: string): GameEventMessage {
+  const eventNumber = nextEventNumber;
+  nextEventNumber += 1;
+  return {
+    createdAt: new Date().toISOString(),
+    id: `event-${eventNumber}`,
+    text
+  };
+}
+
+function describeAction(state: MahjongGameState, seatIndex: number, action: Action): string {
+  const player = state.players[seatIndex];
+  const username = player?.username ?? `${seatIndex + 1}号位`;
+
+  if (action.type === "discard") {
+    const tile = player?.handTiles.find((candidate) => candidate.id === action.tileId);
+    return `${username} 打出 ${tile?.label ?? "一张牌"}`;
+  }
+
+  const actionLabels: Record<Action["type"], string> = {
+    chi: "吃",
+    discard: "打出",
+    gang: "杠",
+    hu: "胡",
+    pass: "过",
+    peng: "碰"
+  };
+
+  return `${username} ${actionLabels[action.type]}`;
+}
+
+export function createGameRoomService() {
+  const roomsById = new Map<string, GameRoom>();
+  const activeRoomIdByUserId = new Map<number, string>();
+
+  function createQuickRoom(user: AuthUser): GameRoom {
+    const room: GameRoom = {
+      events: [createEvent(`${user.username} 加入快速对局`)],
+      humanSeatIndex: 0,
+      id: createRoomId(),
+      playerUserId: user.id,
+      state: createInitialGame({
+        players: [
+          { isBot: false, username: user.username },
+          { isBot: true, username: "东风Bot" },
+          { isBot: true, username: "青竹Bot" },
+          { isBot: true, username: "白露Bot" }
+        ]
+      })
+    };
+
+    roomsById.set(room.id, room);
+    activeRoomIdByUserId.set(user.id, room.id);
+    return room;
+  }
+
+  function getRoomForUser(user: AuthUser, roomId?: string): GameRoom | null {
+    const targetRoomId = roomId ?? activeRoomIdByUserId.get(user.id);
+    if (!targetRoomId) {
+      return null;
+    }
+
+    const room = roomsById.get(targetRoomId);
+    return room?.playerUserId === user.id ? room : null;
+  }
+
+  function getOrCreateQuickRoom(user: AuthUser): GameRoom {
+    return getRoomForUser(user) ?? createQuickRoom(user);
+  }
+
+  function getPlayerView(room: GameRoom): PlayerView {
+    return createRoomPlayerView({
+      events: room.events,
+      roomId: room.id,
+      seatIndex: room.humanSeatIndex,
+      state: room.state
+    });
+  }
+
+  function applyHumanAction(user: AuthUser, action: Action): { error?: string; room: GameRoom } | null {
+    const room = getRoomForUser(user);
+    if (!room) {
+      return null;
+    }
+
+    const result = applyAction(room.state, room.humanSeatIndex, action);
+    if (!result.ok) {
+      return { error: result.error, room };
+    }
+
+    room.events = [...room.events, createEvent(describeAction(room.state, room.humanSeatIndex, action))];
+    room.state = result.state;
+    if (room.state.phase === "ended") {
+      room.events = [...room.events, createEvent("牌局结束")];
+    }
+
+    return { room };
+  }
+
+  function applyNextBotAction(room: GameRoom): boolean {
+    if (room.state.phase !== "playing") {
+      return false;
+    }
+
+    const player = room.state.players[room.state.currentTurn];
+    if (!player?.isBot) {
+      return false;
+    }
+
+    const action = chooseBasicBotAction(room.state, player.seatIndex);
+    const result = applyAction(room.state, player.seatIndex, action);
+    if (!result.ok) {
+      room.events = [...room.events, createEvent(`${player.username} 操作失败：${result.error}`)];
+      return false;
+    }
+
+    room.events = [...room.events, createEvent(describeAction(room.state, player.seatIndex, action))];
+    room.state = result.state;
+    if (room.state.phase === "ended") {
+      room.events = [...room.events, createEvent("牌局结束")];
+    }
+
+    return true;
+  }
+
+  return {
+    applyHumanAction,
+    applyNextBotAction,
+    getOrCreateQuickRoom,
+    getPlayerView,
+    getRoomForUser
+  };
+}

@@ -115,6 +115,25 @@ describe("mahjong-core game reducer", () => {
     expect(state.wall).toHaveLength(83);
   });
 
+  it("accepts explicit human and bot player configuration", () => {
+    const state = createInitialGame({
+      players: [
+        { isBot: false, username: "player-a" },
+        { isBot: true, username: "bot-a" },
+        { isBot: true, username: "bot-b" },
+        { isBot: true, username: "bot-c" }
+      ],
+      seed: 1
+    });
+
+    expect(state.players.map((player) => ({ isBot: player.isBot, username: player.username }))).toEqual([
+      { isBot: false, username: "player-a" },
+      { isBot: true, username: "bot-a" },
+      { isBot: true, username: "bot-b" },
+      { isBot: true, username: "bot-c" }
+    ]);
+  });
+
   it("allows current player to discard and advances the turn with a draw", () => {
     const state = createInitialGame({ seed: 2 });
     const tileId = state.players[0].handTiles[0]?.id;

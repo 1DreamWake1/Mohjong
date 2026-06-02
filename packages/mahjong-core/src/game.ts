@@ -39,6 +39,10 @@ export type MahjongGameState = {
 };
 
 export type CreateGameOptions = {
+  players?: readonly {
+    isBot: boolean;
+    username: string;
+  }[];
   random?: RandomSource;
   seed?: number;
   rules?: RuleConfig;
@@ -53,10 +57,10 @@ export function createInitialGame(options: CreateGameOptions = {}): MahjongGameS
     options.random ?? (options.seed === undefined ? Math.random : createSeededRandom(options.seed));
   const wall = createShuffledWall(random);
   const players: [PlayerState, PlayerState, PlayerState, PlayerState] = [
-    createPlayerState(0),
-    createPlayerState(1),
-    createPlayerState(2),
-    createPlayerState(3)
+    createPlayerState(0, options.players?.[0]),
+    createPlayerState(1, options.players?.[1]),
+    createPlayerState(2, options.players?.[2]),
+    createPlayerState(3, options.players?.[3])
   ];
 
   for (let round = 0; round < 13; round += 1) {
@@ -242,14 +246,17 @@ export function createEmptyPlayerView(seatIndex: number): PlayerView {
   };
 }
 
-function createPlayerState(seatIndex: number): PlayerState {
+function createPlayerState(
+  seatIndex: number,
+  options?: { isBot: boolean; username: string }
+): PlayerState {
   return {
     seatIndex,
-    username: `bot-${seatIndex + 1}`,
+    username: options?.username ?? `bot-${seatIndex + 1}`,
     handTiles: [],
     discardTiles: [],
     publicMelds: [],
-    isBot: true
+    isBot: options?.isBot ?? true
   };
 }
 
