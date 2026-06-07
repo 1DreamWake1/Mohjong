@@ -43,6 +43,14 @@ describe("Tile", () => {
     expect(bambooHtml).not.toContain(">条<");
   });
 
+  it("renders three bamboo with a visible centered top stick", () => {
+    const html = renderToStaticMarkup(<Tile tile={tile("bamboo", 3, "3条")} />);
+
+    expect(html).toContain("_bambooPatternThreeTop_");
+    expect(html).toContain("_bambooPatternThreeRow_");
+    expect(html).toMatch(/bambooPatternThreeTop_[^"]*"><span><\/span><\/span>/);
+  });
+
   it("keeps non-interactive visible tiles in their suit colors", () => {
     const html = renderToStaticMarkup(<Tile tile={tile("dots", 5, "5筒")} />);
 

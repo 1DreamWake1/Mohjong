@@ -563,7 +563,7 @@
   justify-content: center;
 }
 
-.bambooPatternSeven > span,
+.bambooPatternSevenTop span,
 .bambooPatternSevenRow span {
   background: var(--tile-face-color);
   border-radius: 3px;

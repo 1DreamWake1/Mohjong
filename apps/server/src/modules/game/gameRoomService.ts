@@ -19,6 +19,7 @@ type GameRoom = {
 
 export type GameRoomService = ReturnType<typeof createGameRoomService>;
 
+const maxRoomEvents = 20;
 let nextRoomNumber = 1;
 let nextEventNumber = 1;
 
@@ -36,6 +37,10 @@ function createEvent(text: string): GameEventMessage {
     id: `event-${eventNumber}`,
     text
   };
+}
+
+function appendRoomEvent(events: GameEventMessage[], text: string): GameEventMessage[] {
+  return [...events, createEvent(text)].slice(-maxRoomEvents);
 }
 
 function describeAction(state: MahjongGameState, seatIndex: number, action: Action): string {
@@ -65,7 +70,7 @@ export function createGameRoomService() {
 
   function createQuickRoom(user: AuthUser): GameRoom {
     const room: GameRoom = {
-      events: [createEvent(`${user.username} 加入快速对局`)],
+      events: appendRoomEvent([], `${user.username} 加入快速对局`),
       humanSeatIndex: 0,
       id: createRoomId(),
       playerUserId: user.id,
@@ -124,10 +129,10 @@ export function createGameRoomService() {
       return { error: result.error, room };
     }
 
-    room.events = [...room.events, createEvent(describeAction(room.state, room.humanSeatIndex, action))];
+    room.events = appendRoomEvent(room.events, describeAction(room.state, room.humanSeatIndex, action));
     room.state = result.state;
     if (room.state.phase === "ended") {
-      room.events = [...room.events, createEvent("牌局结束")];
+      room.events = appendRoomEvent(room.events, "牌局结束");
     }
 
     return { room };
@@ -146,14 +151,14 @@ export function createGameRoomService() {
     const action = chooseBasicBotAction(room.state, player.seatIndex);
     const result = applyAction(room.state, player.seatIndex, action);
     if (!result.ok) {
-      room.events = [...room.events, createEvent(`${player.username} 操作失败：${result.error}`)];
+      room.events = appendRoomEvent(room.events, `${player.username} 操作失败：${result.error}`);
       return false;
     }
 
-    room.events = [...room.events, createEvent(describeAction(room.state, player.seatIndex, action))];
+    room.events = appendRoomEvent(room.events, describeAction(room.state, player.seatIndex, action));
     room.state = result.state;
     if (room.state.phase === "ended") {
-      room.events = [...room.events, createEvent("牌局结束")];
+      room.events = appendRoomEvent(room.events, "牌局结束");
     }
 
     return true;

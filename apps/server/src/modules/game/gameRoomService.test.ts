@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getLegalActions } from "mahjong-core";
 
 import { createGameRoomService } from "./gameRoomService.js";
 import type { AuthUser } from "@mahjong/shared";
@@ -94,5 +95,41 @@ describe("gameRoomService", () => {
     expect(nextRoom.id).not.toBe(endedRoom.id);
     expect(nextRoom.state.phase).toBe("playing");
     expect(service.getRoomForUser(player)?.id).toBe(nextRoom.id);
+  });
+
+  it("restores the current active room without an explicit room id", () => {
+    const service = createGameRoomService();
+    const room = service.getOrCreateQuickRoom(player);
+
+    expect(service.getRoomForUser(player)).toBe(room);
+  });
+
+  it("keeps only recent room events", () => {
+    const service = createGameRoomService();
+    const room = service.getOrCreateQuickRoom(player);
+
+    for (let index = 0; index < 30; index += 1) {
+      if (room.state.phase !== "playing") {
+        break;
+      }
+
+      if (room.state.currentTurn === room.humanSeatIndex) {
+        const legalActions = getLegalActions(room.state, room.humanSeatIndex);
+        const action =
+          legalActions.find((candidate) => candidate.type === "discard") ??
+          legalActions.find((candidate) => candidate.type === "pass");
+
+        if (!action) {
+          break;
+        }
+
+        const result = service.applyHumanAction(player, action);
+        expect(result?.error).toBeUndefined();
+      } else {
+        service.applyNextBotAction(room);
+      }
+    }
+
+    expect(service.getPlayerView(room).eventMessages.length).toBeLessThanOrEqual(20);
   });
 });

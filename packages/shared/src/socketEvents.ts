@@ -4,7 +4,7 @@ export type ClientToServerEvents = {
   "game:join": (payload: { gameId?: string }) => void;
   "game:start": () => void;
   "game:action": (payload: { action: Action }) => void;
-  "game:sync": (payload: { gameId: string }) => void;
+  "game:sync": (payload: { gameId?: string }) => void;
 };
 
 export type ServerToClientEvents = {

@@ -103,6 +103,12 @@ function buildViews(options: {
   wallTileCount: number;
   winnerSeatIndex?: number;
 }): PlayerView[] {
+  const eventTexts = [
+    "快速对局已自动开始。",
+    "南山 完成起手。",
+    options.eventText
+  ];
+
   return playerNames.map((username, seatIndex) => {
     const view: PlayerView = {
       availableActions:
@@ -116,13 +122,11 @@ function buildViews(options: {
         seatIndex: discardSeatIndex,
         tiles
       })),
-      eventMessages: [
-        {
-          createdAt: "2026-06-01T10:00:00.000Z",
-          id: `${options.roomId}-event`,
-          text: options.eventText
-        }
-      ],
+      eventMessages: eventTexts.map((text, index) => ({
+        createdAt: `2026-06-01T10:00:0${index}.000Z`,
+        id: `${options.roomId}-event-${index}`,
+        text
+      })),
       handTiles: hands[seatIndex] ?? [],
       otherPlayers: playerNames
         .map((otherUsername, otherSeatIndex) => ({

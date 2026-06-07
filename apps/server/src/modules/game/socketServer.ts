@@ -15,9 +15,9 @@ function readToken(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-function emitRoomState(socket: GameSocket, gameRoomService: GameRoomService): void {
+function emitRoomState(socket: GameSocket, gameRoomService: GameRoomService, roomId?: string): void {
   const user = (socket.data as SocketData).user;
-  const room = gameRoomService.getRoomForUser(user);
+  const room = gameRoomService.getRoomForUser(user, roomId);
   if (!room) {
     socket.emit("game:error", { message: "No active game room" });
     return;
@@ -30,33 +30,59 @@ function emitRoomState(socket: GameSocket, gameRoomService: GameRoomService): vo
 }
 
 function scheduleBots(input: {
+  activeSocketByRoomId: Map<string, GameSocket>;
   gameRoomService: GameRoomService;
   roomId: string;
-  socket: GameSocket;
+  scheduledBotRoomIds: Set<string>;
+  user: AuthUser;
 }): void {
-  const room = input.gameRoomService.getRoomForUser((input.socket.data as SocketData).user, input.roomId);
+  const room = input.gameRoomService.getRoomForUser(input.user, input.roomId);
   if (!room || room.state.phase !== "playing") {
     return;
   }
 
   const player = room.state.players[room.state.currentTurn];
   if (!player?.isBot) {
-    emitRoomState(input.socket, input.gameRoomService);
+    const latestSocket = input.activeSocketByRoomId.get(input.roomId);
+    if (latestSocket) {
+      emitRoomState(latestSocket, input.gameRoomService, input.roomId);
+    }
     return;
   }
 
+  if (input.scheduledBotRoomIds.has(room.id)) {
+    return;
+  }
+
+  input.scheduledBotRoomIds.add(room.id);
   const delayMs = 500 + Math.floor(Math.random() * 1500);
   setTimeout(() => {
-    const latestRoom = input.gameRoomService.getRoomForUser(
-      (input.socket.data as SocketData).user,
-      input.roomId
-    );
+    input.scheduledBotRoomIds.delete(input.roomId);
+    const latestRoom = input.gameRoomService.getRoomForUser(input.user, input.roomId);
     if (!latestRoom) {
       return;
     }
 
+    const latestSocket = input.activeSocketByRoomId.get(input.roomId);
+    if (latestRoom.state.phase !== "playing") {
+      if (latestSocket) {
+        emitRoomState(latestSocket, input.gameRoomService, input.roomId);
+      }
+      return;
+    }
+
+    const latestPlayer = latestRoom.state.players[latestRoom.state.currentTurn];
+    if (!latestPlayer?.isBot) {
+      if (latestSocket) {
+        emitRoomState(latestSocket, input.gameRoomService, input.roomId);
+      }
+      return;
+    }
+
     input.gameRoomService.applyNextBotAction(latestRoom);
-    emitRoomState(input.socket, input.gameRoomService);
+    if (latestSocket) {
+      emitRoomState(latestSocket, input.gameRoomService, input.roomId);
+    }
     scheduleBots(input);
   }, delayMs);
 }
@@ -72,6 +98,8 @@ export function registerGameSocketServer(input: {
     }
   });
   const gameRoomService = input.gameRoomService ?? createGameRoomService();
+  const activeSocketByRoomId = new Map<string, GameSocket>();
+  const scheduledBotRoomIds = new Set<string>();
 
   io.use(async (socket, next) => {
     const token = readToken(socket.handshake.auth.token);
@@ -93,6 +121,30 @@ export function registerGameSocketServer(input: {
   io.on("connection", (socket) => {
     const gameSocket = socket as GameSocket;
     const user = (gameSocket.data as SocketData).user;
+    const socketRoomIds = new Set<string>();
+
+    function trackRoomSocket(roomId: string): void {
+      socketRoomIds.add(roomId);
+      activeSocketByRoomId.set(roomId, gameSocket);
+    }
+
+    function scheduleRoomBots(roomId: string): void {
+      scheduleBots({
+        activeSocketByRoomId,
+        gameRoomService,
+        roomId,
+        scheduledBotRoomIds,
+        user
+      });
+    }
+
+    gameSocket.on("disconnect", () => {
+      for (const roomId of socketRoomIds) {
+        if (activeSocketByRoomId.get(roomId) === gameSocket) {
+          activeSocketByRoomId.delete(roomId);
+        }
+      }
+    });
 
     gameSocket.on("game:join", (payload) => {
       if (user.role !== "player") {
@@ -109,8 +161,9 @@ export function registerGameSocketServer(input: {
         return;
       }
 
+      trackRoomSocket(room.id);
       gameSocket.emit("game:state", { view: gameRoomService.getPlayerView(room) });
-      scheduleBots({ gameRoomService, roomId: room.id, socket: gameSocket });
+      scheduleRoomBots(room.id);
     });
 
     gameSocket.on("game:start", () => {
@@ -137,18 +190,25 @@ export function registerGameSocketServer(input: {
       }
 
       gameSocket.emit("game:state", { view: gameRoomService.getPlayerView(result.room) });
-      scheduleBots({ gameRoomService, roomId: result.room.id, socket: gameSocket });
+      trackRoomSocket(result.room.id);
+      scheduleRoomBots(result.room.id);
     });
 
     gameSocket.on("game:sync", (payload) => {
+      if (user.role !== "player") {
+        gameSocket.emit("game:error", { message: "Only players can sync games" });
+        return;
+      }
+
       const room = gameRoomService.getRoomForUser(user, payload.gameId);
       if (!room) {
         gameSocket.emit("game:error", { message: "Game room not found" });
         return;
       }
 
+      trackRoomSocket(room.id);
       gameSocket.emit("game:state", { view: gameRoomService.getPlayerView(room) });
-      scheduleBots({ gameRoomService, roomId: room.id, socket: gameSocket });
+      scheduleRoomBots(room.id);
     });
   });
 

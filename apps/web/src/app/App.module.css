@@ -369,6 +369,20 @@
   margin: 0;
 }
 
+.eventList {
+  color: #374454;
+  display: grid;
+  gap: 8px;
+  line-height: 1.5;
+  list-style-position: inside;
+  margin: 0;
+  padding: 0;
+}
+
+.eventList li {
+  overflow-wrap: anywhere;
+}
+
 .tablePanel {
   min-width: 0;
   padding: 20px;

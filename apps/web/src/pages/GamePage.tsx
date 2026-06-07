@@ -1,5 +1,5 @@
-import type { Action, AuthUser } from "@mahjong/shared";
-import { useEffect } from "react";
+import type { Action, AuthUser, GameEventMessage, GamePhase } from "@mahjong/shared";
+import { useEffect, useRef } from "react";
 
 import styles from "../app/App.module.css";
 import { APP_ROUTES, replaceRoute } from "../app/routes.js";
@@ -12,6 +12,24 @@ type GamePageProps = {
   token: string;
   user: AuthUser;
 };
+
+export function getGameConnectRequest(roomId: string):
+  | { event: "game:join"; payload: Record<string, never> }
+  | { event: "game:sync"; payload: { gameId: string } } {
+  if (roomId.startsWith("quick-")) {
+    return { event: "game:sync", payload: { gameId: roomId } };
+  }
+
+  return { event: "game:join", payload: {} };
+}
+
+export function canRestartGame(phase: GamePhase): boolean {
+  return phase === "ended";
+}
+
+export function getRecentGameEvents(events: GameEventMessage[], limit = 5): GameEventMessage[] {
+  return events.slice(-limit).reverse();
+}
 
 export function GamePage(props: GamePageProps): JSX.Element {
   const signOut = useAuthStore((state) => state.signOut);
@@ -29,7 +47,12 @@ export function GamePage(props: GamePageProps): JSX.Element {
   const socket = useSocketStore((state) => state.socket);
   const socketStatus = useSocketStore((state) => state.status);
 
-  const latestEvent = view.eventMessages.at(-1);
+  const recentEvents = getRecentGameEvents(view.eventMessages);
+  const latestRoomIdRef = useRef(view.roomId);
+
+  useEffect(() => {
+    latestRoomIdRef.current = view.roomId;
+  }, [view.roomId]);
 
   useEffect(() => {
     prepareSocket(props.token);
@@ -53,15 +76,20 @@ export function GamePage(props: GamePageProps): JSX.Element {
     const handleEnded: Parameters<typeof socket.on<"game:ended">>[1] = () => {
       setStatus("ended");
     };
+    const handleConnect = () => {
+      const request = getGameConnectRequest(latestRoomIdRef.current);
+      socket.emit(request.event, request.payload);
+    };
 
+    socket.on("connect", handleConnect);
     socket.on("game:state", handleState);
     socket.on("game:error", handleError);
     socket.on("game:ended", handleEnded);
     socket.connect();
     setStatus("joining");
-    socket.emit("game:join", {});
 
     return () => {
+      socket.off("connect", handleConnect);
       socket.off("game:state", handleState);
       socket.off("game:error", handleError);
       socket.off("game:ended", handleEnded);
@@ -75,6 +103,17 @@ export function GamePage(props: GamePageProps): JSX.Element {
     }
 
     socket.emit("game:action", { action });
+  }
+
+  function handleRestartGame(): void {
+    if (!socket) {
+      setErrorMessage("Socket 未连接");
+      return;
+    }
+
+    setStatus("joining");
+    setErrorMessage(null);
+    socket.emit("game:join", {});
   }
 
   return (
@@ -110,6 +149,11 @@ export function GamePage(props: GamePageProps): JSX.Element {
             <p className={styles.helperText}>
               Socket：{socketStatus === "connected" ? "已连接" : socketStatus === "ready" ? "准备中" : "未准备"}
             </p>
+            {canRestartGame(view.phase) ? (
+              <button className={styles.secondaryButton} onClick={handleRestartGame} type="button">
+                再开一局
+              </button>
+            ) : null}
             {errorMessage ? <p className={styles.error}>{errorMessage}</p> : null}
           </section>
 
@@ -118,7 +162,15 @@ export function GamePage(props: GamePageProps): JSX.Element {
               <p className={styles.panelLabel}>牌局提示</p>
               <h2>{view.phase === "ended" ? "结算" : "事件"}</h2>
             </div>
-            <p className={styles.helperText}>{latestEvent?.text ?? "暂无事件"}</p>
+            {recentEvents.length > 0 ? (
+              <ol className={styles.eventList} aria-label="最近牌局事件">
+                {recentEvents.map((event) => (
+                  <li key={event.id}>{event.text}</li>
+                ))}
+              </ol>
+            ) : (
+              <p className={styles.helperText}>暂无事件</p>
+            )}
             {view.winnerSeatIndex !== undefined ? (
               <span className={styles.statusBadge}>胜者 {view.winnerSeatIndex + 1}号位</span>
             ) : null}

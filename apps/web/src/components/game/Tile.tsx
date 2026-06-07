@@ -207,7 +207,9 @@ function renderPattern(tile: TileInfo): JSX.Element | null {
     if (tile.rank === 3) {
       return (
         <span className={styles.bambooPatternThree} aria-hidden="true">
-          <span className={styles.bambooPatternThreeTop} />
+          <span className={styles.bambooPatternThreeTop}>
+            <span />
+          </span>
           <span className={styles.bambooPatternThreeRow}>
             <span />
             <span />
