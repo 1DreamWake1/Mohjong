@@ -1,4 +1,4 @@
-import type { Action, PlayerView } from "@mahjong/shared";
+import type { Action, MeldType, PlayerView } from "@mahjong/shared";
 
 import styles from "./gameComponents.module.css";
 import { ActionBar } from "./ActionBar.js";
@@ -14,6 +14,38 @@ type MahjongTableProps = {
 };
 
 const seatNames = ["东", "南", "西", "北"];
+const meldTypeLabels: Record<MeldType, string> = {
+  chi: "吃",
+  gang: "杠",
+  peng: "碰"
+};
+
+export function getMeldTypeLabel(type: MeldType): string {
+  return meldTypeLabels[type];
+}
+
+export function getVisibleActions(actions: Action[], selectedTileId: string | null): Action[] {
+  const discardActions = actions.filter((action) => action.type === "discard");
+  const selectedDiscardAction = selectedTileId
+    ? discardActions.find((action) => action.tileId === selectedTileId)
+    : undefined;
+
+  return [
+    ...actions.filter((action) => action.type !== "discard"),
+    ...(selectedDiscardAction ? [selectedDiscardAction] : [])
+  ];
+}
+
+export function shouldPromptForDiscardSelection(actions: Action[], selectedTileId: string | null): boolean {
+  return (
+    actions.some((action) => action.type === "discard") &&
+    !getVisibleActions(actions, selectedTileId).some((action) => action.type === "discard")
+  );
+}
+
+export function shouldRenderActionBar(visibleActions: Action[], promptForDiscardSelection: boolean): boolean {
+  return visibleActions.length > 0 || !promptForDiscardSelection;
+}
 
 export function MahjongTable(props: MahjongTableProps): JSX.Element {
   const currentPlayerName =
@@ -22,14 +54,11 @@ export function MahjongTable(props: MahjongTableProps): JSX.Element {
       : props.view.otherPlayers.find((player) => player.seatIndex === props.view.currentTurn)
           ?.username;
 
-  const discardActions = props.view.availableActions.filter((action) => action.type === "discard");
-  const selectedDiscardAction = props.selectedTileId
-    ? discardActions.find((action) => action.tileId === props.selectedTileId)
-    : undefined;
-  const visibleActions = [
-    ...props.view.availableActions.filter((action) => action.type !== "discard"),
-    ...(selectedDiscardAction ? [selectedDiscardAction] : discardActions.length > 0 ? [{ type: "discard" } as Action] : [])
-  ];
+  const visibleActions = getVisibleActions(props.view.availableActions, props.selectedTileId);
+  const promptForDiscardSelection = shouldPromptForDiscardSelection(
+    props.view.availableActions,
+    props.selectedTileId
+  );
 
   return (
     <section className={styles.tableSurface}>
@@ -80,7 +109,7 @@ export function MahjongTable(props: MahjongTableProps): JSX.Element {
           {props.view.publicMelds.map((meld, index) => (
             <div className={styles.meld} key={`${meld.ownerSeatIndex}-${index}`}>
               <span>
-                {seatNames[meld.ownerSeatIndex]}位 {meld.type}
+                {seatNames[meld.ownerSeatIndex]}位 {getMeldTypeLabel(meld.type)}
               </span>
               <div>
                 {meld.tiles.map((tile) => (
@@ -102,11 +131,14 @@ export function MahjongTable(props: MahjongTableProps): JSX.Element {
           selectedTileId={props.selectedTileId}
           tiles={props.view.handTiles}
         />
-        <ActionBar
-          actions={visibleActions}
-          disabled={props.view.phase === "ended"}
-          onAction={props.onAction}
-        />
+        {shouldRenderActionBar(visibleActions, promptForDiscardSelection) ? (
+          <ActionBar
+            actions={visibleActions}
+            disabled={props.view.phase === "ended"}
+            onAction={props.onAction}
+          />
+        ) : null}
+        {promptForDiscardSelection ? <p className={styles.actionHint}>请选择一张手牌打出</p> : null}
       </footer>
     </section>
   );

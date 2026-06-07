@@ -37,6 +37,19 @@ export type GameEventMessage = {
   createdAt: string;
 };
 
+export type GameScoreFan = {
+  name: string;
+  value: number;
+};
+
+export type GameResultInfo = {
+  endReason: "hu" | "draw";
+  fans: GameScoreFan[];
+  fanTotal: number;
+  totalPoints: number;
+  winningTile?: TileInfo;
+};
+
 export type OtherPlayerView = {
   seatIndex: number;
   username: string;
@@ -57,5 +70,6 @@ export type PlayerView = {
   phase: GamePhase;
   wallTileCount: number;
   eventMessages: GameEventMessage[];
+  result?: GameResultInfo;
   winnerSeatIndex?: number;
 };

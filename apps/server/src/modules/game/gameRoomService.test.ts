@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getLegalActions } from "mahjong-core";
 
-import { createGameRoomService } from "./gameRoomService.js";
+import { createGameRoomService, describeGameEnd } from "./gameRoomService.js";
 import type { AuthUser } from "@mahjong/shared";
 
 const player: AuthUser = {
@@ -62,8 +62,24 @@ describe("gameRoomService", () => {
       type: "discard"
     });
 
-    expect(result?.error).toBe("Cannot discard a tile outside player's hand");
+    expect(result?.error).toBe("Illegal action");
     expect(service.getPlayerView(room).handTiles).toHaveLength(beforeView.handTiles.length);
+  });
+
+  it("rejects actions that are not in the current legal action list", () => {
+    const service = createGameRoomService();
+    const room = service.getOrCreateQuickRoom(player);
+    const beforeView = service.getPlayerView(room);
+
+    const result = service.applyHumanAction(player, {
+      type: "pass"
+    });
+
+    expect(result?.error).toBe("Illegal action");
+    expect(service.getPlayerView(room)).toMatchObject({
+      currentTurn: beforeView.currentTurn,
+      handTiles: beforeView.handTiles
+    });
   });
 
   it("applies legal human actions and can advance bot turns", () => {
@@ -95,6 +111,81 @@ describe("gameRoomService", () => {
     expect(nextRoom.id).not.toBe(endedRoom.id);
     expect(nextRoom.state.phase).toBe("playing");
     expect(service.getRoomForUser(player)?.id).toBe(nextRoom.id);
+  });
+
+  it("includes draw result details in the player view", () => {
+    const service = createGameRoomService();
+    const room = service.getOrCreateQuickRoom(player);
+
+    room.state.phase = "ended";
+    room.state.endReason = "draw";
+
+    expect(service.getPlayerView(room)).toMatchObject({
+      phase: "ended",
+      result: {
+        endReason: "draw",
+        fanTotal: 0,
+        totalPoints: 0
+      }
+    });
+  });
+
+  it("includes winning tile details in the player view", () => {
+    const service = createGameRoomService();
+    const room = service.getOrCreateQuickRoom(player);
+    const winningTile = room.state.players[0].handTiles[0];
+
+    if (!winningTile) {
+      throw new Error("Expected player to have a tile");
+    }
+
+    room.state.phase = "ended";
+    room.state.endReason = "hu";
+    room.state.winnerSeatIndex = 0;
+    room.state.winningTile = winningTile;
+    room.state.score = {
+      basePoints: 20,
+      canHu: true,
+      fanTotal: 1,
+      fans: [{ name: "断幺九", type: "tanyao", value: 1 }],
+      totalPoints: 30
+    };
+
+    expect(service.getPlayerView(room)).toMatchObject({
+      result: {
+        endReason: "hu",
+        totalPoints: 30,
+        winningTile: expect.objectContaining({ id: winningTile.id })
+      },
+      winnerSeatIndex: 0
+    });
+  });
+
+  it("describes ended games with result details", () => {
+    const service = createGameRoomService();
+    const room = service.getOrCreateQuickRoom(player);
+    const winningTile = room.state.players[0].handTiles[0];
+
+    if (!winningTile) {
+      throw new Error("Expected player to have a tile");
+    }
+
+    room.state.phase = "ended";
+    room.state.endReason = "hu";
+    room.state.winnerSeatIndex = 0;
+    room.state.winningTile = winningTile;
+    room.state.score = {
+      basePoints: 20,
+      canHu: true,
+      fanTotal: 1,
+      fans: [{ name: "断幺九", type: "tanyao", value: 1 }],
+      totalPoints: 30
+    };
+
+    expect(describeGameEnd(room.state)).toBe(`player-a 胡牌，胡 ${winningTile.label}，30 分`);
+
+    room.state.endReason = "draw";
+    expect(describeGameEnd(room.state)).toBe("牌局流局");
   });
 
   it("restores the current active room without an explicit room id", () => {

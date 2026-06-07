@@ -7,6 +7,7 @@ import {
   chooseDiscardTile,
   createEmptyPlayerView,
   createInitialGame,
+  createPlayerView,
   createTile,
   createWall,
   getLegalActions,
@@ -405,6 +406,12 @@ describe("mahjong-core game reducer", () => {
       canHu: true,
       fanTotal: 2,
       totalPoints: 40
+    });
+    expect(createPlayerView(result.state, 0).result).toMatchObject({
+      endReason: "hu",
+      fanTotal: 2,
+      totalPoints: 40,
+      winningTile: expect.objectContaining({ id: result.state.winningTile?.id })
     });
   });
 

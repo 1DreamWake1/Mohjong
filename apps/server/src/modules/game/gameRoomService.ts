@@ -3,6 +3,7 @@ import {
   applyAction,
   chooseBasicBotAction,
   createInitialGame,
+  getLegalActions,
   simpleRuleConfig,
   type MahjongGameState
 } from "mahjong-core";
@@ -43,6 +44,30 @@ function appendRoomEvent(events: GameEventMessage[], text: string): GameEventMes
   return [...events, createEvent(text)].slice(-maxRoomEvents);
 }
 
+function haveSameTileIds(left: readonly string[] | undefined, right: readonly string[] | undefined): boolean {
+  if (!left && !right) {
+    return true;
+  }
+
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+
+  const sortedLeft = [...left].sort();
+  const sortedRight = [...right].sort();
+
+  return sortedLeft.every((tileId, index) => tileId === sortedRight[index]);
+}
+
+function isLegalActionRequest(legalActions: readonly Action[], action: Action): boolean {
+  return legalActions.some(
+    (candidate) =>
+      candidate.type === action.type &&
+      candidate.tileId === action.tileId &&
+      haveSameTileIds(candidate.tileIds, action.tileIds)
+  );
+}
+
 function describeAction(state: MahjongGameState, seatIndex: number, action: Action): string {
   const player = state.players[seatIndex];
   const username = player?.username ?? `${seatIndex + 1}号位`;
@@ -62,6 +87,23 @@ function describeAction(state: MahjongGameState, seatIndex: number, action: Acti
   };
 
   return `${username} ${actionLabels[action.type]}`;
+}
+
+export function describeGameEnd(state: MahjongGameState): string {
+  if (state.endReason === "draw") {
+    return "牌局流局";
+  }
+
+  if (state.endReason === "hu") {
+    const winner = state.winnerSeatIndex === undefined ? undefined : state.players[state.winnerSeatIndex];
+    const winnerName = winner?.username ?? "玩家";
+    const winningTileText = state.winningTile ? `，胡 ${state.winningTile.label}` : "";
+    const scoreText = state.score ? `，${state.score.totalPoints} 分` : "";
+
+    return `${winnerName} 胡牌${winningTileText}${scoreText}`;
+  }
+
+  return "牌局结束";
 }
 
 export function createGameRoomService() {
@@ -124,6 +166,11 @@ export function createGameRoomService() {
       return null;
     }
 
+    const legalActions = getLegalActions(room.state, room.humanSeatIndex);
+    if (!isLegalActionRequest(legalActions, action)) {
+      return { error: "Illegal action", room };
+    }
+
     const result = applyAction(room.state, room.humanSeatIndex, action);
     if (!result.ok) {
       return { error: result.error, room };
@@ -132,7 +179,7 @@ export function createGameRoomService() {
     room.events = appendRoomEvent(room.events, describeAction(room.state, room.humanSeatIndex, action));
     room.state = result.state;
     if (room.state.phase === "ended") {
-      room.events = appendRoomEvent(room.events, "牌局结束");
+      room.events = appendRoomEvent(room.events, describeGameEnd(room.state));
     }
 
     return { room };
@@ -158,7 +205,7 @@ export function createGameRoomService() {
     room.events = appendRoomEvent(room.events, describeAction(room.state, player.seatIndex, action));
     room.state = result.state;
     if (room.state.phase === "ended") {
-      room.events = appendRoomEvent(room.events, "牌局结束");
+      room.events = appendRoomEvent(room.events, describeGameEnd(room.state));
     }
 
     return true;

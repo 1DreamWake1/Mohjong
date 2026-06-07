@@ -11,8 +11,21 @@ type SocketData = {
   user: AuthUser;
 };
 
-function readToken(value: unknown): string | null {
+type GameSocketOperation = "action" | "join" | "start" | "sync";
+
+const playerOnlyErrors: Record<GameSocketOperation, string> = {
+  action: "Only players can act in games",
+  join: "Only players can join games",
+  start: "Only players can start games",
+  sync: "Only players can sync games"
+};
+
+export function readSocketToken(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+export function getGameSocketAccessError(user: AuthUser, operation: GameSocketOperation): string | null {
+  return user.role === "player" ? null : playerOnlyErrors[operation];
 }
 
 function emitRoomState(socket: GameSocket, gameRoomService: GameRoomService, roomId?: string): void {
@@ -102,7 +115,7 @@ export function registerGameSocketServer(input: {
   const scheduledBotRoomIds = new Set<string>();
 
   io.use(async (socket, next) => {
-    const token = readToken(socket.handshake.auth.token);
+    const token = readSocketToken(socket.handshake.auth.token);
     if (!token) {
       next(new Error("Unauthorized"));
       return;
@@ -147,8 +160,9 @@ export function registerGameSocketServer(input: {
     });
 
     gameSocket.on("game:join", (payload) => {
-      if (user.role !== "player") {
-        gameSocket.emit("game:error", { message: "Only players can join games" });
+      const accessError = getGameSocketAccessError(user, "join");
+      if (accessError) {
+        gameSocket.emit("game:error", { message: accessError });
         return;
       }
 
@@ -167,13 +181,19 @@ export function registerGameSocketServer(input: {
     });
 
     gameSocket.on("game:start", () => {
-      gameSocket.emit("game:event", { message: "快速对局已自动开始" });
+      const accessError = getGameSocketAccessError(user, "start");
+      if (accessError) {
+        gameSocket.emit("game:error", { message: accessError });
+        return;
+      }
+
       emitRoomState(gameSocket, gameRoomService);
     });
 
     gameSocket.on("game:action", (payload) => {
-      if (user.role !== "player") {
-        gameSocket.emit("game:error", { message: "Only players can act in games" });
+      const accessError = getGameSocketAccessError(user, "action");
+      if (accessError) {
+        gameSocket.emit("game:error", { message: accessError });
         return;
       }
 
@@ -195,8 +215,9 @@ export function registerGameSocketServer(input: {
     });
 
     gameSocket.on("game:sync", (payload) => {
-      if (user.role !== "player") {
-        gameSocket.emit("game:error", { message: "Only players can sync games" });
+      const accessError = getGameSocketAccessError(user, "sync");
+      if (accessError) {
+        gameSocket.emit("game:error", { message: accessError });
         return;
       }
 

@@ -383,6 +383,32 @@
   overflow-wrap: anywhere;
 }
 
+.resultSummary {
+  background: #eefdf7;
+  border: 1px solid #bae6d5;
+  border-radius: 8px;
+  color: #134e4a;
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.resultSummary strong,
+.resultSummary span,
+.resultSummary p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.resultSummary span {
+  font-weight: 800;
+}
+
+.resultSummary p {
+  color: #3f5f59;
+  line-height: 1.5;
+}
+
 .tablePanel {
   min-width: 0;
   padding: 20px;

@@ -37,7 +37,20 @@ export function createRoomPlayerView(input: {
     wallTileCount: input.state.wall.length
   };
 
+  const result =
+    input.state.phase === "ended" && input.state.endReason
+      ? {
+          endReason: input.state.endReason,
+          fanTotal: input.state.score?.fanTotal ?? 0,
+          fans: input.state.score?.fans.map((fan) => ({ name: fan.name, value: fan.value })) ?? [],
+          totalPoints: input.state.score?.totalPoints ?? 0,
+          ...(input.state.winningTile ? { winningTile: input.state.winningTile } : {})
+        }
+      : undefined;
+
+  const viewWithResult = result ? { ...view, result } : view;
+
   return input.state.winnerSeatIndex === undefined
-    ? view
-    : { ...view, winnerSeatIndex: input.state.winnerSeatIndex };
+    ? viewWithResult
+    : { ...viewWithResult, winnerSeatIndex: input.state.winnerSeatIndex };
 }

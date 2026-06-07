@@ -1,4 +1,4 @@
-import type { Action, AuthUser, GameEventMessage, GamePhase } from "@mahjong/shared";
+import type { Action, AuthUser, GameEventMessage, GamePhase, GameResultInfo } from "@mahjong/shared";
 import { useEffect, useRef } from "react";
 
 import styles from "../app/App.module.css";
@@ -31,6 +31,23 @@ export function getRecentGameEvents(events: GameEventMessage[], limit = 5): Game
   return events.slice(-limit).reverse();
 }
 
+export function getGameResultSummary(result: GameResultInfo): {
+  fanText: string | null;
+  scoreText: string;
+  title: string;
+  winningTileText: string | null;
+} {
+  return {
+    fanText:
+      result.fans.length > 0
+        ? result.fans.map((fan) => `${fan.name} ${fan.value}番`).join("、")
+        : null,
+    scoreText: result.endReason === "hu" ? `${result.totalPoints} 分` : "无人胡牌",
+    title: result.endReason === "hu" ? "胡牌结算" : "流局",
+    winningTileText: result.winningTile ? `胡牌：${result.winningTile.label}` : null
+  };
+}
+
 export function GamePage(props: GamePageProps): JSX.Element {
   const signOut = useAuthStore((state) => state.signOut);
   const errorMessage = useGameStore((state) => state.errorMessage);
@@ -48,6 +65,7 @@ export function GamePage(props: GamePageProps): JSX.Element {
   const socketStatus = useSocketStore((state) => state.status);
 
   const recentEvents = getRecentGameEvents(view.eventMessages);
+  const resultSummary = view.result ? getGameResultSummary(view.result) : null;
   const latestRoomIdRef = useRef(view.roomId);
 
   useEffect(() => {
@@ -173,6 +191,14 @@ export function GamePage(props: GamePageProps): JSX.Element {
             )}
             {view.winnerSeatIndex !== undefined ? (
               <span className={styles.statusBadge}>胜者 {view.winnerSeatIndex + 1}号位</span>
+            ) : null}
+            {resultSummary ? (
+              <div className={styles.resultSummary}>
+                <strong>{resultSummary.title}</strong>
+                <span>{resultSummary.scoreText}</span>
+                {resultSummary.winningTileText ? <p>{resultSummary.winningTileText}</p> : null}
+                {resultSummary.fanText ? <p>{resultSummary.fanText}</p> : null}
+              </div>
             ) : null}
           </section>
         </aside>

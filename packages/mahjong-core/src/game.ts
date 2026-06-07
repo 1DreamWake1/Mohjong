@@ -225,9 +225,22 @@ export function createPlayerView(state: MahjongGameState, seatIndex: number): Pl
     wallTileCount: state.wall.length
   };
 
+  const result =
+    state.phase === "ended" && state.endReason
+      ? {
+          endReason: state.endReason,
+          fanTotal: state.score?.fanTotal ?? 0,
+          fans: state.score?.fans.map((fan) => ({ name: fan.name, value: fan.value })) ?? [],
+          totalPoints: state.score?.totalPoints ?? 0,
+          ...(state.winningTile ? { winningTile: state.winningTile } : {})
+        }
+      : undefined;
+
+  const viewWithResult = result ? { ...view, result } : view;
+
   return state.winnerSeatIndex === undefined
-    ? view
-    : { ...view, winnerSeatIndex: state.winnerSeatIndex };
+    ? viewWithResult
+    : { ...viewWithResult, winnerSeatIndex: state.winnerSeatIndex };
 }
 
 export function createEmptyPlayerView(seatIndex: number): PlayerView {

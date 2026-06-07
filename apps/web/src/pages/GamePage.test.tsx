@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { canRestartGame, getGameConnectRequest, getRecentGameEvents } from "./GamePage.js";
+import {
+  canRestartGame,
+  getGameConnectRequest,
+  getGameResultSummary,
+  getRecentGameEvents
+} from "./GamePage.js";
 
 vi.mock("../stores/authStore.js", () => ({
   useAuthStore: (selector: (state: { signOut: () => Promise<void> }) => unknown) =>
@@ -59,5 +64,43 @@ describe("GamePage", () => {
       "event-3",
       "event-2"
     ]);
+  });
+
+  it("formats winning result summaries", () => {
+    expect(
+      getGameResultSummary({
+        endReason: "hu",
+        fanTotal: 2,
+        fans: [{ name: "平和", value: 1 }, { name: "断幺九", value: 1 }],
+        totalPoints: 40,
+        winningTile: {
+          id: "tile-a",
+          label: "8筒",
+          rank: 8,
+          suit: "dots"
+        }
+      })
+    ).toEqual({
+      fanText: "平和 1番、断幺九 1番",
+      scoreText: "40 分",
+      title: "胡牌结算",
+      winningTileText: "胡牌：8筒"
+    });
+  });
+
+  it("formats draw result summaries", () => {
+    expect(
+      getGameResultSummary({
+        endReason: "draw",
+        fanTotal: 0,
+        fans: [],
+        totalPoints: 0
+      })
+    ).toEqual({
+      fanText: null,
+      scoreText: "无人胡牌",
+      title: "流局",
+      winningTileText: null
+    });
   });
 });

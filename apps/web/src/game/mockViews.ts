@@ -157,7 +157,17 @@ function buildViews(options: {
 
     return options.winnerSeatIndex === undefined
       ? view
-      : { ...view, winnerSeatIndex: options.winnerSeatIndex };
+      : {
+          ...view,
+          result: {
+            endReason: "hu",
+            fanTotal: 2,
+            fans: [{ name: "断幺九", value: 1 }, { name: "平和", value: 1 }],
+            totalPoints: 40,
+            winningTile: tile("mock-winning-tile", "8筒", "dots", 8)
+          },
+          winnerSeatIndex: options.winnerSeatIndex
+        };
   });
 }
 
