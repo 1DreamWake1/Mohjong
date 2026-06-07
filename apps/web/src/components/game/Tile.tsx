@@ -129,19 +129,13 @@ function renderPattern(tile: TileInfo): JSX.Element | null {
     if (tile.rank === 7) {
       return (
         <span className={styles.dotPatternSeven} aria-hidden="true">
-          <span className={styles.dotPatternSevenRow}>
-            <span />
-            <span />
-            <span />
-          </span>
-          <span className={styles.dotPatternSevenRow}>
-            <span />
-            <span />
-          </span>
-          <span className={styles.dotPatternSevenRow}>
-            <span />
-            <span />
-          </span>
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
         </span>
       );
     }
@@ -284,12 +278,16 @@ function renderPattern(tile: TileInfo): JSX.Element | null {
           <span className={styles.bambooPatternEightRow}>
             <span />
             <span />
+          </span>
+          <span className={styles.bambooPatternEightRow}>
             <span />
             <span />
           </span>
           <span className={styles.bambooPatternEightRow}>
             <span />
             <span />
+          </span>
+          <span className={styles.bambooPatternEightRow}>
             <span />
             <span />
           </span>
@@ -320,6 +318,10 @@ function renderPattern(tile: TileInfo): JSX.Element | null {
         ))}
       </span>
     );
+  }
+
+  if (tile.suit === "dragons" && tile.rank === 3) {
+    return <span className={styles.whiteDragonPattern} aria-hidden="true" />;
   }
 
   return null;

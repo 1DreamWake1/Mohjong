@@ -117,6 +117,8 @@
 
 .tile {
   --tile-face-color: #17202a;
+  --tile-height: 44px;
+  --tile-width: 32px;
 
   align-items: center;
   aspect-ratio: 0.72;
@@ -128,10 +130,11 @@
   display: inline-flex;
   font-size: 0.8125rem;
   font-weight: 800;
+  height: var(--tile-height);
   justify-content: center;
-  min-height: 42px;
+  min-height: 0;
   padding: 3px;
-  width: 32px;
+  width: var(--tile-width);
 }
 
 .tile:disabled,
@@ -182,12 +185,18 @@
   --tile-face-color: #15803d;
 }
 
+.tileDragons[data-rank="3"] {
+  padding: 2px;
+}
+
 .tileFace {
   align-items: center;
   display: flex;
   height: 100%;
   justify-items: center;
   line-height: 1;
+  min-height: 0;
+  min-width: 0;
   width: 100%;
 }
 
@@ -196,8 +205,9 @@
   color: var(--tile-face-color);
   display: flex;
   font-size: 0.95rem;
+  height: 100%;
   justify-content: center;
-  min-height: 30px;
+  min-height: 0;
   text-align: center;
   -webkit-text-fill-color: var(--tile-face-color);
   width: 100%;
@@ -207,7 +217,7 @@
   align-items: center;
   display: flex;
   justify-content: center;
-  width: 100%;
+  width: 22px;
 }
 
 .dotPattern span {
@@ -222,6 +232,7 @@
 .dotPatternSingle {
   align-items: center;
   display: flex;
+  height: 100%;
   justify-content: center;
   width: 100%;
 }
@@ -230,15 +241,16 @@
   background: var(--tile-face-color);
   border-radius: 999px;
   -webkit-text-fill-color: var(--tile-face-color);
-  height: 8px;
-  width: 8px;
+  height: 12px;
+  width: 12px;
 }
 
 .dotPatternColumn {
   align-items: center;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
+  height: 100%;
   justify-content: center;
   width: 100%;
 }
@@ -247,15 +259,17 @@
   background: var(--tile-face-color);
   border-radius: 999px;
   -webkit-text-fill-color: var(--tile-face-color);
-  height: 7px;
-  width: 7px;
+  height: 9px;
+  width: 9px;
 }
 
 .dotPatternGrid2x2 {
   display: grid;
-  gap: 4px;
-  grid-template-columns: repeat(2, 7px);
+  gap: 7px 6px;
+  grid-template-columns: repeat(2, 8px);
+  grid-template-rows: repeat(2, 8px);
   justify-content: center;
+  place-content: center;
   width: 100%;
 }
 
@@ -263,16 +277,17 @@
   background: var(--tile-face-color);
   border-radius: 999px;
   -webkit-text-fill-color: var(--tile-face-color);
-  height: 6px;
-  width: 6px;
+  height: 8px;
+  width: 8px;
 }
 
 .dotPatternFive {
   display: grid;
-  gap: 4px;
-  grid-template-columns: repeat(2, 7px);
-  grid-template-rows: repeat(2, 7px);
+  gap: 7px 6px;
+  grid-template-columns: repeat(2, 8px);
+  grid-template-rows: repeat(2, 8px);
   justify-content: center;
+  place-content: center;
   position: relative;
   width: 100%;
 }
@@ -281,73 +296,58 @@
   background: var(--tile-face-color);
   border-radius: 999px;
   -webkit-text-fill-color: var(--tile-face-color);
-  height: 6px;
-  width: 6px;
+  height: 8px;
+  width: 8px;
 }
 
 .dotPatternCenter {
   background: var(--tile-face-color);
   border-radius: 999px;
   -webkit-text-fill-color: var(--tile-face-color);
-  height: 8px;
+  height: 9px;
   left: 50%;
   position: absolute;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 8px;
+  width: 9px;
 }
 
 .dotPatternSix {
   align-items: center;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  justify-content: center;
   width: 100%;
 }
 
 .dotPatternRow {
   display: flex;
-  gap: 6px;
+  gap: 9px;
 }
 
 .dotPatternRow span {
   background: var(--tile-face-color);
   border-radius: 999px;
   -webkit-text-fill-color: var(--tile-face-color);
-  height: 7px;
-  width: 7px;
+  height: 8px;
+  width: 8px;
 }
 
 .dotPatternSix .dotPatternRow:first-child {
-  margin-bottom: 4px;
+  margin-bottom: 5px;
 }
 
 .dotPatternSeven {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: grid;
+  gap: 2px 4px;
+  grid-template-columns: repeat(3, 7px);
+  grid-template-rows: repeat(4, 7px);
+  place-content: center;
   width: 100%;
 }
 
-.dotPatternSevenRow {
-  display: flex;
-  gap: 6px;
-}
-
-.dotPatternSevenRow:nth-child(1) {
-  transform: translateX(-3px);
-}
-
-.dotPatternSevenRow:nth-child(2) {
-  transform: translateX(3px);
-}
-
-.dotPatternSevenRow:nth-child(3) {
-  transform: translateX(7px);
-}
-
-.dotPatternSevenRow span {
+.dotPatternSeven span {
   background: var(--tile-face-color);
   border-radius: 999px;
   -webkit-text-fill-color: var(--tile-face-color);
@@ -355,12 +355,33 @@
   width: 7px;
 }
 
+.dotPatternSeven span:nth-child(4) {
+  grid-column: 1;
+  grid-row: 3;
+}
+
+.dotPatternSeven span:nth-child(5) {
+  grid-column: 3;
+  grid-row: 3;
+}
+
+.dotPatternSeven span:nth-child(6) {
+  grid-column: 1;
+  grid-row: 4;
+}
+
+.dotPatternSeven span:nth-child(7) {
+  grid-column: 3;
+  grid-row: 4;
+}
+
 .dotPatternEight {
   display: grid;
-  gap: 4px;
-  grid-template-columns: repeat(2, 7px);
-  grid-template-rows: repeat(4, 7px);
+  gap: 2px 10px;
+  grid-template-columns: repeat(2, 8px);
+  grid-template-rows: repeat(4, 8px);
   justify-content: center;
+  place-content: center;
   width: 100%;
 }
 
@@ -372,16 +393,17 @@
   background: var(--tile-face-color);
   border-radius: 999px;
   -webkit-text-fill-color: var(--tile-face-color);
-  height: 7px;
-  width: 7px;
+  height: 8px;
+  width: 8px;
 }
 
 .dotPatternNine {
   display: grid;
-  gap: 3px;
+  gap: 4px;
   grid-template-columns: repeat(3, 7px);
   grid-template-rows: repeat(3, 7px);
   justify-content: center;
+  place-content: center;
   width: 100%;
 }
 
@@ -423,6 +445,7 @@
 .tileBamboo[data-rank="1"] .bambooPattern {
   align-items: center;
   display: flex;
+  height: 100%;
   justify-content: center;
   width: 100%;
 }
@@ -436,8 +459,8 @@
 }
 
 .tileBamboo[data-rank="1"] .bambooPattern span {
-  height: 15px;
-  width: 5px;
+  height: 19px;
+  width: 6px;
 }
 
 .bambooPatternTwo,
@@ -456,19 +479,21 @@
 
 .bambooPatternTwo {
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
+  height: 100%;
 }
 
 .bambooPatternTwo span {
   background: var(--tile-face-color);
   border-radius: 3px;
-  height: 12px;
+  height: 13px;
   width: 5px;
 }
 
 .bambooPatternThree {
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
+  height: 100%;
 }
 
 .bambooPatternThreeTop {
@@ -479,22 +504,24 @@
 
 .bambooPatternThreeRow {
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
 .bambooPatternThreeTop span,
 .bambooPatternThreeRow span {
   background: var(--tile-face-color);
   border-radius: 3px;
-  height: 11px;
+  height: 12px;
   width: 5px;
 }
 
 .bambooPatternFour {
   display: grid;
-  gap: 4px;
+  gap: 5px 8px;
   grid-template-columns: repeat(2, 5px);
+  grid-template-rows: repeat(2, 11px);
   justify-content: center;
+  place-content: center;
 }
 
 .bambooPatternFour span {
@@ -506,10 +533,11 @@
 
 .bambooPatternFive {
   display: grid;
-  gap: 4px;
+  gap: 5px 8px;
   grid-template-columns: repeat(2, 5px);
   grid-template-rows: repeat(2, 11px);
   justify-content: center;
+  place-content: center;
   position: relative;
 }
 
@@ -521,7 +549,7 @@
 }
 
 .bambooPatternCenter {
-  height: 12px !important;
+  height: 11px !important;
   left: 50%;
   position: absolute;
   top: 50%;
@@ -531,7 +559,7 @@
 
 .bambooPatternSix {
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 
 .bambooPatternRow {
@@ -549,6 +577,7 @@
 .bambooPatternSeven {
   flex-direction: column;
   gap: 3px;
+  height: 100%;
 }
 
 .bambooPatternSevenTop {
@@ -559,7 +588,7 @@
 
 .bambooPatternSevenRow {
   display: flex;
-  gap: 5px;
+  gap: 4px;
   justify-content: center;
 }
 
@@ -567,44 +596,59 @@
 .bambooPatternSevenRow span {
   background: var(--tile-face-color);
   border-radius: 3px;
-  height: 10px;
+  height: 9px;
   width: 4px;
 }
 
 .bambooPatternEight {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 1px;
   width: 100%;
 }
 
 .bambooPatternEightRow {
   display: flex;
-  gap: 5px;
+  gap: 9px;
   justify-content: center;
+}
+
+.bambooPatternEightRow:nth-child(2),
+.bambooPatternEightRow:nth-child(3) {
+  gap: 4px;
 }
 
 .bambooPatternEightRow span {
   background: var(--tile-face-color);
   border-radius: 3px;
-  height: 10px;
+  height: 8px;
   width: 4px;
 }
 
 .bambooPatternNine {
   display: grid;
-  gap: 3px;
+  gap: 3px 5px;
   grid-template-columns: repeat(3, 5px);
-  grid-template-rows: repeat(3, 11px);
+  grid-template-rows: repeat(3, 9px);
   justify-content: center;
+  place-content: center;
   width: 100%;
 }
 
 .bambooPatternNine span {
   background: var(--tile-face-color);
   border-radius: 3px;
-  height: 11px;
+  height: 9px;
   width: 5px;
+}
+
+.whiteDragonPattern {
+  border: 2px solid #b45309;
+  border-radius: 2px;
+  box-sizing: border-box;
+  display: block;
+  height: 100%;
+  width: 100%;
 }
 
 .playerHandPanel {
@@ -736,7 +780,7 @@
   }
 
   .tile {
-    min-height: 38px;
-    width: 29px;
+    --tile-height: 40px;
+    --tile-width: 29px;
   }
 }
