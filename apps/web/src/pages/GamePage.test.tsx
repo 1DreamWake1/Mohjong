@@ -37,10 +37,9 @@ describe("GamePage", () => {
     });
   });
 
-  it("joins a quick room when no live room has been assigned", () => {
+  it("starts a quick room when no live room has been assigned", () => {
     expect(getGameConnectRequest("")).toEqual({
-      event: "game:join",
-      payload: {}
+      event: "game:start"
     });
   });
 

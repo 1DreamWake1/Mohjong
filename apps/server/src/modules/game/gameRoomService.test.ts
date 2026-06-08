@@ -99,6 +99,42 @@ describe("gameRoomService", () => {
     expect(service.getPlayerView(room).roomId).toBe(room.id);
   });
 
+  it("auto-plays a legal human action when the player times out", () => {
+    const service = createGameRoomService();
+    const room = service.getOrCreateQuickRoom(player);
+
+    const progressed = service.applyHumanTimeout(room);
+
+    expect(progressed).toBe(true);
+    expect(service.getPlayerView(room).eventMessages.some((event) => event.text.includes("超时托管"))).toBe(true);
+  });
+
+  it("does not auto-play a human timeout outside the human player's turn", () => {
+    const service = createGameRoomService();
+    const room = service.getOrCreateQuickRoom(player);
+    const humanPlayer = room.state.players[room.humanSeatIndex];
+
+    if (!humanPlayer) {
+      throw new Error("Expected human player to exist");
+    }
+
+    const tileId = humanPlayer.handTiles[0]?.id;
+
+    if (!tileId) {
+      throw new Error("Expected human player to have a tile");
+    }
+
+    const actionResult = service.applyHumanAction(player, { tileId, type: "discard" });
+    expect(actionResult?.error).toBeUndefined();
+
+    const beforeView = service.getPlayerView(room);
+    expect(service.applyHumanTimeout(room)).toBe(false);
+    expect(service.getPlayerView(room)).toMatchObject({
+      currentTurn: beforeView.currentTurn,
+      handTiles: beforeView.handTiles
+    });
+  });
+
   it("starts a new quick room after the active room has ended", () => {
     const service = createGameRoomService();
     const endedRoom = service.getOrCreateQuickRoom(player);

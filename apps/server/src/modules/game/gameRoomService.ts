@@ -185,6 +185,35 @@ export function createGameRoomService() {
     return { room };
   }
 
+  function applyHumanTimeout(room: GameRoom): boolean {
+    if (room.state.phase !== "playing" || room.state.currentTurn !== room.humanSeatIndex) {
+      return false;
+    }
+
+    const player = room.state.players[room.humanSeatIndex];
+    if (!player || player.isBot) {
+      return false;
+    }
+
+    const action = chooseBasicBotAction(room.state, room.humanSeatIndex);
+    const result = applyAction(room.state, room.humanSeatIndex, action);
+    if (!result.ok) {
+      room.events = appendRoomEvent(room.events, `${player.username} 超时托管失败：${result.error}`);
+      return false;
+    }
+
+    room.events = appendRoomEvent(
+      room.events,
+      `${player.username} 超时托管，${describeAction(room.state, room.humanSeatIndex, action)}`
+    );
+    room.state = result.state;
+    if (room.state.phase === "ended") {
+      room.events = appendRoomEvent(room.events, describeGameEnd(room.state));
+    }
+
+    return true;
+  }
+
   function applyNextBotAction(room: GameRoom): boolean {
     if (room.state.phase !== "playing") {
       return false;
@@ -213,6 +242,7 @@ export function createGameRoomService() {
 
   return {
     applyHumanAction,
+    applyHumanTimeout,
     applyNextBotAction,
     getOrCreateQuickRoom,
     getPlayerView,

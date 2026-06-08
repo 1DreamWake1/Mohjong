@@ -1,5 +1,5 @@
 import type { Action, AuthUser, GameEventMessage, GamePhase, GameResultInfo } from "@mahjong/shared";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import styles from "../app/App.module.css";
 import { APP_ROUTES, replaceRoute } from "../app/routes.js";
@@ -14,13 +14,13 @@ type GamePageProps = {
 };
 
 export function getGameConnectRequest(roomId: string):
-  | { event: "game:join"; payload: Record<string, never> }
+  | { event: "game:start" }
   | { event: "game:sync"; payload: { gameId: string } } {
   if (roomId.startsWith("quick-")) {
     return { event: "game:sync", payload: { gameId: roomId } };
   }
 
-  return { event: "game:join", payload: {} };
+  return { event: "game:start" };
 }
 
 export function canRestartGame(phase: GamePhase): boolean {
@@ -63,6 +63,7 @@ export function GamePage(props: GamePageProps): JSX.Element {
   const prepareSocket = useSocketStore((state) => state.prepareSocket);
   const socket = useSocketStore((state) => state.socket);
   const socketStatus = useSocketStore((state) => state.status);
+  const [eventNotice, setEventNotice] = useState<string | null>(null);
 
   const recentEvents = getRecentGameEvents(view.eventMessages);
   const resultSummary = view.result ? getGameResultSummary(view.result) : null;
@@ -94,14 +95,27 @@ export function GamePage(props: GamePageProps): JSX.Element {
     const handleEnded: Parameters<typeof socket.on<"game:ended">>[1] = () => {
       setStatus("ended");
     };
+    const handleTimeout: Parameters<typeof socket.on<"game:timeout">>[1] = (payload) => {
+      setErrorMessage(payload.message);
+    };
+    const handleEvent: Parameters<typeof socket.on<"game:event">>[1] = (payload) => {
+      setEventNotice(payload.message);
+    };
     const handleConnect = () => {
       const request = getGameConnectRequest(latestRoomIdRef.current);
+      if (request.event === "game:start") {
+        socket.emit(request.event);
+        return;
+      }
+
       socket.emit(request.event, request.payload);
     };
 
     socket.on("connect", handleConnect);
     socket.on("game:state", handleState);
     socket.on("game:error", handleError);
+    socket.on("game:event", handleEvent);
+    socket.on("game:timeout", handleTimeout);
     socket.on("game:ended", handleEnded);
     socket.connect();
     setStatus("joining");
@@ -110,6 +124,8 @@ export function GamePage(props: GamePageProps): JSX.Element {
       socket.off("connect", handleConnect);
       socket.off("game:state", handleState);
       socket.off("game:error", handleError);
+      socket.off("game:event", handleEvent);
+      socket.off("game:timeout", handleTimeout);
       socket.off("game:ended", handleEnded);
     };
   }, [setErrorMessage, setStatus, setView, socket]);
@@ -172,6 +188,7 @@ export function GamePage(props: GamePageProps): JSX.Element {
                 再开一局
               </button>
             ) : null}
+            {eventNotice ? <p className={styles.helperText}>{eventNotice}</p> : null}
             {errorMessage ? <p className={styles.error}>{errorMessage}</p> : null}
           </section>
 

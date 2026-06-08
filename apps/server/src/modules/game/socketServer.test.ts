@@ -1,7 +1,12 @@
 import type { AuthUser } from "@mahjong/shared";
 import { describe, expect, it } from "vitest";
 
-import { getGameSocketAccessError, readSocketToken } from "./socketServer.js";
+import {
+  getGameSocketAccessError,
+  getGameStartMode,
+  humanActionTimeoutMs,
+  readSocketToken
+} from "./socketServer.js";
 
 const player: AuthUser = {
   createdAt: "2026-06-01T00:00:00.000Z",
@@ -38,5 +43,14 @@ describe("socketServer", () => {
     expect(getGameSocketAccessError(admin, "start")).toBe("Only players can start games");
     expect(getGameSocketAccessError(admin, "action")).toBe("Only players can act in games");
     expect(getGameSocketAccessError(admin, "sync")).toBe("Only players can sync games");
+  });
+
+  it("uses a 30 second human action timeout", () => {
+    expect(humanActionTimeoutMs).toBe(30_000);
+  });
+
+  it("starts a quick room when no active room exists and syncs otherwise", () => {
+    expect(getGameStartMode(false)).toBe("create-quick-room");
+    expect(getGameStartMode(true)).toBe("sync-active-room");
   });
 });

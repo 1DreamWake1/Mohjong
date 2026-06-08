@@ -12,6 +12,7 @@ type SocketData = {
 };
 
 type GameSocketOperation = "action" | "join" | "start" | "sync";
+type TimeoutHandle = ReturnType<typeof setTimeout>;
 
 const playerOnlyErrors: Record<GameSocketOperation, string> = {
   action: "Only players can act in games",
@@ -28,6 +29,12 @@ export function getGameSocketAccessError(user: AuthUser, operation: GameSocketOp
   return user.role === "player" ? null : playerOnlyErrors[operation];
 }
 
+export const humanActionTimeoutMs = 30_000;
+
+export function getGameStartMode(hasActiveRoom: boolean): "create-quick-room" | "sync-active-room" {
+  return hasActiveRoom ? "sync-active-room" : "create-quick-room";
+}
+
 function emitRoomState(socket: GameSocket, gameRoomService: GameRoomService, roomId?: string): void {
   const user = (socket.data as SocketData).user;
   const room = gameRoomService.getRoomForUser(user, roomId);
@@ -42,11 +49,19 @@ function emitRoomState(socket: GameSocket, gameRoomService: GameRoomService, roo
   }
 }
 
+function emitLatestRoomEvent(socket: GameSocket, room: { events: { text: string }[] }): void {
+  const latestEvent = room.events.at(-1);
+  if (latestEvent) {
+    socket.emit("game:event", { message: latestEvent.text });
+  }
+}
+
 function scheduleBots(input: {
   activeSocketByRoomId: Map<string, GameSocket>;
   gameRoomService: GameRoomService;
   roomId: string;
   scheduledBotRoomIds: Set<string>;
+  scheduledHumanTimeoutsByRoomId: Map<string, TimeoutHandle>;
   user: AuthUser;
 }): void {
   const room = input.gameRoomService.getRoomForUser(input.user, input.roomId);
@@ -60,6 +75,7 @@ function scheduleBots(input: {
     if (latestSocket) {
       emitRoomState(latestSocket, input.gameRoomService, input.roomId);
     }
+    scheduleHumanTimeout(input);
     return;
   }
 
@@ -92,12 +108,61 @@ function scheduleBots(input: {
       return;
     }
 
-    input.gameRoomService.applyNextBotAction(latestRoom);
     if (latestSocket) {
+      input.gameRoomService.applyNextBotAction(latestRoom);
+      emitLatestRoomEvent(latestSocket, latestRoom);
       emitRoomState(latestSocket, input.gameRoomService, input.roomId);
+    } else {
+      input.gameRoomService.applyNextBotAction(latestRoom);
     }
     scheduleBots(input);
   }, delayMs);
+}
+
+function scheduleHumanTimeout(input: {
+  activeSocketByRoomId: Map<string, GameSocket>;
+  gameRoomService: GameRoomService;
+  roomId: string;
+  scheduledBotRoomIds: Set<string>;
+  scheduledHumanTimeoutsByRoomId: Map<string, TimeoutHandle>;
+  user: AuthUser;
+}): void {
+  const room = input.gameRoomService.getRoomForUser(input.user, input.roomId);
+  if (!room || room.state.phase !== "playing") {
+    return;
+  }
+
+  const player = room.state.players[room.state.currentTurn];
+  if (player?.isBot || room.state.currentTurn !== room.humanSeatIndex) {
+    return;
+  }
+
+  if (input.scheduledHumanTimeoutsByRoomId.has(room.id)) {
+    return;
+  }
+
+  const scheduledState = room.state;
+  const timeout = setTimeout(() => {
+    input.scheduledHumanTimeoutsByRoomId.delete(input.roomId);
+    const latestRoom = input.gameRoomService.getRoomForUser(input.user, input.roomId);
+    if (!latestRoom || latestRoom.state !== scheduledState) {
+      return;
+    }
+
+    const latestSocket = input.activeSocketByRoomId.get(input.roomId);
+    if (!input.gameRoomService.applyHumanTimeout(latestRoom)) {
+      return;
+    }
+
+    if (latestSocket) {
+      latestSocket.emit("game:timeout", { message: "操作超时，已自动托管出牌" });
+      emitLatestRoomEvent(latestSocket, latestRoom);
+      emitRoomState(latestSocket, input.gameRoomService, input.roomId);
+    }
+    scheduleBots(input);
+  }, humanActionTimeoutMs);
+
+  input.scheduledHumanTimeoutsByRoomId.set(room.id, timeout);
 }
 
 export function registerGameSocketServer(input: {
@@ -113,6 +178,7 @@ export function registerGameSocketServer(input: {
   const gameRoomService = input.gameRoomService ?? createGameRoomService();
   const activeSocketByRoomId = new Map<string, GameSocket>();
   const scheduledBotRoomIds = new Set<string>();
+  const scheduledHumanTimeoutsByRoomId = new Map<string, TimeoutHandle>();
 
   io.use(async (socket, next) => {
     const token = readSocketToken(socket.handshake.auth.token);
@@ -147,6 +213,7 @@ export function registerGameSocketServer(input: {
         gameRoomService,
         roomId,
         scheduledBotRoomIds,
+        scheduledHumanTimeoutsByRoomId,
         user
       });
     }
@@ -177,6 +244,7 @@ export function registerGameSocketServer(input: {
 
       trackRoomSocket(room.id);
       gameSocket.emit("game:state", { view: gameRoomService.getPlayerView(room) });
+      emitLatestRoomEvent(gameSocket, room);
       scheduleRoomBots(room.id);
     });
 
@@ -187,7 +255,21 @@ export function registerGameSocketServer(input: {
         return;
       }
 
-      emitRoomState(gameSocket, gameRoomService);
+      const activeRoom = gameRoomService.getRoomForUser(user);
+      const room =
+        getGameStartMode(Boolean(activeRoom)) === "sync-active-room"
+          ? activeRoom
+          : gameRoomService.getOrCreateQuickRoom(user);
+
+      if (!room) {
+        gameSocket.emit("game:error", { message: "No active game room" });
+        return;
+      }
+
+      trackRoomSocket(room.id);
+      gameSocket.emit("game:state", { view: gameRoomService.getPlayerView(room) });
+      emitLatestRoomEvent(gameSocket, room);
+      scheduleRoomBots(room.id);
     });
 
     gameSocket.on("game:action", (payload) => {
@@ -208,8 +290,14 @@ export function registerGameSocketServer(input: {
         gameSocket.emit("game:state", { view: gameRoomService.getPlayerView(result.room) });
         return;
       }
+      const timeout = scheduledHumanTimeoutsByRoomId.get(result.room.id);
+      if (timeout) {
+        clearTimeout(timeout);
+        scheduledHumanTimeoutsByRoomId.delete(result.room.id);
+      }
 
       gameSocket.emit("game:state", { view: gameRoomService.getPlayerView(result.room) });
+      emitLatestRoomEvent(gameSocket, result.room);
       trackRoomSocket(result.room.id);
       scheduleRoomBots(result.room.id);
     });
@@ -229,6 +317,7 @@ export function registerGameSocketServer(input: {
 
       trackRoomSocket(room.id);
       gameSocket.emit("game:state", { view: gameRoomService.getPlayerView(room) });
+      emitLatestRoomEvent(gameSocket, room);
       scheduleRoomBots(room.id);
     });
   });

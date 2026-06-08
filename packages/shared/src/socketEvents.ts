@@ -11,5 +11,6 @@ export type ServerToClientEvents = {
   "game:state": (payload: { view: PlayerView }) => void;
   "game:event": (payload: { message: string }) => void;
   "game:error": (payload: { message: string }) => void;
+  "game:timeout": (payload: { message: string }) => void;
   "game:ended": (payload: { reason: string }) => void;
 };

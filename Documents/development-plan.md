@@ -629,6 +629,12 @@ pnpm build
 
 将第一阶段完成的麻将核心业务算法合并到整体系统中，使前端显示、账号系统和服务端业务形成闭环。
 
+阶段状态：收尾中。
+
+当前已完成：快速对局创建、前端首次进入牌桌触发 `game:start`、`mahjong-core` reducer 校验、简化规则牌墙、玩家视角 mapper、Socket.IO `game:join` / `game:start` / `game:action` / `game:sync`、实时事件通知、机器人连续操作、断线后同步、结束后再开一局、结算信息、摸打牌高亮和真人 30 秒超时托管。
+
+剩余收尾：手动浏览器验收、阶段五文档完成记录、可选的 GameRecord / GameEvent 持久化方案评估。
+
 ### 8.2 功能点
 
 - 服务端接入 `packages/mahjong-core`。
