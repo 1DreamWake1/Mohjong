@@ -108,6 +108,12 @@ describe("Tile", () => {
     expect(html).not.toContain(" disabled=");
   });
 
+  it("marks highlighted visible tiles", () => {
+    const html = renderToStaticMarkup(<Tile highlighted tile={tile("dots", 5, "5筒")} />);
+
+    expect(html).toContain("_tileHighlighted_");
+  });
+
   it("renders white dragon as an empty framed mark", () => {
     const html = renderToStaticMarkup(<Tile tile={tile("dragons", 3, "白")} />);
 

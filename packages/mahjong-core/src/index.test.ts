@@ -158,6 +158,7 @@ describe("mahjong-core game reducer", () => {
   it("allows current player to discard and lets the next player draw when nobody can respond", () => {
     const state = createInitialGame({ seed: 2 });
     const tileId = state.players[0].handTiles[0]?.id;
+    const drawnTileId = state.wall.at(-1)?.id;
 
     if (!tileId) {
       throw new Error("Expected dealer to have a tile");
@@ -175,8 +176,18 @@ describe("mahjong-core game reducer", () => {
     expect(result.state.pendingDiscard).toBeUndefined();
     expect(result.state.players[0].handTiles).toHaveLength(13);
     expect(result.state.players[0].discardTiles).toHaveLength(1);
+    expect(result.state.players[0].lastDrawnTileId).toBeUndefined();
+    expect(result.state.lastDiscardedTileId).toBe(tileId);
     expect(result.state.players[1].handTiles).toHaveLength(14);
+    expect(result.state.players[1].lastDrawnTileId).toBe(drawnTileId);
     expect(getLegalActions(result.state, 1).some((action) => action.type === "discard")).toBe(true);
+  });
+
+  it("does not mark the initial deal as a newly drawn tile", () => {
+    const state = createInitialGame({ seed: 2 });
+
+    expect(state.lastDiscardedTileId).toBeUndefined();
+    expect(state.players.every((player) => player.lastDrawnTileId === undefined)).toBe(true);
   });
 
   it("rejects an illegal discard from another player's hand", () => {

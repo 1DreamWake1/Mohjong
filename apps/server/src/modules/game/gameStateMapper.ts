@@ -34,7 +34,11 @@ export function createRoomPlayerView(input: {
     roomId: input.roomId,
     seatIndex: input.seatIndex,
     username: player.username,
-    wallTileCount: input.state.wall.length
+    wallTileCount: input.state.wall.length,
+    ...(input.state.lastDiscardedTileId
+      ? { lastDiscardedTileId: input.state.lastDiscardedTileId }
+      : {}),
+    ...(player.lastDrawnTileId ? { lastDrawnTileId: player.lastDrawnTileId } : {})
   };
 
   const result =

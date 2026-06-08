@@ -98,7 +98,12 @@ export function MahjongTable(props: MahjongTableProps): JSX.Element {
         {props.view.discardAreas.map((pile) => (
           <section className={styles.discardPanel} key={pile.seatIndex}>
             <h3>{seatNames[pile.seatIndex]}位弃牌</h3>
-            <DiscardArea pile={pile} />
+            <DiscardArea
+              pile={pile}
+              {...(props.view.lastDiscardedTileId
+                ? { highlightedTileId: props.view.lastDiscardedTileId }
+                : {})}
+            />
           </section>
         ))}
       </div>
@@ -130,6 +135,7 @@ export function MahjongTable(props: MahjongTableProps): JSX.Element {
           onSelectTile={props.onSelectTile}
           selectedTileId={props.selectedTileId}
           tiles={props.view.handTiles}
+          {...(props.view.lastDrawnTileId ? { highlightedTileId: props.view.lastDrawnTileId } : {})}
         />
         {shouldRenderActionBar(visibleActions, promptForDiscardSelection) ? (
           <ActionBar

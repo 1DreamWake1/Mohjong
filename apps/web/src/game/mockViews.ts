@@ -110,6 +110,8 @@ function buildViews(options: {
   ];
 
   return playerNames.map((username, seatIndex) => {
+    const handTiles = hands[seatIndex] ?? [];
+    const lastHandTile = handTiles.at(-1);
     const view: PlayerView = {
       availableActions:
         seatIndex === options.availableActionsForSeat && options.phase !== "ended"
@@ -127,7 +129,11 @@ function buildViews(options: {
         id: `${options.roomId}-event-${index}`,
         text
       })),
-      handTiles: hands[seatIndex] ?? [],
+      handTiles,
+      lastDiscardedTileId: "discard-3-2",
+      ...(seatIndex === options.availableActionsForSeat && lastHandTile
+        ? { lastDrawnTileId: lastHandTile.id }
+        : {}),
       otherPlayers: playerNames
         .map((otherUsername, otherSeatIndex) => ({
           handTileCount: hands[otherSeatIndex]?.length ?? 0,

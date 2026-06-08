@@ -13,6 +13,7 @@ export type PlayerState = {
   discardTiles: Tile[];
   publicMelds: MeldInfo[];
   isBot: boolean;
+  lastDrawnTileId?: string;
 };
 
 export type PendingDiscard = {
@@ -35,6 +36,7 @@ export type MahjongGameState = {
   winningTile?: Tile;
   score?: ScoreResult;
   endReason?: "hu" | "draw";
+  lastDiscardedTileId?: string;
   pendingDiscard?: PendingDiscard;
 };
 
@@ -74,6 +76,7 @@ export function createInitialGame(options: CreateGameOptions = {}): MahjongGameS
 
   for (const player of players) {
     player.handTiles.sort(compareTiles);
+    delete player.lastDrawnTileId;
   }
 
   return {
@@ -186,6 +189,8 @@ export function applyAction(
   }
 
   player.discardTiles.push(discardedTile);
+  delete player.lastDrawnTileId;
+  nextState.lastDiscardedTileId = discardedTile.id;
   openClaimWindow(nextState, discardedTile, seatIndex);
 
   return { ok: true, state: nextState };
@@ -216,13 +221,15 @@ export function createPlayerView(state: MahjongGameState, seatIndex: number): Pl
         isBot: otherPlayer.isBot,
         seatIndex: otherPlayer.seatIndex,
         username: otherPlayer.username
-      })),
+    })),
     phase: state.phase,
     publicMelds: state.players.flatMap((meldPlayer) => meldPlayer.publicMelds),
     roomId: "core-game",
     seatIndex,
     username: player.username,
-    wallTileCount: state.wall.length
+    wallTileCount: state.wall.length,
+    ...(state.lastDiscardedTileId ? { lastDiscardedTileId: state.lastDiscardedTileId } : {}),
+    ...(player.lastDrawnTileId ? { lastDrawnTileId: player.lastDrawnTileId } : {})
   };
 
   const result =
@@ -702,6 +709,7 @@ function drawTileIntoHand(player: PlayerState, wall: Tile[]): void {
   }
 
   player.handTiles.push(tile);
+  player.lastDrawnTileId = tile.id;
 }
 
 function getPlayer(state: MahjongGameState, seatIndex: number): PlayerState {

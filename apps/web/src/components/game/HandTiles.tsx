@@ -4,6 +4,7 @@ import styles from "./gameComponents.module.css";
 import { Tile } from "./Tile.js";
 
 type HandTilesProps = {
+  highlightedTileId?: string;
   selectedTileId: string | null;
   tiles: TileInfo[];
   onSelectTile: (tileId: string) => void;
@@ -14,6 +15,7 @@ export function HandTiles(props: HandTilesProps): JSX.Element {
     <div className={styles.handTiles}>
       {props.tiles.map((tile) => (
         <Tile
+          highlighted={props.highlightedTileId === tile.id}
           key={tile.id}
           onClick={() => props.onSelectTile(tile.id)}
           selected={props.selectedTileId === tile.id}

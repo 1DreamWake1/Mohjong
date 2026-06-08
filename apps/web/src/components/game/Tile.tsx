@@ -4,6 +4,7 @@ import styles from "./gameComponents.module.css";
 
 type TileProps = {
   hidden?: boolean;
+  highlighted?: boolean;
   onClick?: () => void;
   selected?: boolean;
   tile?: TileInfo;
@@ -344,6 +345,7 @@ export function Tile(props: TileProps): JSX.Element {
     styles.tile,
     props.tile && !props.hidden ? getSuitClassName(props.tile.suit) : "",
     props.hidden ? styles.tileHidden : "",
+    props.highlighted && !props.hidden ? styles.tileHighlighted : "",
     props.selected ? styles.tileSelected : ""
   ]
     .filter(Boolean)

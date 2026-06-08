@@ -62,6 +62,8 @@ export type PlayerView = {
   seatIndex: number;
   username: string;
   handTiles: TileInfo[];
+  lastDrawnTileId?: string;
+  lastDiscardedTileId?: string;
   otherPlayers: OtherPlayerView[];
   discardAreas: DiscardPile[];
   publicMelds: MeldInfo[];

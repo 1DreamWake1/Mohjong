@@ -157,6 +157,13 @@
   transform: translateY(-8px);
 }
 
+.tileHighlighted {
+  border-color: #f59e0b;
+  box-shadow:
+    0 0 0 2px rgb(250 204 21 / 72%),
+    0 2px 0 #c8b78c;
+}
+
 .tileCharacters {
   --tile-face-color: #b91c1c;
 }
