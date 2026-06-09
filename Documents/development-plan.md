@@ -18,7 +18,7 @@
 - 阶段 2 已于 2026-05-30 完成。
 - 阶段 3 已于 2026-06-01 完成。
 - 阶段 4 已于 2026-06-01 完成。
-- 当前优先级进入阶段 5：核心算法 + 服务端实时对局闭环。
+- 阶段 5 已于 2026-06-09 完成。
 - 阶段 1 已完成核心规则基础能力：牌定义、牌墙、发牌、摸打、弃牌响应窗口、响应优先级、吃碰杠、基础胡牌判定、基础番型识别、简化计分、basicBot 自摸/流局模拟。
 - 阶段 2 已完成账号管理闭环：SQLite 账户存储、bcrypt 密码哈希、管理员初始化、登录态、管理员用户管理 API、登录页面、管理员页面、玩家登录占位入口和 Ubuntu 虚拟机浏览器验证。
 - 阶段 3 已完成玩家大厅、前端路由保护、Zustand 登录态管理、Socket.IO Client 占位、退出登录清理和 PC/移动端体验优化。
@@ -629,11 +629,11 @@ pnpm build
 
 将第一阶段完成的麻将核心业务算法合并到整体系统中，使前端显示、账号系统和服务端业务形成闭环。
 
-阶段状态：收尾中。
+阶段状态：已完成。
 
-当前已完成：快速对局创建、前端首次进入牌桌触发 `game:start`、`mahjong-core` reducer 校验、简化规则牌墙、玩家视角 mapper、Socket.IO `game:join` / `game:start` / `game:action` / `game:sync`、实时事件通知、机器人连续操作、断线后同步、结束后再开一局、结算信息、摸打牌高亮和真人 30 秒超时托管。
+完成范围：快速对局创建、前端首次进入牌桌触发 `game:start`、`mahjong-core` reducer 校验、简化规则牌墙、玩家视角 mapper、Socket.IO `game:join` / `game:start` / `game:action` / `game:sync`、实时事件通知、机器人连续操作、断线后同步、结束后再开一局、结算信息、摸打牌高亮和真人 30 秒超时托管。
 
-剩余收尾：手动浏览器验收、阶段五文档完成记录、可选的 GameRecord / GameEvent 持久化方案评估。
+范围调整：`GameRecord` / `GameEvent` 持久化已评估为后续长期运行和回放能力，不作为阶段 5 闭环验收的阻塞项。当前阶段使用服务端内存房间状态和实时事件消息完成本地/虚拟机对局闭环。
 
 ### 8.2 功能点
 
@@ -645,7 +645,7 @@ pnpm build
 - 电脑玩家延迟 0.5-2s 随机延迟后自动提交动作。
 - 实现断线重连：`game:sync` 事件恢复当前玩家视角。
 - 实现超时处理：玩家超时未操作时自动打出随机合法牌（托管模式）。
-- 写入 GameRecord 和 GameEvent 表（通过 Prisma）。
+- 输出实时对局事件消息；`GameRecord` / `GameEvent` 持久化后置到长期运行和回放能力。
 - 实现对局结束结算通知。
 - 完成端到端联调。
 
@@ -654,7 +654,7 @@ pnpm build
 - 服务端 game 模块完整实现（gameService、gameRoom、gameStateMapper）。
 - Socket.IO 事件处理完整实现。
 - 电脑玩家接入流程。
-- GameRecord / GameEvent 数据表。
+- 实时对局事件消息；`GameRecord` / `GameEvent` 数据表后置。
 - 完整对局联调 Demo。
 
 ### 8.4 验收标准
@@ -668,6 +668,39 @@ pnpm build
 - 电脑玩家可参与对局并执行合法动作。
 - 能完整跑通一局游戏（从发牌到有人胡牌或流局）。
 - 断线重连后玩家可恢复牌局视角。
+
+### 8.5 完成记录
+
+完成日期：2026-06-09
+
+已完成输出：
+
+- 服务端 game room 管理：快速对局、座位、人类玩家与电脑玩家混排、对局生命周期。
+- `mahjong-core` reducer 接入服务端动作校验，非法动作通过 `game:error` 返回。
+- 简化规则牌墙：仅万、筒、条，不含东南西北中发白；当前不支持吃。
+- `gameStateMapper` 将真实牌局状态转换为玩家视角 `PlayerView`。
+- Socket.IO 对局事件：`game:join`、`game:start`、`game:action`、`game:sync`、`game:state`、`game:error`、`game:event`、`game:timeout`。
+- 电脑玩家自动操作循环，支持摸打推进到胡牌或流局。
+- 真人 30 秒未操作自动托管出牌。
+- 断线或刷新后可通过同步恢复当前牌局视角。
+- 对局结束后可重新开始新局，避免回到上一局已结束房间。
+- 前端牌桌接入真实对局状态，支持动作按钮、弃牌、手牌、结算、最近事件、摸打牌高亮。
+
+已验证命令：
+
+```bash
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+```
+
+浏览器验收记录：
+
+- `pnpm dev` 可启动 web 和 server。
+- 前端默认地址：`http://localhost:5173/`。
+- 后端默认地址：`http://localhost:3000/`。
+- 虚拟机网络访问地址以 Vite 和 Fastify 启动日志为准，例如 `http://192.168.x.x:5173/` 和 `http://192.168.x.x:3000/`。
 
 ---
 
@@ -702,9 +735,9 @@ pnpm build
 
 最高优先级：
 
-- 阶段 5：核心算法 + 服务端实时对局闭环。
-- 服务端接入 mahjong-core、gameRoom、Socket.IO 对局事件和断线重连。
-- 实现 gameStateMapper，将真实牌局状态转换为 `PlayerView` 推送给前端。
+- 地方规则、长期运行能力和对局体验增强。
+- 扩展规则配置，例如四川麻将、禁用吃、更多胡牌和结算规则。
+- 评估并实现 `GameRecord` / `GameEvent` 持久化，用于历史记录、调试和回放。
 
 第二优先级：
 
