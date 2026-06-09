@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { createApp } from "../app.js";
 import { hashPassword, verifyPassword } from "../modules/auth/password.js";
+import { createGameRoomService } from "../modules/game/gameRoomService.js";
 import type {
   CreateUserInput,
   StoredUser,
@@ -100,6 +101,7 @@ async function createTestApp() {
 
   const app = await createApp({
     authTokenSecret: "test-secret",
+    gameRoomService: createGameRoomService(),
     userRepository
   });
 

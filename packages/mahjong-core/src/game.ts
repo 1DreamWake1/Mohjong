@@ -1,4 +1,4 @@
-import type { Action, MeldInfo, PlayerView } from "@mahjong/shared";
+import type { Action, MeldInfo, PlayerView, WinType } from "@mahjong/shared";
 
 import { canHu } from "./hand.js";
 import { standardRuleConfig, type RuleConfig } from "./rules.js";
@@ -34,6 +34,7 @@ export type MahjongGameState = {
   rules: RuleConfig;
   winnerSeatIndex?: number;
   winningTile?: Tile;
+  winType?: WinType;
   score?: ScoreResult;
   endReason?: "hu" | "draw";
   lastDiscardedTileId?: string;
@@ -138,7 +139,10 @@ export function applyAction(
       return { ok: false, error: "Hand cannot win", state };
     }
 
-    const winningTile = player.handTiles.at(-1);
+    const winningTile =
+      player.lastDrawnTileId === undefined
+        ? player.handTiles.at(-1)
+        : player.handTiles.find((tile) => tile.id === player.lastDrawnTileId);
     const score = calculateScore(player.handTiles, state.rules);
 
     return {
@@ -149,6 +153,7 @@ export function applyAction(
             phase: "ended",
             winnerSeatIndex: seatIndex,
             winningTile,
+            winType: "selfDraw",
             score,
             endReason: "hu"
           }
@@ -156,6 +161,7 @@ export function applyAction(
             ...state,
             phase: "ended",
             winnerSeatIndex: seatIndex,
+            winType: "selfDraw",
             score,
             endReason: "hu"
           }
@@ -239,7 +245,8 @@ export function createPlayerView(state: MahjongGameState, seatIndex: number): Pl
           fanTotal: state.score?.fanTotal ?? 0,
           fans: state.score?.fans.map((fan) => ({ name: fan.name, value: fan.value })) ?? [],
           totalPoints: state.score?.totalPoints ?? 0,
-          ...(state.winningTile ? { winningTile: state.winningTile } : {})
+          ...(state.endReason === "hu" && state.winType ? { winType: state.winType } : {}),
+          ...(state.endReason === "hu" && state.winningTile ? { winningTile: state.winningTile } : {})
         }
       : undefined;
 
@@ -417,6 +424,7 @@ function applyClaimAction(
         phase: "ended",
         winnerSeatIndex: seatIndex,
         winningTile: pendingDiscard.tile,
+        winType: "discard",
         score,
         endReason: "hu"
       }

@@ -48,7 +48,12 @@ export function createRoomPlayerView(input: {
           fanTotal: input.state.score?.fanTotal ?? 0,
           fans: input.state.score?.fans.map((fan) => ({ name: fan.name, value: fan.value })) ?? [],
           totalPoints: input.state.score?.totalPoints ?? 0,
-          ...(input.state.winningTile ? { winningTile: input.state.winningTile } : {})
+          ...(input.state.endReason === "hu" && input.state.winType
+            ? { winType: input.state.winType }
+            : {}),
+          ...(input.state.endReason === "hu" && input.state.winningTile
+            ? { winningTile: input.state.winningTile }
+            : {})
         }
       : undefined;
 

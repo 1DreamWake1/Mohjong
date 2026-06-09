@@ -366,6 +366,46 @@ describe("mahjong-core game reducer", () => {
     expect(gangResult.state.players[3].handTiles[0]?.code).toBe("east");
   });
 
+  it("ends in a draw when a claimed gang cannot draw a supplement tile", () => {
+    const state = createClaimScenario("white", {
+      3: ["white", "white", "white"]
+    });
+    const discardedTileId = state.players[0].handTiles[0]?.id;
+
+    state.wall = [];
+
+    if (!discardedTileId) {
+      throw new Error("Expected discarder to have a tile");
+    }
+
+    const discardResult = applyAction(state, 0, { type: "discard", tileId: discardedTileId });
+
+    if (!discardResult.ok) {
+      throw new Error(discardResult.error);
+    }
+
+    const gangAction = getLegalActions(discardResult.state, 3).find((action) => action.type === "gang");
+
+    expect(gangAction).toBeDefined();
+
+    if (!gangAction) {
+      return;
+    }
+
+    const gangResult = applyAction(discardResult.state, 3, gangAction);
+
+    expect(gangResult.ok).toBe(true);
+
+    if (!gangResult.ok) {
+      return;
+    }
+
+    expect(gangResult.state).toMatchObject({
+      endReason: "draw",
+      phase: "ended"
+    });
+  });
+
   it("prioritizes hu over peng and chi, then falls back after pass", () => {
     const state = createClaimScenario("red", {
       1: ["m1", "m2"],
@@ -413,6 +453,7 @@ describe("mahjong-core game reducer", () => {
     }
 
     expect(result.state.phase).toBe("ended");
+    expect(result.state.winType).toBe("selfDraw");
     expect(result.state.score).toMatchObject({
       canHu: true,
       fanTotal: 2,
@@ -422,7 +463,53 @@ describe("mahjong-core game reducer", () => {
       endReason: "hu",
       fanTotal: 2,
       totalPoints: 40,
+      winType: "selfDraw",
       winningTile: expect.objectContaining({ id: result.state.winningTile?.id })
+    });
+  });
+
+  it("ends on a claimed discard win and records the win source", () => {
+    const state = createClaimScenario("red", {
+      3: ["m1", "m2", "m3", "m4", "m5", "m6", "p2", "p3", "p4", "s7", "s8", "s9", "red"]
+    });
+    const discardedTileId = state.players[0].handTiles[0]?.id;
+
+    if (!discardedTileId) {
+      throw new Error("Expected discarder to have a tile");
+    }
+
+    const discardResult = applyAction(state, 0, { type: "discard", tileId: discardedTileId });
+
+    if (!discardResult.ok) {
+      throw new Error(discardResult.error);
+    }
+
+    const huAction = getLegalActions(discardResult.state, 3).find((action) => action.type === "hu");
+
+    expect(huAction).toBeDefined();
+
+    if (!huAction) {
+      return;
+    }
+
+    const huResult = applyAction(discardResult.state, 3, huAction);
+
+    expect(huResult.ok).toBe(true);
+
+    if (!huResult.ok) {
+      return;
+    }
+
+    expect(huResult.state).toMatchObject({
+      endReason: "hu",
+      phase: "ended",
+      winnerSeatIndex: 3,
+      winType: "discard"
+    });
+    expect(createPlayerView(huResult.state, 3).result).toMatchObject({
+      endReason: "hu",
+      winType: "discard",
+      winningTile: expect.objectContaining({ code: "red" })
     });
   });
 

@@ -42,11 +42,14 @@ export type GameScoreFan = {
   value: number;
 };
 
+export type WinType = "selfDraw" | "discard";
+
 export type GameResultInfo = {
   endReason: "hu" | "draw";
   fans: GameScoreFan[];
   fanTotal: number;
   totalPoints: number;
+  winType?: WinType;
   winningTile?: TileInfo;
 };
 

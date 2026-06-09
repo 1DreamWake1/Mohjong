@@ -8,6 +8,10 @@ import {
   type MahjongGameState
 } from "mahjong-core";
 
+import {
+  createNoopGameRecordRepository,
+  type GameRecordRepository
+} from "./gameRecordRepository.js";
 import { createRoomPlayerView } from "./gameStateMapper.js";
 
 type GameRoom = {
@@ -19,6 +23,9 @@ type GameRoom = {
 };
 
 export type GameRoomService = ReturnType<typeof createGameRoomService>;
+export type CreateGameRoomServiceOptions = {
+  gameRecordRepository?: GameRecordRepository;
+};
 
 const maxRoomEvents = 20;
 let nextRoomNumber = 1;
@@ -40,8 +47,11 @@ function createEvent(text: string): GameEventMessage {
   };
 }
 
-function appendRoomEvent(events: GameEventMessage[], text: string): GameEventMessage[] {
-  return [...events, createEvent(text)].slice(-maxRoomEvents);
+function appendExistingRoomEvent(
+  events: GameEventMessage[],
+  event: GameEventMessage
+): GameEventMessage[] {
+  return [...events, event].slice(-maxRoomEvents);
 }
 
 function haveSameTileIds(left: readonly string[] | undefined, right: readonly string[] | undefined): boolean {
@@ -97,22 +107,51 @@ export function describeGameEnd(state: MahjongGameState): string {
   if (state.endReason === "hu") {
     const winner = state.winnerSeatIndex === undefined ? undefined : state.players[state.winnerSeatIndex];
     const winnerName = winner?.username ?? "玩家";
+    const winTypeText = state.winType === "selfDraw" ? "自摸" : state.winType === "discard" ? "点炮" : "胡牌";
     const winningTileText = state.winningTile ? `，胡 ${state.winningTile.label}` : "";
     const scoreText = state.score ? `，${state.score.totalPoints} 分` : "";
 
-    return `${winnerName} 胡牌${winningTileText}${scoreText}`;
+    return `${winnerName} ${winTypeText}${winningTileText}${scoreText}`;
   }
 
   return "牌局结束";
 }
 
-export function createGameRoomService() {
+export function createGameRoomService(options: CreateGameRoomServiceOptions = {}) {
   const roomsById = new Map<string, GameRoom>();
   const activeRoomIdByUserId = new Map<number, string>();
+  const gameRecordRepository =
+    options.gameRecordRepository ?? createNoopGameRecordRepository();
+  const persistentWriteQueueByRoomId = new Map<string, Promise<void>>();
+
+  function enqueuePersistentWrite(roomId: string, write: () => Promise<void>): void {
+    const previousWrite = persistentWriteQueueByRoomId.get(roomId) ?? Promise.resolve();
+    const nextWrite = previousWrite
+      .catch(() => undefined)
+      .then(write)
+      .catch(() => undefined);
+
+    persistentWriteQueueByRoomId.set(roomId, nextWrite);
+  }
+
+  function recordRoomEvent(room: GameRoom, text: string): void {
+    const event = createEvent(text);
+    room.events = appendExistingRoomEvent(room.events, event);
+    enqueuePersistentWrite(room.id, () => gameRecordRepository.appendEvent(room.id, event));
+  }
+
+  function recordGameEnd(room: GameRoom): void {
+    enqueuePersistentWrite(room.id, () =>
+      gameRecordRepository.finishRecord({
+        roomId: room.id,
+        state: room.state
+      })
+    );
+  }
 
   function createQuickRoom(user: AuthUser): GameRoom {
     const room: GameRoom = {
-      events: appendRoomEvent([], `${user.username} 加入快速对局`),
+      events: [],
       humanSeatIndex: 0,
       id: createRoomId(),
       playerUserId: user.id,
@@ -129,6 +168,15 @@ export function createGameRoomService() {
 
     roomsById.set(room.id, room);
     activeRoomIdByUserId.set(user.id, room.id);
+    enqueuePersistentWrite(room.id, () =>
+      gameRecordRepository.createRecord({
+        humanSeatIndex: room.humanSeatIndex,
+        playerUserId: room.playerUserId,
+        roomId: room.id,
+        ruleName: room.state.rules.name
+      })
+    );
+    recordRoomEvent(room, `${user.username} 加入快速对局`);
     return room;
   }
 
@@ -176,10 +224,11 @@ export function createGameRoomService() {
       return { error: result.error, room };
     }
 
-    room.events = appendRoomEvent(room.events, describeAction(room.state, room.humanSeatIndex, action));
+    recordRoomEvent(room, describeAction(room.state, room.humanSeatIndex, action));
     room.state = result.state;
     if (room.state.phase === "ended") {
-      room.events = appendRoomEvent(room.events, describeGameEnd(room.state));
+      recordRoomEvent(room, describeGameEnd(room.state));
+      recordGameEnd(room);
     }
 
     return { room };
@@ -198,17 +247,18 @@ export function createGameRoomService() {
     const action = chooseBasicBotAction(room.state, room.humanSeatIndex);
     const result = applyAction(room.state, room.humanSeatIndex, action);
     if (!result.ok) {
-      room.events = appendRoomEvent(room.events, `${player.username} 超时托管失败：${result.error}`);
+      recordRoomEvent(room, `${player.username} 超时托管失败：${result.error}`);
       return false;
     }
 
-    room.events = appendRoomEvent(
-      room.events,
+    recordRoomEvent(
+      room,
       `${player.username} 超时托管，${describeAction(room.state, room.humanSeatIndex, action)}`
     );
     room.state = result.state;
     if (room.state.phase === "ended") {
-      room.events = appendRoomEvent(room.events, describeGameEnd(room.state));
+      recordRoomEvent(room, describeGameEnd(room.state));
+      recordGameEnd(room);
     }
 
     return true;
@@ -227,17 +277,27 @@ export function createGameRoomService() {
     const action = chooseBasicBotAction(room.state, player.seatIndex);
     const result = applyAction(room.state, player.seatIndex, action);
     if (!result.ok) {
-      room.events = appendRoomEvent(room.events, `${player.username} 操作失败：${result.error}`);
+      recordRoomEvent(room, `${player.username} 操作失败：${result.error}`);
       return false;
     }
 
-    room.events = appendRoomEvent(room.events, describeAction(room.state, player.seatIndex, action));
+    recordRoomEvent(room, describeAction(room.state, player.seatIndex, action));
     room.state = result.state;
     if (room.state.phase === "ended") {
-      room.events = appendRoomEvent(room.events, describeGameEnd(room.state));
+      recordRoomEvent(room, describeGameEnd(room.state));
+      recordGameEnd(room);
     }
 
     return true;
+  }
+
+  async function waitForPersistentWrites(roomId?: string): Promise<void> {
+    if (roomId) {
+      await persistentWriteQueueByRoomId.get(roomId);
+      return;
+    }
+
+    await Promise.all(persistentWriteQueueByRoomId.values());
   }
 
   return {
@@ -246,6 +306,7 @@ export function createGameRoomService() {
     applyNextBotAction,
     getOrCreateQuickRoom,
     getPlayerView,
-    getRoomForUser
+    getRoomForUser,
+    waitForPersistentWrites
   };
 }

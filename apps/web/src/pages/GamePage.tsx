@@ -35,8 +35,12 @@ export function getGameResultSummary(result: GameResultInfo): {
   fanText: string | null;
   scoreText: string;
   title: string;
+  winTypeText: string | null;
   winningTileText: string | null;
 } {
+  const winTypeText =
+    result.winType === "selfDraw" ? "自摸" : result.winType === "discard" ? "点炮" : null;
+
   return {
     fanText:
       result.fans.length > 0
@@ -44,6 +48,7 @@ export function getGameResultSummary(result: GameResultInfo): {
         : null,
     scoreText: result.endReason === "hu" ? `${result.totalPoints} 分` : "无人胡牌",
     title: result.endReason === "hu" ? "胡牌结算" : "流局",
+    winTypeText,
     winningTileText: result.winningTile ? `胡牌：${result.winningTile.label}` : null
   };
 }
@@ -213,6 +218,7 @@ export function GamePage(props: GamePageProps): JSX.Element {
               <div className={styles.resultSummary}>
                 <strong>{resultSummary.title}</strong>
                 <span>{resultSummary.scoreText}</span>
+                {resultSummary.winTypeText ? <p>方式：{resultSummary.winTypeText}</p> : null}
                 {resultSummary.winningTileText ? <p>{resultSummary.winningTileText}</p> : null}
                 {resultSummary.fanText ? <p>{resultSummary.fanText}</p> : null}
               </div>

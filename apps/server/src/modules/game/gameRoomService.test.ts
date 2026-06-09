@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { getLegalActions } from "mahjong-core";
+import { createTile, getLegalActions, type TileCode } from "mahjong-core";
 
 import { createGameRoomService, describeGameEnd } from "./gameRoomService.js";
+import { createMemoryGameRecordRepository } from "./gameRecordRepository.js";
 import type { AuthUser } from "@mahjong/shared";
 
 const player: AuthUser = {
@@ -179,6 +180,7 @@ describe("gameRoomService", () => {
     room.state.endReason = "hu";
     room.state.winnerSeatIndex = 0;
     room.state.winningTile = winningTile;
+    room.state.winType = "discard";
     room.state.score = {
       basePoints: 20,
       canHu: true,
@@ -191,6 +193,7 @@ describe("gameRoomService", () => {
       result: {
         endReason: "hu",
         totalPoints: 30,
+        winType: "discard",
         winningTile: expect.objectContaining({ id: winningTile.id })
       },
       winnerSeatIndex: 0
@@ -210,6 +213,7 @@ describe("gameRoomService", () => {
     room.state.endReason = "hu";
     room.state.winnerSeatIndex = 0;
     room.state.winningTile = winningTile;
+    room.state.winType = "selfDraw";
     room.state.score = {
       basePoints: 20,
       canHu: true,
@@ -218,7 +222,10 @@ describe("gameRoomService", () => {
       totalPoints: 30
     };
 
-    expect(describeGameEnd(room.state)).toBe(`player-a 胡牌，胡 ${winningTile.label}，30 分`);
+    expect(describeGameEnd(room.state)).toBe(`player-a 自摸，胡 ${winningTile.label}，30 分`);
+
+    room.state.winType = "discard";
+    expect(describeGameEnd(room.state)).toBe(`player-a 点炮，胡 ${winningTile.label}，30 分`);
 
     room.state.endReason = "draw";
     expect(describeGameEnd(room.state)).toBe("牌局流局");
@@ -259,4 +266,72 @@ describe("gameRoomService", () => {
 
     expect(service.getPlayerView(room).eventMessages.length).toBeLessThanOrEqual(20);
   });
+
+  it("persists quick room records, events, and final results", async () => {
+    const gameRecordRepository = createMemoryGameRecordRepository();
+    const service = createGameRoomService({ gameRecordRepository });
+    const room = service.getOrCreateQuickRoom(player);
+
+    await service.waitForPersistentWrites(room.id);
+
+    expect(gameRecordRepository.getRecord(room.id)).toMatchObject({
+      events: [expect.objectContaining({ text: "player-a 加入快速对局" })],
+      humanSeatIndex: 0,
+      playerUserId: player.id,
+      roomId: room.id,
+      ruleName: "simple",
+      status: "playing"
+    });
+
+    room.state.currentTurn = 0;
+    room.state.players[0].handTiles = handFromCodes([
+      "m2",
+      "m3",
+      "m4",
+      "m3",
+      "m4",
+      "m5",
+      "p4",
+      "p5",
+      "p6",
+      "s6",
+      "s7",
+      "s8",
+      "p8",
+      "p8"
+    ]);
+    const lastDrawnTileId = room.state.players[0].handTiles.at(-1)?.id;
+    if (!lastDrawnTileId) {
+      throw new Error("Expected winning hand to have a last tile");
+    }
+    room.state.players[0].lastDrawnTileId = lastDrawnTileId;
+
+    const result = service.applyHumanAction(player, { type: "hu" });
+    expect(result?.error).toBeUndefined();
+
+    await service.waitForPersistentWrites(room.id);
+
+    expect(gameRecordRepository.getRecord(room.id)).toMatchObject({
+      endReason: "hu",
+      events: expect.arrayContaining([
+        expect.objectContaining({ text: "player-a 加入快速对局" }),
+        expect.objectContaining({ text: "player-a 胡" }),
+        expect.objectContaining({ text: expect.stringContaining("player-a 自摸") })
+      ]),
+      status: "ended",
+      totalPoints: 40,
+      winnerSeatIndex: 0,
+      winType: "selfDraw"
+    });
+  });
 });
+
+function handFromCodes(codes: TileCode[]) {
+  const copyCounters = new Map<TileCode, number>();
+
+  return codes.map((code) => {
+    const copyIndex = copyCounters.get(code) ?? 0;
+    copyCounters.set(code, copyIndex + 1);
+    return createTile(code, copyIndex);
+  });
+}

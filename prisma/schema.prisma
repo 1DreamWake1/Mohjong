@@ -14,4 +14,34 @@ model User {
   role         String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  gameRecords GameRecord[]
+}
+
+model GameRecord {
+  id              Int         @id @default(autoincrement())
+  roomId          String      @unique
+  playerUserId    Int?
+  humanSeatIndex  Int
+  ruleName        String
+  status          String
+  startedAt       DateTime    @default(now())
+  endedAt         DateTime?
+  endReason       String?
+  winnerSeatIndex Int?
+  winType         String?
+  winningTile     String?
+  fanTotal        Int?
+  totalPoints     Int?
+  resultSnapshot  String?
+  player          User?       @relation(fields: [playerUserId], references: [id], onDelete: SetNull)
+  events          GameEvent[]
+}
+
+model GameEvent {
+  id        Int        @id @default(autoincrement())
+  recordId  Int
+  message   String
+  createdAt DateTime   @default(now())
+  record    GameRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
 }

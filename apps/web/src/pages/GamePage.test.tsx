@@ -72,6 +72,7 @@ describe("GamePage", () => {
         fanTotal: 2,
         fans: [{ name: "平和", value: 1 }, { name: "断幺九", value: 1 }],
         totalPoints: 40,
+        winType: "selfDraw",
         winningTile: {
           id: "tile-a",
           label: "8筒",
@@ -83,6 +84,7 @@ describe("GamePage", () => {
       fanText: "平和 1番、断幺九 1番",
       scoreText: "40 分",
       title: "胡牌结算",
+      winTypeText: "自摸",
       winningTileText: "胡牌：8筒"
     });
   });
@@ -99,6 +101,7 @@ describe("GamePage", () => {
       fanText: null,
       scoreText: "无人胡牌",
       title: "流局",
+      winTypeText: null,
       winningTileText: null
     });
   });
