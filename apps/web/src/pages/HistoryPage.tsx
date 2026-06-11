@@ -1,10 +1,11 @@
-import type { AuthUser, GameHistoryDetail, GameHistoryItem } from "@mahjong/shared";
+import type { AuthUser, GameHistoryDetail, GameHistoryItem, PlayerView } from "@mahjong/shared";
 import { useEffect, useMemo, useState } from "react";
 
 import { getGameHistory, listGameHistory } from "../api/client.js";
 import { getErrorMessage, isUnauthorizedError } from "../api/errors.js";
 import styles from "../app/App.module.css";
 import { APP_ROUTES, replaceRoute } from "../app/routes.js";
+import { MahjongTable } from "../components/game/MahjongTable.js";
 import { useAuthStore } from "../stores/authStore.js";
 import { formatDateTime } from "../utils/date.js";
 
@@ -75,6 +76,13 @@ export function getNextReplayIndex(
   return Math.min(Math.max(currentIndex + delta, 0), total - 1);
 }
 
+export function createReadonlyReplayView(view: PlayerView): PlayerView {
+  return {
+    ...view,
+    availableActions: []
+  };
+}
+
 export function filterGameHistory(
   records: GameHistoryItem[],
   filter: GameHistoryFilter,
@@ -116,6 +124,9 @@ export function HistoryPage(props: HistoryPageProps): JSX.Element {
   const selectedFanText = selectedRecord ? getGameHistoryFanText(selectedRecord) : null;
   const replayEvents = selectedRecord?.events ?? [];
   const replayEvent = replayEvents[replayIndex];
+  const replayView = replayEvent?.viewSnapshot
+    ? createReadonlyReplayView(replayEvent.viewSnapshot)
+    : null;
 
   async function refreshHistory(): Promise<void> {
     setError(null);
@@ -380,9 +391,21 @@ export function HistoryPage(props: HistoryPageProps): JSX.Element {
                   </span>
                 </div>
                 {replayEvent ? (
-                  <p className={styles.replayEvent}>
-                    {formatDateTime(replayEvent.createdAt)} {replayEvent.text}
-                  </p>
+                  <>
+                    <p className={styles.replayEvent}>
+                      {formatDateTime(replayEvent.createdAt)} {replayEvent.text}
+                    </p>
+                    {replayView ? (
+                      <div className={styles.historyReplayTable}>
+                        <MahjongTable
+                          onAction={() => undefined}
+                          onSelectTile={() => undefined}
+                          selectedTileId={null}
+                          view={replayView}
+                        />
+                      </div>
+                    ) : null}
+                  </>
                 ) : (
                   <p className={styles.emptyState}>暂无可回放事件</p>
                 )}

@@ -79,8 +79,12 @@ export type GameHistoryResultSnapshot = {
   winType?: WinType;
 };
 
+export type GameHistoryEvent = GameEventMessage & {
+  viewSnapshot?: PlayerView;
+};
+
 export type GameHistoryDetail = GameHistoryItem & {
-  events: GameEventMessage[];
+  events: GameHistoryEvent[];
   result?: GameHistoryResultSnapshot;
 };
 

@@ -39,9 +39,10 @@ model GameRecord {
 }
 
 model GameEvent {
-  id        Int        @id @default(autoincrement())
-  recordId  Int
-  message   String
-  createdAt DateTime   @default(now())
-  record    GameRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  id            Int        @id @default(autoincrement())
+  recordId      Int
+  message       String
+  stateSnapshot String?
+  createdAt     DateTime   @default(now())
+  record        GameRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
 }

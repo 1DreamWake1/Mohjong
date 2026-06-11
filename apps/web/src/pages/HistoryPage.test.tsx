@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  createReadonlyReplayView,
   filterGameHistory,
   getGameHistoryFanText,
   getGameHistoryResultText,
@@ -112,6 +113,26 @@ describe("HistoryPage", () => {
     expect(getNextReplayIndex(1, 3, "previous")).toBe(0);
     expect(getNextReplayIndex(1, 3, "next")).toBe(2);
     expect(getNextReplayIndex(2, 3, "next")).toBe(2);
+  });
+
+  it("creates read-only replay views from snapshots", () => {
+    const replayView = createReadonlyReplayView({
+      availableActions: [{ tileId: "m1-a", type: "discard" }],
+      currentTurn: 0,
+      discardAreas: [],
+      eventMessages: [],
+      handTiles: [],
+      otherPlayers: [],
+      phase: "playing",
+      publicMelds: [],
+      roomId: "quick-replay",
+      seatIndex: 0,
+      username: "player1",
+      wallTileCount: 42
+    });
+
+    expect(replayView.availableActions).toEqual([]);
+    expect(replayView.roomId).toBe("quick-replay");
   });
 
   it("filters game history by status, result and room id", () => {

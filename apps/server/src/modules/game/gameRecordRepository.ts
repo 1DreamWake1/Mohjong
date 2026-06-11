@@ -1,9 +1,10 @@
 import type {
-  GameEventMessage,
+  GameHistoryEvent,
   GameHistoryDetail,
   GameHistoryItem,
   GameHistoryResultSnapshot,
   GameRecordStatus,
+  PlayerView,
   TileInfo,
   WinType
 } from "@mahjong/shared";
@@ -28,7 +29,7 @@ export type FinishGameRecordInput = {
 export type GameRecordSnapshot = {
   endedAt?: string;
   endReason?: "hu" | "draw";
-  events: GameEventMessage[];
+  events: GameHistoryEvent[];
   fanTotal?: number;
   humanSeatIndex: number;
   playerUserId: number;
@@ -44,7 +45,7 @@ export type GameRecordSnapshot = {
 };
 
 export type GameRecordRepository = {
-  appendEvent(roomId: string, event: GameEventMessage): Promise<void>;
+  appendEvent(roomId: string, event: GameHistoryEvent): Promise<void>;
   createRecord(input: CreateGameRecordInput): Promise<void>;
   finishRecord(input: FinishGameRecordInput): Promise<void>;
   getRecordForPlayer(playerUserId: number, roomId: string): Promise<GameHistoryDetail | null>;
@@ -172,6 +173,7 @@ export function createPrismaGameRecordRepository(
         data: {
           createdAt: event.createdAt,
           message: event.text,
+          ...(event.viewSnapshot ? { stateSnapshot: JSON.stringify(event.viewSnapshot) } : {}),
           recordId: record.id
         }
       });
@@ -229,11 +231,16 @@ export function createPrismaGameRecordRepository(
 
       return {
         ...toHistoryItemFromPrisma(record),
-        events: record.events.map((event) => ({
-          createdAt: event.createdAt.toISOString(),
-          id: `event-${event.id}`,
-          text: event.message
-        })),
+        events: record.events.map((event) => {
+          const viewSnapshot = parsePlayerViewSnapshot(event.stateSnapshot);
+
+          return {
+            createdAt: event.createdAt.toISOString(),
+            id: `event-${event.id}`,
+            text: event.message,
+            ...(viewSnapshot ? { viewSnapshot } : {})
+          };
+        }),
         ...(result ? { result } : {})
       };
     },
@@ -307,6 +314,19 @@ function parseResultSnapshot(value: string | null): GameHistoryResultSnapshot | 
   }
 }
 
+function parsePlayerViewSnapshot(value: string | null): PlayerView | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    const parsedValue: unknown = JSON.parse(value);
+    return isPlayerView(parsedValue) ? parsedValue : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function toHistoryItem(record: GameRecordSnapshot): GameHistoryItem {
   return {
     roomId: record.roomId,
@@ -330,6 +350,7 @@ type PrismaGameRecordWithEvents = Awaited<
     createdAt: Date;
     id: number;
     message: string;
+    stateSnapshot: string | null;
   }[];
 };
 
@@ -364,6 +385,88 @@ function isTileInfo(value: unknown): value is TileInfo {
       value.suit === "bamboo" ||
       value.suit === "winds" ||
       value.suit === "dragons")
+  );
+}
+
+function isGameEventMessage(value: unknown): value is GameHistoryEvent {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.text === "string" &&
+    typeof value.createdAt === "string"
+  );
+}
+
+function isDiscardPile(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.seatIndex === "number" &&
+    Array.isArray(value.tiles) &&
+    value.tiles.every(isTileInfo)
+  );
+}
+
+function isMeldInfo(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    (value.type === "chi" || value.type === "peng" || value.type === "gang") &&
+    typeof value.ownerSeatIndex === "number" &&
+    (value.fromSeatIndex === undefined || typeof value.fromSeatIndex === "number") &&
+    Array.isArray(value.tiles) &&
+    value.tiles.every(isTileInfo)
+  );
+}
+
+function isOtherPlayerView(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.seatIndex === "number" &&
+    typeof value.username === "string" &&
+    typeof value.handTileCount === "number" &&
+    typeof value.isBot === "boolean"
+  );
+}
+
+function isAction(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    (value.type === "discard" ||
+      value.type === "chi" ||
+      value.type === "peng" ||
+      value.type === "gang" ||
+      value.type === "hu" ||
+      value.type === "pass") &&
+    (value.tileId === undefined || typeof value.tileId === "string") &&
+    (value.tileIds === undefined ||
+      (Array.isArray(value.tileIds) &&
+        value.tileIds.every((tileId) => typeof tileId === "string")))
+  );
+}
+
+function isPlayerView(value: unknown): value is PlayerView {
+  return (
+    isRecord(value) &&
+    typeof value.roomId === "string" &&
+    typeof value.seatIndex === "number" &&
+    typeof value.username === "string" &&
+    typeof value.currentTurn === "number" &&
+    (value.phase === "waiting" ||
+      value.phase === "dealing" ||
+      value.phase === "playing" ||
+      value.phase === "ended") &&
+    typeof value.wallTileCount === "number" &&
+    Array.isArray(value.handTiles) &&
+    value.handTiles.every(isTileInfo) &&
+    Array.isArray(value.otherPlayers) &&
+    value.otherPlayers.every(isOtherPlayerView) &&
+    Array.isArray(value.discardAreas) &&
+    value.discardAreas.every(isDiscardPile) &&
+    Array.isArray(value.publicMelds) &&
+    value.publicMelds.every(isMeldInfo) &&
+    Array.isArray(value.availableActions) &&
+    value.availableActions.every(isAction) &&
+    Array.isArray(value.eventMessages) &&
+    value.eventMessages.every(isGameEventMessage)
   );
 }
 

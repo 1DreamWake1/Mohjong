@@ -275,7 +275,16 @@ describe("gameRoomService", () => {
     await service.waitForPersistentWrites(room.id);
 
     expect(gameRecordRepository.getRecord(room.id)).toMatchObject({
-      events: [expect.objectContaining({ text: "player-a 加入快速对局" })],
+      events: [
+        expect.objectContaining({
+          text: "player-a 加入快速对局",
+          viewSnapshot: expect.objectContaining({
+            availableActions: expect.any(Array),
+            roomId: room.id,
+            username: "player-a"
+          })
+        })
+      ],
       humanSeatIndex: 0,
       playerUserId: player.id,
       roomId: room.id,
@@ -315,8 +324,16 @@ describe("gameRoomService", () => {
       endReason: "hu",
       events: expect.arrayContaining([
         expect.objectContaining({ text: "player-a 加入快速对局" }),
-        expect.objectContaining({ text: "player-a 胡" }),
-        expect.objectContaining({ text: expect.stringContaining("player-a 自摸") })
+        expect.objectContaining({
+          text: "player-a 胡",
+          viewSnapshot: expect.objectContaining({ phase: "ended" })
+        }),
+        expect.objectContaining({
+          text: expect.stringContaining("player-a 自摸"),
+          viewSnapshot: expect.objectContaining({
+            result: expect.objectContaining({ winType: "selfDraw" })
+          })
+        })
       ]),
       status: "ended",
       totalPoints: 40,
@@ -332,7 +349,16 @@ describe("gameRoomService", () => {
         winnerSeatIndex: 0,
         winningTile: expect.objectContaining({ label: "8筒" }),
         winType: "selfDraw"
-      }
+      },
+      events: expect.arrayContaining([
+        expect.objectContaining({
+          viewSnapshot: expect.objectContaining({
+            eventMessages: expect.arrayContaining([
+              expect.objectContaining({ text: "player-a 加入快速对局" })
+            ])
+          })
+        })
+      ])
     });
   });
 });

@@ -1,4 +1,4 @@
-import type { Action, AuthUser, GameEventMessage, PlayerView } from "@mahjong/shared";
+import type { Action, AuthUser, GameEventMessage, GameHistoryEvent, PlayerView } from "@mahjong/shared";
 import {
   applyAction,
   chooseBasicBotAction,
@@ -15,7 +15,7 @@ import {
 import { createRoomPlayerView } from "./gameStateMapper.js";
 
 type GameRoom = {
-  events: GameEventMessage[];
+  events: GameHistoryEvent[];
   humanSeatIndex: number;
   id: string;
   playerUserId: number;
@@ -48,10 +48,18 @@ function createEvent(text: string): GameEventMessage {
 }
 
 function appendExistingRoomEvent(
-  events: GameEventMessage[],
-  event: GameEventMessage
-): GameEventMessage[] {
+  events: GameHistoryEvent[],
+  event: GameHistoryEvent
+): GameHistoryEvent[] {
   return [...events, event].slice(-maxRoomEvents);
+}
+
+function stripEventSnapshot(event: GameHistoryEvent): GameEventMessage {
+  return {
+    createdAt: event.createdAt,
+    id: event.id,
+    text: event.text
+  };
 }
 
 function haveSameTileIds(left: readonly string[] | undefined, right: readonly string[] | undefined): boolean {
@@ -134,8 +142,24 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     persistentWriteQueueByRoomId.set(roomId, nextWrite);
   }
 
+  function createRoomViewSnapshot(room: GameRoom): PlayerView {
+    return createRoomPlayerView({
+      events: room.events.map(stripEventSnapshot),
+      roomId: room.id,
+      seatIndex: room.humanSeatIndex,
+      state: room.state
+    });
+  }
+
   function recordRoomEvent(room: GameRoom, text: string): void {
-    const event = createEvent(text);
+    const baseEvent = createEvent(text);
+    const event = {
+      ...baseEvent,
+      viewSnapshot: createRoomViewSnapshot({
+        ...room,
+        events: appendExistingRoomEvent(room.events, baseEvent)
+      })
+    };
     room.events = appendExistingRoomEvent(room.events, event);
     enqueuePersistentWrite(room.id, () => gameRecordRepository.appendEvent(room.id, event));
   }
@@ -219,13 +243,14 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
       return { error: "Illegal action", room };
     }
 
+    const eventText = describeAction(room.state, room.humanSeatIndex, action);
     const result = applyAction(room.state, room.humanSeatIndex, action);
     if (!result.ok) {
       return { error: result.error, room };
     }
 
-    recordRoomEvent(room, describeAction(room.state, room.humanSeatIndex, action));
     room.state = result.state;
+    recordRoomEvent(room, eventText);
     if (room.state.phase === "ended") {
       recordRoomEvent(room, describeGameEnd(room.state));
       recordGameEnd(room);
@@ -245,17 +270,15 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     }
 
     const action = chooseBasicBotAction(room.state, room.humanSeatIndex);
+    const eventText = `${player.username} 超时托管，${describeAction(room.state, room.humanSeatIndex, action)}`;
     const result = applyAction(room.state, room.humanSeatIndex, action);
     if (!result.ok) {
       recordRoomEvent(room, `${player.username} 超时托管失败：${result.error}`);
       return false;
     }
 
-    recordRoomEvent(
-      room,
-      `${player.username} 超时托管，${describeAction(room.state, room.humanSeatIndex, action)}`
-    );
     room.state = result.state;
+    recordRoomEvent(room, eventText);
     if (room.state.phase === "ended") {
       recordRoomEvent(room, describeGameEnd(room.state));
       recordGameEnd(room);
@@ -275,14 +298,15 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     }
 
     const action = chooseBasicBotAction(room.state, player.seatIndex);
+    const eventText = describeAction(room.state, player.seatIndex, action);
     const result = applyAction(room.state, player.seatIndex, action);
     if (!result.ok) {
       recordRoomEvent(room, `${player.username} 操作失败：${result.error}`);
       return false;
     }
 
-    recordRoomEvent(room, describeAction(room.state, player.seatIndex, action));
     room.state = result.state;
+    recordRoomEvent(room, eventText);
     if (room.state.phase === "ended") {
       recordRoomEvent(room, describeGameEnd(room.state));
       recordGameEnd(room);

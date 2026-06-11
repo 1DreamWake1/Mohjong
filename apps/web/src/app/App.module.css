@@ -559,6 +559,11 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.historyReplayTable {
+  min-width: 0;
+  overflow-x: auto;
+}
+
 @media (max-width: 760px) {
   .shell,
   .adminShell,
