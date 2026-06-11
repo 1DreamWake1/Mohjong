@@ -69,8 +69,19 @@ export type GameHistoryItem = {
   totalPoints?: number;
 };
 
+export type GameHistoryResultSnapshot = {
+  endReason?: "hu" | "draw";
+  fanTotal: number;
+  fans: GameScoreFan[];
+  totalPoints: number;
+  winnerSeatIndex?: number;
+  winningTile?: TileInfo;
+  winType?: WinType;
+};
+
 export type GameHistoryDetail = GameHistoryItem & {
   events: GameEventMessage[];
+  result?: GameHistoryResultSnapshot;
 };
 
 export type ListGameHistoryResponse = {

@@ -323,6 +323,17 @@ describe("gameRoomService", () => {
       winnerSeatIndex: 0,
       winType: "selfDraw"
     });
+
+    await expect(gameRecordRepository.getRecordForPlayer(player.id, room.id)).resolves.toMatchObject({
+      result: {
+        fanTotal: 2,
+        fans: expect.arrayContaining([expect.objectContaining({ name: "断幺九" })]),
+        totalPoints: 40,
+        winnerSeatIndex: 0,
+        winningTile: expect.objectContaining({ label: "8筒" }),
+        winType: "selfDraw"
+      }
+    });
   });
 });
 

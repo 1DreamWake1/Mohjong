@@ -13,6 +13,16 @@ type HistoryPageProps = {
   user: AuthUser;
 };
 
+export type GameHistoryFilter = "all" | "playing" | "ended" | "hu" | "draw";
+
+const gameHistoryFilters: Array<{ label: string; value: GameHistoryFilter }> = [
+  { label: "全部", value: "all" },
+  { label: "进行中", value: "playing" },
+  { label: "已结束", value: "ended" },
+  { label: "胡牌", value: "hu" },
+  { label: "流局", value: "draw" }
+];
+
 export function getGameHistoryResultText(record: GameHistoryItem): string {
   if (record.status !== "ended") {
     return "进行中";
@@ -35,6 +45,57 @@ export function sortGameHistory(records: GameHistoryItem[]): GameHistoryItem[] {
   );
 }
 
+export function getGameHistoryFanText(record: GameHistoryDetail): string | null {
+  if (!record.result || record.result.fans.length === 0) {
+    return null;
+  }
+
+  return record.result.fans.map((fan) => `${fan.name} ${fan.value}番`).join("、");
+}
+
+export function getReplayProgressText(currentIndex: number, total: number): string {
+  if (total <= 0) {
+    return "0 / 0";
+  }
+
+  const normalizedIndex = Math.min(Math.max(currentIndex, 0), total - 1);
+  return `${normalizedIndex + 1} / ${total}`;
+}
+
+export function getNextReplayIndex(
+  currentIndex: number,
+  total: number,
+  direction: "previous" | "next"
+): number {
+  if (total <= 0) {
+    return 0;
+  }
+
+  const delta = direction === "next" ? 1 : -1;
+  return Math.min(Math.max(currentIndex + delta, 0), total - 1);
+}
+
+export function filterGameHistory(
+  records: GameHistoryItem[],
+  filter: GameHistoryFilter,
+  searchQuery: string
+): GameHistoryItem[] {
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+
+  return records.filter((record) => {
+    const matchesFilter =
+      filter === "all" ||
+      (filter === "playing" && record.status === "playing") ||
+      (filter === "ended" && record.status === "ended") ||
+      (filter === "hu" && record.endReason === "hu") ||
+      (filter === "draw" && record.endReason === "draw");
+    const matchesSearch =
+      normalizedQuery.length === 0 || record.roomId.toLowerCase().includes(normalizedQuery);
+
+    return matchesFilter && matchesSearch;
+  });
+}
+
 export function HistoryPage(props: HistoryPageProps): JSX.Element {
   const clearSession = useAuthStore((state) => state.clearSession);
   const signOut = useAuthStore((state) => state.signOut);
@@ -42,9 +103,19 @@ export function HistoryPage(props: HistoryPageProps): JSX.Element {
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<GameHistoryDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<GameHistoryFilter>("all");
   const [isLoadingList, setIsLoadingList] = useState(true);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
-  const sortedRecords = useMemo(() => sortGameHistory(records), [records]);
+  const [isReplayPlaying, setIsReplayPlaying] = useState(false);
+  const [replayIndex, setReplayIndex] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const filteredRecords = useMemo(
+    () => sortGameHistory(filterGameHistory(records, activeFilter, searchQuery)),
+    [activeFilter, records, searchQuery]
+  );
+  const selectedFanText = selectedRecord ? getGameHistoryFanText(selectedRecord) : null;
+  const replayEvents = selectedRecord?.events ?? [];
+  const replayEvent = replayEvents[replayIndex];
 
   async function refreshHistory(): Promise<void> {
     setError(null);
@@ -70,6 +141,17 @@ export function HistoryPage(props: HistoryPageProps): JSX.Element {
   useEffect(() => {
     void refreshHistory();
   }, []);
+
+  useEffect(() => {
+    if (filteredRecords.length === 0) {
+      setSelectedRoomId(null);
+      return;
+    }
+
+    if (!selectedRoomId || !filteredRecords.some((record) => record.roomId === selectedRoomId)) {
+      setSelectedRoomId(filteredRecords[0]?.roomId ?? null);
+    }
+  }, [filteredRecords, selectedRoomId]);
 
   useEffect(() => {
     if (!selectedRoomId) {
@@ -110,6 +192,30 @@ export function HistoryPage(props: HistoryPageProps): JSX.Element {
     };
   }, [clearSession, props.token, selectedRoomId]);
 
+  useEffect(() => {
+    setIsReplayPlaying(false);
+    setReplayIndex(0);
+  }, [selectedRecord?.roomId]);
+
+  useEffect(() => {
+    if (!isReplayPlaying || replayEvents.length === 0) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      setReplayIndex((currentIndex) => {
+        if (currentIndex >= replayEvents.length - 1) {
+          setIsReplayPlaying(false);
+          return currentIndex;
+        }
+
+        return currentIndex + 1;
+      });
+    }, 1200);
+
+    return () => window.clearInterval(interval);
+  }, [isReplayPlaying, replayEvents.length]);
+
   return (
     <main className={styles.lobbyShell}>
       <header className={styles.lobbyHeader}>
@@ -138,25 +244,53 @@ export function HistoryPage(props: HistoryPageProps): JSX.Element {
           <div className={styles.tableHeader}>
             <div>
               <h2>对局列表</h2>
-              <p>{records.length} 条记录</p>
+              <p>
+                {filteredRecords.length} / {records.length} 条记录
+              </p>
             </div>
-            <button
-              className={styles.secondaryButton}
-              disabled={isLoadingList}
-              onClick={() => void refreshHistory()}
-              type="button"
-            >
-              {isLoadingList ? "刷新中" : "刷新"}
-            </button>
+            <div className={styles.tableTools}>
+              <input
+                aria-label="搜索房间号"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="搜索房间号"
+                type="search"
+                value={searchQuery}
+              />
+              <button
+                className={styles.secondaryButton}
+                disabled={isLoadingList}
+                onClick={() => void refreshHistory()}
+                type="button"
+              >
+                {isLoadingList ? "刷新中" : "刷新"}
+              </button>
+            </div>
+          </div>
+
+          <div className={styles.historyFilters} aria-label="历史对局筛选">
+            {gameHistoryFilters.map((filter) => (
+              <button
+                className={
+                  activeFilter === filter.value ? styles.segmentButtonActive : styles.segmentButton
+                }
+                key={filter.value}
+                onClick={() => setActiveFilter(filter.value)}
+                type="button"
+              >
+                {filter.label}
+              </button>
+            ))}
           </div>
 
           {isLoadingList ? (
             <p className={styles.emptyState}>正在加载历史对局</p>
-          ) : sortedRecords.length === 0 ? (
+          ) : records.length === 0 ? (
             <p className={styles.emptyState}>暂无历史对局</p>
+          ) : filteredRecords.length === 0 ? (
+            <p className={styles.emptyState}>没有匹配的历史对局</p>
           ) : (
             <div className={styles.playerList}>
-              {sortedRecords.map((record) => (
+              {filteredRecords.map((record) => (
                 <button
                   className={
                     selectedRoomId === record.roomId ? styles.historyRowActive : styles.historyRow
@@ -209,7 +343,84 @@ export function HistoryPage(props: HistoryPageProps): JSX.Element {
                   <dt>总分</dt>
                   <dd>{selectedRecord.totalPoints ?? 0}</dd>
                 </div>
+                <div>
+                  <dt>胜者</dt>
+                  <dd>
+                    {selectedRecord.result?.winnerSeatIndex === undefined
+                      ? "-"
+                      : `${selectedRecord.result.winnerSeatIndex + 1}号位`}
+                  </dd>
+                </div>
+                <div>
+                  <dt>胡牌牌</dt>
+                  <dd>{selectedRecord.result?.winningTile?.label ?? selectedRecord.winningTile ?? "-"}</dd>
+                </div>
               </dl>
+
+              {selectedRecord.result ? (
+                <div className={styles.resultSummary}>
+                  <strong>结算明细</strong>
+                  <span>{getGameHistoryResultText(selectedRecord)}</span>
+                  <p>
+                    番数：{selectedRecord.result.fanTotal}，总分：
+                    {selectedRecord.result.totalPoints}
+                  </p>
+                  {selectedFanText ? <p>{selectedFanText}</p> : null}
+                </div>
+              ) : null}
+
+              <section className={styles.replayPanel} aria-label="历史事件回放">
+                <div className={styles.panelHeader}>
+                  <div>
+                    <p className={styles.panelLabel}>事件回放</p>
+                    <h2>{getReplayProgressText(replayIndex, replayEvents.length)}</h2>
+                  </div>
+                  <span className={styles.statusBadge}>
+                    {isReplayPlaying ? "播放中" : "已暂停"}
+                  </span>
+                </div>
+                {replayEvent ? (
+                  <p className={styles.replayEvent}>
+                    {formatDateTime(replayEvent.createdAt)} {replayEvent.text}
+                  </p>
+                ) : (
+                  <p className={styles.emptyState}>暂无可回放事件</p>
+                )}
+                <div className={styles.replayControls}>
+                  <button
+                    className={styles.secondaryButton}
+                    disabled={replayEvents.length === 0 || replayIndex === 0}
+                    onClick={() =>
+                      setReplayIndex((currentIndex) =>
+                        getNextReplayIndex(currentIndex, replayEvents.length, "previous")
+                      )
+                    }
+                    type="button"
+                  >
+                    上一条
+                  </button>
+                  <button
+                    className={styles.primaryButton}
+                    disabled={replayEvents.length === 0}
+                    onClick={() => setIsReplayPlaying((currentValue) => !currentValue)}
+                    type="button"
+                  >
+                    {isReplayPlaying ? "暂停" : "播放"}
+                  </button>
+                  <button
+                    className={styles.secondaryButton}
+                    disabled={replayEvents.length === 0 || replayIndex >= replayEvents.length - 1}
+                    onClick={() =>
+                      setReplayIndex((currentIndex) =>
+                        getNextReplayIndex(currentIndex, replayEvents.length, "next")
+                      )
+                    }
+                    type="button"
+                  >
+                    下一条
+                  </button>
+                </div>
+              </section>
 
               {selectedRecord.events.length > 0 ? (
                 <ol className={styles.eventList} aria-label="历史对局事件">

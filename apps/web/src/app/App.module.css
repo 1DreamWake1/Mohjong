@@ -342,6 +342,13 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.historyFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
 .segmentButton,
 .segmentButtonActive {
   border: 1px solid #c7d1dc;
@@ -530,6 +537,28 @@
   white-space: nowrap;
 }
 
+.replayPanel {
+  background: #f7fafc;
+  border: 1px solid #d7dee8;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.replayEvent {
+  color: #243241;
+  line-height: 1.6;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.replayControls {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 @media (max-width: 760px) {
   .shell,
   .adminShell,
@@ -575,6 +604,10 @@
 
   .playerRow .playerActions button {
     flex: 1;
+  }
+
+  .replayControls {
+    grid-template-columns: 1fr;
   }
 
   .tableTools input {

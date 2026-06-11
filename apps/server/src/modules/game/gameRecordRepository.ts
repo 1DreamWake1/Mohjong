@@ -2,7 +2,9 @@ import type {
   GameEventMessage,
   GameHistoryDetail,
   GameHistoryItem,
+  GameHistoryResultSnapshot,
   GameRecordStatus,
+  TileInfo,
   WinType
 } from "@mahjong/shared";
 import type { PrismaClient } from "@prisma/client";
@@ -13,6 +15,7 @@ import { prisma as defaultPrisma } from "../../db/prisma.js";
 export type CreateGameRecordInput = {
   humanSeatIndex: number;
   playerUserId: number;
+  result?: GameHistoryResultSnapshot;
   roomId: string;
   ruleName: string;
 };
@@ -29,6 +32,7 @@ export type GameRecordSnapshot = {
   fanTotal?: number;
   humanSeatIndex: number;
   playerUserId: number;
+  result?: GameHistoryResultSnapshot;
   roomId: string;
   ruleName: string;
   startedAt: string;
@@ -99,6 +103,7 @@ export function createMemoryGameRecordRepository(): GameRecordRepository & {
         ...record,
         endedAt: new Date().toISOString(),
         ...(input.state.endReason ? { endReason: input.state.endReason } : {}),
+        result: createResultSnapshot(input.state),
         status: "ended",
         ...(input.state.score ? { fanTotal: input.state.score.fanTotal } : {}),
         ...(input.state.score ? { totalPoints: input.state.score.totalPoints } : {}),
@@ -135,7 +140,8 @@ export function createMemoryGameRecordRepository(): GameRecordRepository & {
 
       return {
         ...toHistoryItem(record),
-        events: [...record.events]
+        events: [...record.events],
+        ...(record.result ? { result: record.result } : {})
       };
     },
 
@@ -215,16 +221,21 @@ export function createPrismaGameRecordRepository(
         }
       });
 
-      return record
-        ? {
-            ...toHistoryItemFromPrisma(record),
-            events: record.events.map((event) => ({
-              createdAt: event.createdAt.toISOString(),
-              id: `event-${event.id}`,
-              text: event.message
-            }))
-          }
-        : null;
+      if (!record) {
+        return null;
+      }
+
+      const result = parseResultSnapshot(record.resultSnapshot);
+
+      return {
+        ...toHistoryItemFromPrisma(record),
+        events: record.events.map((event) => ({
+          createdAt: event.createdAt.toISOString(),
+          id: `event-${event.id}`,
+          text: event.message
+        })),
+        ...(result ? { result } : {})
+      };
     },
 
     async listRecordsForPlayer(playerUserId) {
@@ -238,16 +249,62 @@ export function createPrismaGameRecordRepository(
   };
 }
 
-function createResultSnapshot(state: MahjongGameState) {
+function createResultSnapshot(state: MahjongGameState): GameHistoryResultSnapshot {
   return {
-    endReason: state.endReason,
     fanTotal: state.score?.fanTotal ?? 0,
     fans: state.score?.fans.map((fan) => ({ name: fan.name, value: fan.value })) ?? [],
     totalPoints: state.score?.totalPoints ?? 0,
-    winnerSeatIndex: state.winnerSeatIndex,
-    winningTile: state.winningTile,
-    winType: state.winType
+    ...(state.endReason ? { endReason: state.endReason } : {}),
+    ...(state.winnerSeatIndex === undefined ? {} : { winnerSeatIndex: state.winnerSeatIndex }),
+    ...(state.winningTile ? { winningTile: state.winningTile } : {}),
+    ...(state.winType ? { winType: state.winType } : {})
   };
+}
+
+function parseResultSnapshot(value: string | null): GameHistoryResultSnapshot | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    const parsedValue: unknown = JSON.parse(value);
+    if (!isRecord(parsedValue)) {
+      return undefined;
+    }
+
+    const fanTotal = typeof parsedValue.fanTotal === "number" ? parsedValue.fanTotal : 0;
+    const totalPoints = typeof parsedValue.totalPoints === "number" ? parsedValue.totalPoints : 0;
+    const fans = Array.isArray(parsedValue.fans)
+      ? parsedValue.fans.flatMap((fan): GameHistoryResultSnapshot["fans"] => {
+          if (
+            !isRecord(fan) ||
+            typeof fan.name !== "string" ||
+            typeof fan.value !== "number"
+          ) {
+            return [];
+          }
+
+          return [{ name: fan.name, value: fan.value }];
+        })
+      : [];
+    const endReason = toEndReason(readString(parsedValue.endReason));
+    const winType = toWinType(readString(parsedValue.winType));
+    const winnerSeatIndex =
+      typeof parsedValue.winnerSeatIndex === "number" ? parsedValue.winnerSeatIndex : undefined;
+    const winningTile = isTileInfo(parsedValue.winningTile) ? parsedValue.winningTile : undefined;
+
+    return {
+      fanTotal,
+      fans,
+      totalPoints,
+      ...(endReason ? { endReason } : {}),
+      ...(winnerSeatIndex === undefined ? {} : { winnerSeatIndex }),
+      ...(winningTile ? { winningTile } : {}),
+      ...(winType ? { winType } : {})
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 function toHistoryItem(record: GameRecordSnapshot): GameHistoryItem {
@@ -286,6 +343,28 @@ function toEndReason(value: string | null): "hu" | "draw" | undefined {
 
 function toWinType(value: string | null): WinType | undefined {
   return value === "selfDraw" || value === "discard" ? value : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object";
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function isTileInfo(value: unknown): value is TileInfo {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.label === "string" &&
+    typeof value.rank === "number" &&
+    (value.suit === "characters" ||
+      value.suit === "dots" ||
+      value.suit === "bamboo" ||
+      value.suit === "winds" ||
+      value.suit === "dragons")
+  );
 }
 
 function toHistoryItemFromPrisma(record: NonNullable<PrismaGameRecordWithEvents>): GameHistoryItem {
