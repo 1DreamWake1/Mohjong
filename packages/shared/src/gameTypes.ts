@@ -86,6 +86,10 @@ export type JoinGameRoomResponse = {
   room: GameLobbyRoom;
 };
 
+export type LeaveGameRoomResponse = {
+  room: GameLobbyRoom | null;
+};
+
 export type SetGameRoomReadyRequest = {
   isReady: boolean;
 };

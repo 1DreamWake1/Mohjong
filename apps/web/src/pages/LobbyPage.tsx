@@ -5,6 +5,7 @@ import {
   createGameRoom,
   getCurrentGameRoom,
   joinGameRoom,
+  leaveCurrentGameRoom,
   setGameRoomReady,
   startGameRoom
 } from "../api/client.js";
@@ -40,6 +41,28 @@ export function canStartLobbyRoom(room: GameLobbyRoom, userId: number): boolean 
   );
 }
 
+export function canEnterLobbyGame(room: GameLobbyRoom | null): boolean {
+  return room?.status === "playing";
+}
+
+export function canLeaveLobbyRoom(room: GameLobbyRoom | null): boolean {
+  return room?.status === "waiting" || room?.status === "ended";
+}
+
+export function getLobbyRoomStatusText(room: GameLobbyRoom | null): string {
+  if (room?.status === "waiting") {
+    return "等待中";
+  }
+  if (room?.status === "playing") {
+    return "进行中";
+  }
+  if (room?.status === "ended") {
+    return "已结束";
+  }
+
+  return "-";
+}
+
 export function LobbyPage(props: LobbyPageProps): JSX.Element {
   const clearSession = useAuthStore((state) => state.clearSession);
   const signOut = useAuthStore((state) => state.signOut);
@@ -55,6 +78,8 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
   const socketStatusText = socketStatus === "ready" ? "已准备" : "未准备";
   const currentSeat = room?.seats.find((seat) => seat.userId === props.user.id);
   const canStartRoom = room ? canStartLobbyRoom(room, props.user.id) : false;
+  const canEnterGame = canEnterLobbyGame(room);
+  const canLeaveRoom = canLeaveLobbyRoom(room);
 
   function handleRoomError(error: unknown): void {
     if (isUnauthorizedError(error)) {
@@ -101,7 +126,8 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
       socket.emit("lobby:watch", { roomId: room.roomId });
     };
     const handleLobbyRoom: Parameters<typeof socket.on<"lobby:room">>[1] = (payload) => {
-      setRoom(payload.room);
+      const isStillSeated = payload.room.seats.some((seat) => seat.userId === props.user.id);
+      setRoom(isStillSeated ? payload.room : null);
     };
 
     socket.on("connect", handleConnect);
@@ -169,6 +195,23 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
     }
   }
 
+  async function handleLeaveRoom(): Promise<void> {
+    if (!canLeaveRoom) {
+      return;
+    }
+
+    setIsRoomBusy(true);
+    setRoomError(null);
+
+    try {
+      setRoom(await leaveCurrentGameRoom(props.token));
+    } catch (error) {
+      handleRoomError(error);
+    } finally {
+      setIsRoomBusy(false);
+    }
+  }
+
   async function handleStartRoom(): Promise<void> {
     if (!room) {
       return;
@@ -178,7 +221,9 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
     setRoomError(null);
 
     try {
-      setRoom(await startGameRoom(props.token));
+      const startedRoom = await startGameRoom(props.token);
+      setRoom(startedRoom);
+      replaceRoute(APP_ROUTES.gameDemo);
     } catch (error) {
       handleRoomError(error);
     } finally {
@@ -276,7 +321,7 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
               <p className={styles.panelLabel}>当前房间</p>
               <h2>{room?.roomId ?? "暂无房间"}</h2>
             </div>
-            <span className={styles.statusBadge}>{room?.status === "waiting" ? "等待中" : "-"}</span>
+            <span className={styles.statusBadge}>{getLobbyRoomStatusText(room)}</span>
           </div>
           {room ? (
             <>
@@ -305,6 +350,22 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
                   type="button"
                 >
                   开始房间
+                </button>
+                <button
+                  className={styles.secondaryButton}
+                  disabled={!canEnterGame}
+                  onClick={() => replaceRoute(APP_ROUTES.gameDemo)}
+                  type="button"
+                >
+                  进入牌桌
+                </button>
+                <button
+                  className={styles.secondaryButton}
+                  disabled={isRoomBusy || !canLeaveRoom}
+                  onClick={() => void handleLeaveRoom()}
+                  type="button"
+                >
+                  退出房间
                 </button>
               </div>
             </>

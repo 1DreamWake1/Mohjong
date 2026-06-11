@@ -8,6 +8,7 @@ import type {
   GameHistoryItem,
   GameLobbyRoom,
   JoinGameRoomResponse,
+  LeaveGameRoomResponse,
   LoginRequest,
   ListGameHistoryResponse,
   LoginResponse,
@@ -164,6 +165,14 @@ export async function joinGameRoom(token: string, roomId: string): Promise<GameL
       token
     }
   );
+  return response.room;
+}
+
+export async function leaveCurrentGameRoom(token: string): Promise<GameLobbyRoom | null> {
+  const response = await request<LeaveGameRoomResponse>("/rooms/current", {
+    method: "DELETE",
+    token
+  });
   return response.room;
 }
 

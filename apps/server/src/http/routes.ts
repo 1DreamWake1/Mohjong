@@ -6,6 +6,7 @@ import type {
   ListGameHistoryResponse,
   GetCurrentGameRoomResponse,
   JoinGameRoomResponse,
+  LeaveGameRoomResponse,
   LoginRequest,
   LogoutResponse,
   ResetPlayerPasswordRequest,
@@ -17,12 +18,14 @@ import type {
 import type { AuthService } from "../modules/auth/authService.js";
 import type { GameRecordRepository } from "../modules/game/gameRecordRepository.js";
 import type { GameLobbyService } from "../modules/game/gameLobbyService.js";
+import type { GameRoomService } from "../modules/game/gameRoomService.js";
 import type { createUserService } from "../modules/users/userService.js";
 
 type RouteServices = {
   authService: AuthService;
   gameLobbyService: GameLobbyService;
   gameRecordRepository: GameRecordRepository;
+  gameRoomService: GameRoomService;
   userService: ReturnType<typeof createUserService>;
 };
 
@@ -244,6 +247,31 @@ export async function registerRoutes(
     }
   );
 
+  app.delete("/rooms/current", async (request, reply): Promise<LeaveGameRoomResponse | void> => {
+    const user = await requireUser(
+      app,
+      services,
+      request.headers.authorization
+    );
+
+    if (!user) {
+      return reply.code(401).send({ message: "Unauthorized" });
+    }
+    if (user.role !== "player") {
+      return reply.code(403).send({ message: "Forbidden" });
+    }
+
+    const result = services.gameLobbyService.leaveRoom(user);
+    if (!result.ok && result.reason === "not_found") {
+      return reply.code(404).send({ message: "Room not found" });
+    }
+    if (!result.ok) {
+      return reply.code(409).send({ message: "Room is currently playing" });
+    }
+
+    return { room: result.room };
+  });
+
   app.patch(
     "/rooms/current/ready",
     async (request, reply): Promise<SetGameRoomReadyResponse | void> => {
@@ -307,6 +335,7 @@ export async function registerRoutes(
         return reply.code(409).send({ message: "Room has already started" });
       }
 
+      services.gameRoomService.createRoomFromLobby(result.room);
       return { room: result.room };
     }
   );

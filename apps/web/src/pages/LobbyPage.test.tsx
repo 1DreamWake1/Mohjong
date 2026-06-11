@@ -1,11 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { canStartLobbyRoom, getLobbySeatText } from "./LobbyPage.js";
+import {
+  canEnterLobbyGame,
+  canLeaveLobbyRoom,
+  canStartLobbyRoom,
+  getLobbyRoomStatusText,
+  getLobbySeatText
+} from "./LobbyPage.js";
 
 vi.mock("../api/client.js", () => ({
   createGameRoom: vi.fn(),
   getCurrentGameRoom: vi.fn(),
-  joinGameRoom: vi.fn()
+  joinGameRoom: vi.fn(),
+  leaveCurrentGameRoom: vi.fn(),
+  setGameRoomReady: vi.fn(),
+  startGameRoom: vi.fn()
 }));
 
 vi.mock("../stores/authStore.js", () => ({
@@ -82,5 +91,68 @@ describe("LobbyPage", () => {
         1
       )
     ).toBe(false);
+  });
+
+  it("allows entering the table after a lobby room has started", () => {
+    const room = {
+      createdAt: "2026-06-11T00:00:00.000Z",
+      ownerUserId: 1,
+      roomId: "room-0001",
+      seats: [
+        { isBot: false, isReady: true, seatIndex: 0, userId: 1, username: "player1" },
+        { isBot: true, isReady: true, seatIndex: 1, username: "玩家Bot1" },
+        { isBot: true, isReady: true, seatIndex: 2, username: "玩家Bot2" },
+        { isBot: true, isReady: true, seatIndex: 3, username: "玩家Bot3" }
+      ],
+      status: "playing" as const,
+      updatedAt: "2026-06-11T00:00:00.000Z"
+    };
+
+    expect(canEnterLobbyGame(room)).toBe(true);
+    expect(canEnterLobbyGame({ ...room, status: "waiting" })).toBe(false);
+    expect(canEnterLobbyGame({ ...room, status: "ended" })).toBe(false);
+    expect(canEnterLobbyGame(null)).toBe(false);
+  });
+
+  it("allows leaving waiting and ended lobby rooms", () => {
+    const room = {
+      createdAt: "2026-06-11T00:00:00.000Z",
+      ownerUserId: 1,
+      roomId: "room-0001",
+      seats: [
+        { isBot: false, isReady: true, seatIndex: 0, userId: 1, username: "player1" },
+        { isBot: false, isReady: false, seatIndex: 1 },
+        { isBot: false, isReady: false, seatIndex: 2 },
+        { isBot: false, isReady: false, seatIndex: 3 }
+      ],
+      status: "waiting" as const,
+      updatedAt: "2026-06-11T00:00:00.000Z"
+    };
+
+    expect(canLeaveLobbyRoom(room)).toBe(true);
+    expect(canLeaveLobbyRoom({ ...room, status: "playing" })).toBe(false);
+    expect(canLeaveLobbyRoom({ ...room, status: "ended" })).toBe(true);
+    expect(canLeaveLobbyRoom(null)).toBe(false);
+  });
+
+  it("formats lobby room status text", () => {
+    const room = {
+      createdAt: "2026-06-11T00:00:00.000Z",
+      ownerUserId: 1,
+      roomId: "room-0001",
+      seats: [
+        { isBot: false, isReady: true, seatIndex: 0, userId: 1, username: "player1" },
+        { isBot: false, isReady: false, seatIndex: 1 },
+        { isBot: false, isReady: false, seatIndex: 2 },
+        { isBot: false, isReady: false, seatIndex: 3 }
+      ],
+      status: "waiting" as const,
+      updatedAt: "2026-06-11T00:00:00.000Z"
+    };
+
+    expect(getLobbyRoomStatusText(room)).toBe("等待中");
+    expect(getLobbyRoomStatusText({ ...room, status: "playing" })).toBe("进行中");
+    expect(getLobbyRoomStatusText({ ...room, status: "ended" })).toBe("已结束");
+    expect(getLobbyRoomStatusText(null)).toBe("-");
   });
 });

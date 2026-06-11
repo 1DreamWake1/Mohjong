@@ -57,6 +57,7 @@ export async function createApp(options: CreateAppOptions = {}) {
     authService,
     gameLobbyService,
     gameRecordRepository,
+    gameRoomService,
     userService
   });
   registerGameSocketServer({

@@ -8,6 +8,10 @@ export type JoinGameLobbyRoomResult =
   | { ok: true; room: GameLobbyRoom }
   | { ok: false; reason: "not_found" | "full" | "already_in_other_room" };
 
+export type LeaveGameLobbyRoomResult =
+  | { ok: true; room: GameLobbyRoom | null }
+  | { ok: false; reason: "not_found" | "playing" };
+
 export type SetGameLobbyRoomReadyResult =
   | { ok: true; room: GameLobbyRoom }
   | { ok: false; reason: "not_found" | "already_started" };
@@ -15,6 +19,10 @@ export type SetGameLobbyRoomReadyResult =
 export type StartGameLobbyRoomResult =
   | { ok: true; room: GameLobbyRoom }
   | { ok: false; reason: "not_found" | "forbidden" | "not_ready" | "already_started" };
+
+export type FinishGameLobbyRoomResult =
+  | { ok: true; room: GameLobbyRoom }
+  | { ok: false; reason: "not_found" };
 
 let nextLobbyRoomNumber = 1;
 
@@ -68,6 +76,17 @@ function fillEmptySeatsWithBots(room: MutableLobbyRoom): void {
   }
 }
 
+function clearSeat(seat: GameLobbySeat): void {
+  delete seat.userId;
+  delete seat.username;
+  seat.isBot = false;
+  seat.isReady = false;
+}
+
+function findNextHumanSeat(room: MutableLobbyRoom): GameLobbySeat | undefined {
+  return room.seats.find((seat) => seat.userId !== undefined && !seat.isBot);
+}
+
 export function createGameLobbyService() {
   const roomsById = new Map<string, MutableLobbyRoom>();
   const activeRoomIdByUserId = new Map<number, string>();
@@ -100,6 +119,9 @@ export function createGameLobbyService() {
     if (activeRoom && activeRoom.status === "waiting") {
       return activeRoom;
     }
+    if (activeRoom?.status === "ended") {
+      clearEndedRoomMembership(user.id);
+    }
 
     const now = new Date().toISOString();
     const room: MutableLobbyRoom = {
@@ -117,6 +139,38 @@ export function createGameLobbyService() {
     return cloneRoom(room);
   }
 
+  function removeUserFromRoom(userId: number, room: MutableLobbyRoom): GameLobbyRoom | null {
+    const seat = findUserSeat(room, userId);
+    if (!seat) {
+      activeRoomIdByUserId.delete(userId);
+      return cloneRoom(room);
+    }
+
+    activeRoomIdByUserId.delete(userId);
+    clearSeat(seat);
+
+    const nextOwnerSeat = findNextHumanSeat(room);
+    if (!nextOwnerSeat?.userId) {
+      roomsById.delete(room.roomId);
+      return null;
+    }
+
+    if (room.ownerUserId === userId) {
+      room.ownerUserId = nextOwnerSeat.userId;
+    }
+    room.updatedAt = new Date().toISOString();
+    notifyRoomUpdated(room);
+    return cloneRoom(room);
+  }
+
+  function clearEndedRoomMembership(userId: number): void {
+    const activeRoomId = activeRoomIdByUserId.get(userId);
+    const activeRoom = activeRoomId ? roomsById.get(activeRoomId) : undefined;
+    if (activeRoom?.status === "ended") {
+      removeUserFromRoom(userId, activeRoom);
+    }
+  }
+
   function joinRoom(user: AuthUser, roomId: string): JoinGameLobbyRoomResult {
     const room = roomsById.get(roomId);
     if (!room || room.status !== "waiting") {
@@ -125,7 +179,12 @@ export function createGameLobbyService() {
 
     const activeRoomId = activeRoomIdByUserId.get(user.id);
     if (activeRoomId && activeRoomId !== roomId) {
-      return { ok: false, reason: "already_in_other_room" };
+      const activeRoom = roomsById.get(activeRoomId);
+      if (activeRoom?.status === "ended") {
+        removeUserFromRoom(user.id, activeRoom);
+      } else {
+        return { ok: false, reason: "already_in_other_room" };
+      }
     }
 
     const existingSeat = findUserSeat(room, user.id);
@@ -145,6 +204,20 @@ export function createGameLobbyService() {
     activeRoomIdByUserId.set(user.id, room.roomId);
     notifyRoomUpdated(room);
     return { ok: true, room: cloneRoom(room) };
+  }
+
+  function leaveRoom(user: AuthUser): LeaveGameLobbyRoomResult {
+    const roomId = activeRoomIdByUserId.get(user.id);
+    const room = roomId ? roomsById.get(roomId) : undefined;
+    const seat = room ? findUserSeat(room, user.id) : undefined;
+    if (!room || !seat) {
+      return { ok: false, reason: "not_found" };
+    }
+    if (room.status === "playing") {
+      return { ok: false, reason: "playing" };
+    }
+
+    return { ok: true, room: removeUserFromRoom(user.id, room) };
   }
 
   function setReady(
@@ -190,6 +263,21 @@ export function createGameLobbyService() {
     return { ok: true, room: cloneRoom(room) };
   }
 
+  function finishRoom(roomId: string): FinishGameLobbyRoomResult {
+    const room = roomsById.get(roomId);
+    if (!room) {
+      return { ok: false, reason: "not_found" };
+    }
+
+    if (room.status !== "ended") {
+      room.status = "ended";
+      room.updatedAt = new Date().toISOString();
+      notifyRoomUpdated(room);
+    }
+
+    return { ok: true, room: cloneRoom(room) };
+  }
+
   function subscribeRoomUpdates(listener: GameLobbyRoomListener): () => void {
     roomListeners.add(listener);
     return () => {
@@ -198,9 +286,12 @@ export function createGameLobbyService() {
   }
 
   return {
+    clearEndedRoomMembership,
     createRoom,
+    finishRoom,
     getCurrentRoom,
     joinRoom,
+    leaveRoom,
     setReady,
     startRoom,
     subscribeRoomUpdates

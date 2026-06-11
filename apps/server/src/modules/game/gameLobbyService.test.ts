@@ -72,6 +72,135 @@ describe("gameLobbyService", () => {
     expect(service.getCurrentRoom(player)?.roomId).toBe(room.roomId);
   });
 
+  it("allows players to leave waiting rooms and clears their seat", () => {
+    const service = createGameLobbyService();
+    const owner = createPlayer(1, "player1");
+    const joiner = createPlayer(2, "player2");
+    const room = service.createRoom(owner);
+    service.joinRoom(joiner, room.roomId);
+
+    const leaveResult = service.leaveRoom(joiner);
+
+    expect(leaveResult).toMatchObject({
+      ok: true,
+      room: {
+        ownerUserId: owner.id
+      }
+    });
+    if (!leaveResult.ok || !leaveResult.room) {
+      throw new Error("Expected leave result to include a room");
+    }
+    const clearedSeat = leaveResult.room.seats[1];
+    expect(clearedSeat).toMatchObject({
+      isBot: false,
+      isReady: false,
+      seatIndex: 1
+    });
+    expect(clearedSeat?.userId).toBeUndefined();
+    expect(clearedSeat?.username).toBeUndefined();
+    expect(service.getCurrentRoom(joiner)).toBeNull();
+  });
+
+  it("transfers ownership when the owner leaves a waiting room", () => {
+    const service = createGameLobbyService();
+    const owner = createPlayer(1, "player1");
+    const joiner = createPlayer(2, "player2");
+    const room = service.createRoom(owner);
+    service.joinRoom(joiner, room.roomId);
+
+    const leaveResult = service.leaveRoom(owner);
+
+    expect(leaveResult).toMatchObject({
+      ok: true,
+      room: {
+        ownerUserId: joiner.id
+      }
+    });
+    if (!leaveResult.ok || !leaveResult.room) {
+      throw new Error("Expected leave result to include a room");
+    }
+    expect(leaveResult.room.seats[0]?.userId).toBeUndefined();
+    expect(leaveResult.room.seats[1]).toMatchObject({
+      seatIndex: 1,
+      userId: joiner.id
+    });
+  });
+
+  it("removes empty waiting rooms after the last player leaves", () => {
+    const service = createGameLobbyService();
+    const owner = createPlayer(1, "player1");
+    service.createRoom(owner);
+
+    expect(service.leaveRoom(owner)).toEqual({ ok: true, room: null });
+    expect(service.getCurrentRoom(owner)).toBeNull();
+  });
+
+  it("allows players to leave ended rooms", () => {
+    const service = createGameLobbyService();
+    const owner = createPlayer(1, "player1");
+    const room = service.createRoom(owner);
+    service.startRoom(owner);
+    service.finishRoom(room.roomId);
+
+    expect(service.leaveRoom(owner)).toEqual({ ok: true, room: null });
+    expect(service.getCurrentRoom(owner)).toBeNull();
+  });
+
+  it("allows players in ended rooms to join another waiting room", () => {
+    const service = createGameLobbyService();
+    const player = createPlayer(1, "player1");
+    const endedRoom = service.createRoom(player);
+    service.startRoom(player);
+    service.finishRoom(endedRoom.roomId);
+    const nextRoom = service.createRoom(createPlayer(2, "player2"));
+
+    expect(service.joinRoom(player, nextRoom.roomId)).toMatchObject({
+      ok: true,
+      room: {
+        roomId: nextRoom.roomId,
+        seats: expect.arrayContaining([
+          expect.objectContaining({ userId: player.id, username: player.username })
+        ])
+      }
+    });
+    expect(service.getCurrentRoom(player)?.roomId).toBe(nextRoom.roomId);
+  });
+
+  it("clears ended room membership when creating a new room", () => {
+    const service = createGameLobbyService();
+    const player = createPlayer(1, "player1");
+    const endedRoom = service.createRoom(player);
+    service.startRoom(player);
+    service.finishRoom(endedRoom.roomId);
+
+    const nextRoom = service.createRoom(player);
+
+    expect(nextRoom.roomId).not.toBe(endedRoom.roomId);
+    expect(nextRoom.status).toBe("waiting");
+    expect(service.getCurrentRoom(player)?.roomId).toBe(nextRoom.roomId);
+  });
+
+  it("keeps players in active rooms from joining another room", () => {
+    const service = createGameLobbyService();
+    const player = createPlayer(1, "player1");
+    service.createRoom(player);
+    const otherRoom = service.createRoom(createPlayer(2, "player2"));
+
+    expect(service.joinRoom(player, otherRoom.roomId)).toEqual({
+      ok: false,
+      reason: "already_in_other_room"
+    });
+  });
+
+  it("rejects leaving rooms while a game is playing", () => {
+    const service = createGameLobbyService();
+    const owner = createPlayer(1, "player1");
+    service.createRoom(owner);
+    service.startRoom(owner);
+
+    expect(service.leaveRoom(owner)).toEqual({ ok: false, reason: "playing" });
+  });
+
   it("notifies subscribers when rooms change", () => {
     const service = createGameLobbyService();
     const updates: string[] = [];
@@ -125,5 +254,32 @@ describe("gameLobbyService", () => {
     service.joinRoom(joiner, room.roomId);
 
     expect(service.startRoom(joiner)).toEqual({ ok: false, reason: "forbidden" });
+  });
+
+  it("marks playing rooms as ended and notifies subscribers", () => {
+    const service = createGameLobbyService();
+    const updates: string[] = [];
+    service.subscribeRoomUpdates((room) => {
+      updates.push(`${room.roomId}:${room.status}`);
+    });
+    const owner = createPlayer(1, "player1");
+    const room = service.createRoom(owner);
+    const startResult = service.startRoom(owner);
+    if (!startResult.ok) {
+      throw new Error("Expected room to start");
+    }
+
+    expect(service.finishRoom(room.roomId)).toMatchObject({
+      ok: true,
+      room: {
+        roomId: room.roomId,
+        status: "ended"
+      }
+    });
+    expect(service.getCurrentRoom(owner)).toMatchObject({
+      roomId: room.roomId,
+      status: "ended"
+    });
+    expect(updates).toContain(`${room.roomId}:ended`);
   });
 });

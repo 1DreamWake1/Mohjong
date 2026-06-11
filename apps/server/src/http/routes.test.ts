@@ -106,14 +106,15 @@ async function createTestApp() {
     role: "player"
   });
 
+  const gameRoomService = createGameRoomService({ gameRecordRepository });
   const app = await createApp({
     authTokenSecret: "test-secret",
     gameRecordRepository,
-    gameRoomService: createGameRoomService({ gameRecordRepository }),
+    gameRoomService,
     userRepository
   });
 
-  return { app, gameRecordRepository, userRepository };
+  return { app, gameRecordRepository, gameRoomService, userRepository };
 }
 
 describe("routes", () => {
@@ -299,7 +300,7 @@ describe("routes", () => {
   });
 
   it("allows players to create, read, and join lobby rooms", async () => {
-    const { app } = await createTestApp();
+    const { app, gameRoomService } = await createTestApp();
 
     const ownerLoginResponse = await app.inject({
       method: "POST",
@@ -379,6 +380,13 @@ describe("routes", () => {
     });
 
     expect(notReadyResponse.statusCode).toBe(200);
+    expect(gameRoomService.getRoomForUser({
+      createdAt: "2026-06-01T00:00:00.000Z",
+      id: 2,
+      role: "player",
+      updatedAt: "2026-06-01T00:00:00.000Z",
+      username: "player1"
+    }, roomId)).toBeNull();
 
     const blockedStartResponse = await app.inject({
       headers: {
@@ -427,6 +435,93 @@ describe("routes", () => {
         status: "playing"
       }
     });
+    expect(gameRoomService.getRoomForUser({
+      createdAt: "2026-06-01T00:00:00.000Z",
+      id: 2,
+      role: "player",
+      updatedAt: "2026-06-01T00:00:00.000Z",
+      username: "player1"
+    }, roomId)).toMatchObject({
+      id: roomId
+    });
+    expect(gameRoomService.getRoomForUser({
+      createdAt: "2026-06-01T00:00:00.000Z",
+      id: 3,
+      role: "player",
+      updatedAt: "2026-06-01T00:00:00.000Z",
+      username: "player2"
+    }, roomId)).toMatchObject({
+      id: roomId
+    });
+
+    await app.close();
+  });
+
+  it("allows players to leave waiting lobby rooms", async () => {
+    const { app } = await createTestApp();
+
+    const ownerLoginResponse = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: {
+        username: "player1",
+        password: "player123"
+      }
+    });
+    const ownerToken = ownerLoginResponse.json<{ token: string }>().token;
+    const joinerLoginResponse = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: {
+        username: "player2",
+        password: "player123"
+      }
+    });
+    const joinerToken = joinerLoginResponse.json<{ token: string }>().token;
+
+    const createResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${ownerToken}`
+      },
+      method: "POST",
+      url: "/rooms"
+    });
+    const roomId = createResponse.json<{ room: { roomId: string } }>().room.roomId;
+    await app.inject({
+      headers: {
+        authorization: `Bearer ${joinerToken}`
+      },
+      method: "POST",
+      url: `/rooms/${roomId}/join`
+    });
+
+    const leaveResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${joinerToken}`
+      },
+      method: "DELETE",
+      url: "/rooms/current"
+    });
+
+    expect(leaveResponse.statusCode).toBe(200);
+    const leaveBody = leaveResponse.json<{ room: { ownerUserId: number; roomId: string; seats: Array<{ seatIndex: number; userId?: number }> } }>();
+    expect(leaveBody).toMatchObject({
+      room: {
+        ownerUserId: 2,
+        roomId
+      }
+    });
+    expect(leaveBody.room.seats[1]).toMatchObject({ seatIndex: 1 });
+    expect(leaveBody.room.seats[1]?.userId).toBeUndefined();
+
+    const currentResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${joinerToken}`
+      },
+      method: "GET",
+      url: "/rooms/current"
+    });
+    expect(currentResponse.json()).toEqual({ room: null });
 
     await app.close();
   });

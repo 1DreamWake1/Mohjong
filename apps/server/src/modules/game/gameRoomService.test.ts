@@ -3,7 +3,7 @@ import { createTile, getLegalActions, type TileCode } from "mahjong-core";
 
 import { createGameRoomService, describeGameEnd } from "./gameRoomService.js";
 import { createMemoryGameRecordRepository } from "./gameRecordRepository.js";
-import type { AuthUser } from "@mahjong/shared";
+import type { AuthUser, GameLobbyRoom } from "@mahjong/shared";
 
 const player: AuthUser = {
   createdAt: "2026-06-01T00:00:00.000Z",
@@ -11,6 +11,12 @@ const player: AuthUser = {
   role: "player",
   updatedAt: "2026-06-01T00:00:00.000Z",
   username: "player-a"
+};
+
+const secondPlayer: AuthUser = {
+  ...player,
+  id: 11,
+  username: "player-b"
 };
 
 describe("gameRoomService", () => {
@@ -148,6 +154,88 @@ describe("gameRoomService", () => {
     expect(nextRoom.id).not.toBe(endedRoom.id);
     expect(nextRoom.state.phase).toBe("playing");
     expect(service.getRoomForUser(player)?.id).toBe(nextRoom.id);
+  });
+
+  it("creates a playable game room from a lobby room with multiple human seats", async () => {
+    const gameRecordRepository = createMemoryGameRecordRepository();
+    const service = createGameRoomService({ gameRecordRepository });
+    const lobbyRoom: GameLobbyRoom = {
+      createdAt: "2026-06-11T10:00:00.000Z",
+      ownerUserId: player.id,
+      roomId: "room-0100",
+      seats: [
+        {
+          isBot: false,
+          isReady: true,
+          seatIndex: 0,
+          userId: player.id,
+          username: player.username
+        },
+        {
+          isBot: false,
+          isReady: true,
+          seatIndex: 1,
+          userId: secondPlayer.id,
+          username: secondPlayer.username
+        },
+        {
+          isBot: true,
+          isReady: true,
+          seatIndex: 2,
+          username: "玩家Bot2"
+        },
+        {
+          isBot: true,
+          isReady: true,
+          seatIndex: 3,
+          username: "玩家Bot3"
+        }
+      ],
+      status: "playing",
+      updatedAt: "2026-06-11T10:00:00.000Z"
+    };
+
+    const room = service.createRoomFromLobby(lobbyRoom);
+    await service.waitForPersistentWrites(room.id);
+
+    expect(service.getRoomForUser(player, lobbyRoom.roomId)).toBe(room);
+    expect(service.getRoomForUser(secondPlayer, lobbyRoom.roomId)).toBe(room);
+    expect(service.getPlayerView(room, player)).toMatchObject({
+      roomId: lobbyRoom.roomId,
+      seatIndex: 0,
+      username: player.username
+    });
+    expect(service.getPlayerView(room, secondPlayer)).toMatchObject({
+      roomId: lobbyRoom.roomId,
+      seatIndex: 1,
+      username: secondPlayer.username
+    });
+    expect(gameRecordRepository.getRecord(lobbyRoom.roomId)).toMatchObject({
+      humanSeatIndex: 0,
+      playerUserId: player.id,
+      roomId: lobbyRoom.roomId,
+      status: "playing"
+    });
+  });
+
+  it("prevents non-members from reading lobby-created game rooms", () => {
+    const service = createGameRoomService();
+    const room = service.createRoomFromLobby({
+      createdAt: "2026-06-11T10:00:00.000Z",
+      ownerUserId: player.id,
+      roomId: "room-0101",
+      seats: [
+        { isBot: false, isReady: true, seatIndex: 0, userId: player.id, username: player.username },
+        { isBot: true, isReady: true, seatIndex: 1, username: "玩家Bot1" },
+        { isBot: true, isReady: true, seatIndex: 2, username: "玩家Bot2" },
+        { isBot: true, isReady: true, seatIndex: 3, username: "玩家Bot3" }
+      ],
+      status: "playing",
+      updatedAt: "2026-06-11T10:00:00.000Z"
+    });
+
+    expect(room.id).toBe("room-0101");
+    expect(service.getRoomForUser(secondPlayer, room.id)).toBeNull();
   });
 
   it("includes draw result details in the player view", () => {

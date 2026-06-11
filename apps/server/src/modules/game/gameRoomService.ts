@@ -1,4 +1,11 @@
-import type { Action, AuthUser, GameEventMessage, GameHistoryEvent, PlayerView } from "@mahjong/shared";
+import type {
+  Action,
+  AuthUser,
+  GameEventMessage,
+  GameHistoryEvent,
+  GameLobbyRoom,
+  PlayerView
+} from "@mahjong/shared";
 import {
   applyAction,
   chooseBasicBotAction,
@@ -17,6 +24,7 @@ import { createRoomPlayerView } from "./gameStateMapper.js";
 type GameRoom = {
   events: GameHistoryEvent[];
   humanSeatIndex: number;
+  humanSeatIndexByUserId: Map<number, number>;
   id: string;
   playerUserId: number;
   state: MahjongGameState;
@@ -35,6 +43,14 @@ function createRoomId(): string {
   const roomNumber = nextRoomNumber;
   nextRoomNumber += 1;
   return `quick-${roomNumber.toString().padStart(4, "0")}`;
+}
+
+function getHumanSeatIndex(room: GameRoom, user?: AuthUser): number {
+  if (!user) {
+    return room.humanSeatIndex;
+  }
+
+  return room.humanSeatIndexByUserId.get(user.id) ?? room.humanSeatIndex;
 }
 
 function createEvent(text: string): GameEventMessage {
@@ -177,6 +193,7 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     const room: GameRoom = {
       events: [],
       humanSeatIndex: 0,
+      humanSeatIndexByUserId: new Map([[user.id, 0]]),
       id: createRoomId(),
       playerUserId: user.id,
       state: createInitialGame({
@@ -204,6 +221,62 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     return room;
   }
 
+  function createRoomFromLobby(lobbyRoom: GameLobbyRoom): GameRoom {
+    const existingRoom = roomsById.get(lobbyRoom.roomId);
+    if (existingRoom) {
+      return existingRoom;
+    }
+
+    const humanSeats = lobbyRoom.seats.filter(
+      (seat) => seat.userId !== undefined && !seat.isBot
+    );
+    const primaryHumanSeat = humanSeats.find((seat) => seat.userId === lobbyRoom.ownerUserId) ?? humanSeats[0];
+    if (!primaryHumanSeat?.userId) {
+      throw new Error("Cannot create a game room without a human player");
+    }
+
+    const humanSeatIndexByUserId = new Map<number, number>();
+    for (const seat of humanSeats) {
+      if (seat.userId !== undefined) {
+        humanSeatIndexByUserId.set(seat.userId, seat.seatIndex);
+      }
+    }
+
+    const room: GameRoom = {
+      events: [],
+      humanSeatIndex: primaryHumanSeat.seatIndex,
+      humanSeatIndexByUserId,
+      id: lobbyRoom.roomId,
+      playerUserId: primaryHumanSeat.userId,
+      state: createInitialGame({
+        players: lobbyRoom.seats.map((seat) => ({
+          isBot: seat.isBot,
+          username: seat.username ?? (seat.isBot ? `玩家Bot${seat.seatIndex}` : `${seat.seatIndex + 1}号位`)
+        })),
+        rules: simpleRuleConfig
+      })
+    };
+
+    roomsById.set(room.id, room);
+    for (const userId of humanSeatIndexByUserId.keys()) {
+      activeRoomIdByUserId.set(userId, room.id);
+    }
+    enqueuePersistentWrite(room.id, () =>
+      gameRecordRepository.createRecord({
+        humanSeatIndex: room.humanSeatIndex,
+        playerUserId: room.playerUserId,
+        roomId: room.id,
+        ruleName: room.state.rules.name
+      })
+    );
+    recordRoomEvent(room, `${primaryHumanSeat.username ?? "房主"} 开始多人房间`);
+    return room;
+  }
+
+  function getRoom(roomId: string): GameRoom | null {
+    return roomsById.get(roomId) ?? null;
+  }
+
   function getRoomForUser(user: AuthUser, roomId?: string): GameRoom | null {
     const targetRoomId = roomId ?? activeRoomIdByUserId.get(user.id);
     if (!targetRoomId) {
@@ -211,7 +284,7 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     }
 
     const room = roomsById.get(targetRoomId);
-    return room?.playerUserId === user.id ? room : null;
+    return room?.humanSeatIndexByUserId.has(user.id) ? room : null;
   }
 
   function getOrCreateQuickRoom(user: AuthUser): GameRoom {
@@ -223,11 +296,11 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     return activeRoom;
   }
 
-  function getPlayerView(room: GameRoom): PlayerView {
+  function getPlayerView(room: GameRoom, user?: AuthUser): PlayerView {
     return createRoomPlayerView({
       events: room.events,
       roomId: room.id,
-      seatIndex: room.humanSeatIndex,
+      seatIndex: getHumanSeatIndex(room, user),
       state: room.state
     });
   }
@@ -238,13 +311,14 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
       return null;
     }
 
-    const legalActions = getLegalActions(room.state, room.humanSeatIndex);
+    const seatIndex = getHumanSeatIndex(room, user);
+    const legalActions = getLegalActions(room.state, seatIndex);
     if (!isLegalActionRequest(legalActions, action)) {
       return { error: "Illegal action", room };
     }
 
-    const eventText = describeAction(room.state, room.humanSeatIndex, action);
-    const result = applyAction(room.state, room.humanSeatIndex, action);
+    const eventText = describeAction(room.state, seatIndex, action);
+    const result = applyAction(room.state, seatIndex, action);
     if (!result.ok) {
       return { error: result.error, room };
     }
@@ -260,18 +334,22 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
   }
 
   function applyHumanTimeout(room: GameRoom): boolean {
-    if (room.state.phase !== "playing" || room.state.currentTurn !== room.humanSeatIndex) {
+    if (
+      room.state.phase !== "playing" ||
+      ![...room.humanSeatIndexByUserId.values()].includes(room.state.currentTurn)
+    ) {
       return false;
     }
 
-    const player = room.state.players[room.humanSeatIndex];
+    const seatIndex = room.state.currentTurn;
+    const player = room.state.players[seatIndex];
     if (!player || player.isBot) {
       return false;
     }
 
-    const action = chooseBasicBotAction(room.state, room.humanSeatIndex);
-    const eventText = `${player.username} 超时托管，${describeAction(room.state, room.humanSeatIndex, action)}`;
-    const result = applyAction(room.state, room.humanSeatIndex, action);
+    const action = chooseBasicBotAction(room.state, seatIndex);
+    const eventText = `${player.username} 超时托管，${describeAction(room.state, seatIndex, action)}`;
+    const result = applyAction(room.state, seatIndex, action);
     if (!result.ok) {
       recordRoomEvent(room, `${player.username} 超时托管失败：${result.error}`);
       return false;
@@ -328,8 +406,10 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     applyHumanAction,
     applyHumanTimeout,
     applyNextBotAction,
+    createRoomFromLobby,
     getOrCreateQuickRoom,
     getPlayerView,
+    getRoom,
     getRoomForUser,
     waitForPersistentWrites
   };
