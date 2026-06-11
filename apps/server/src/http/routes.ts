@@ -1,16 +1,20 @@
 import type { FastifyInstance } from "fastify";
 import type {
   CreatePlayerRequest,
+  GetGameHistoryResponse,
+  ListGameHistoryResponse,
   LoginRequest,
   LogoutResponse,
   ResetPlayerPasswordRequest
 } from "@mahjong/shared";
 
 import type { AuthService } from "../modules/auth/authService.js";
+import type { GameRecordRepository } from "../modules/game/gameRecordRepository.js";
 import type { createUserService } from "../modules/users/userService.js";
 
 type RouteServices = {
   authService: AuthService;
+  gameRecordRepository: GameRecordRepository;
   userService: ReturnType<typeof createUserService>;
 };
 
@@ -72,6 +76,14 @@ function parseIdParam(value: unknown): number | null {
 
   const id = Number(value.id);
   return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function parseRoomIdParam(value: unknown): string | null {
+  if (!isRecord(value) || typeof value.roomId !== "string" || value.roomId.length === 0) {
+    return null;
+  }
+
+  return value.roomId;
 }
 
 function readBearerToken(authorizationHeader: unknown): string | null {
@@ -145,6 +157,55 @@ export async function registerRoutes(
   app.post("/auth/logout", async (): Promise<LogoutResponse> => ({
     ok: true
   }));
+
+  app.get("/games/history", async (request, reply): Promise<ListGameHistoryResponse | void> => {
+    const user = await requireUser(
+      app,
+      services,
+      request.headers.authorization
+    );
+
+    if (!user) {
+      return reply.code(401).send({ message: "Unauthorized" });
+    }
+    if (user.role !== "player") {
+      return reply.code(403).send({ message: "Forbidden" });
+    }
+
+    return {
+      records: await services.gameRecordRepository.listRecordsForPlayer(user.id)
+    };
+  });
+
+  app.get(
+    "/games/history/:roomId",
+    async (request, reply): Promise<GetGameHistoryResponse | void> => {
+      const user = await requireUser(
+        app,
+        services,
+        request.headers.authorization
+      );
+
+      if (!user) {
+        return reply.code(401).send({ message: "Unauthorized" });
+      }
+      if (user.role !== "player") {
+        return reply.code(403).send({ message: "Forbidden" });
+      }
+
+      const roomId = parseRoomIdParam(request.params);
+      if (!roomId) {
+        return reply.code(400).send({ message: "Invalid room id" });
+      }
+
+      const record = await services.gameRecordRepository.getRecordForPlayer(user.id, roomId);
+      if (!record) {
+        return reply.code(404).send({ message: "Game record not found" });
+      }
+
+      return { record };
+    }
+  );
 
   app.get("/admin/players", async (request, reply) => {
     const user = await requireUser(

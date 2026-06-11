@@ -4,7 +4,10 @@ import Fastify from "fastify";
 import { readEnv } from "./config/env.js";
 import { registerRoutes } from "./http/routes.js";
 import { createAuthService } from "./modules/auth/authService.js";
-import { createPrismaGameRecordRepository } from "./modules/game/gameRecordRepository.js";
+import {
+  createPrismaGameRecordRepository,
+  type GameRecordRepository
+} from "./modules/game/gameRecordRepository.js";
 import {
   createGameRoomService,
   type GameRoomService
@@ -16,6 +19,7 @@ import { createUserService } from "./modules/users/userService.js";
 
 export type CreateAppOptions = {
   authTokenSecret?: string;
+  gameRecordRepository?: GameRecordRepository;
   gameRoomService?: GameRoomService;
   userRepository?: UserRepository;
 };
@@ -28,10 +32,12 @@ export async function createApp(options: CreateAppOptions = {}) {
     options.authTokenSecret ?? env.authTokenSecret
   );
   const userService = createUserService(userRepository);
+  const gameRecordRepository =
+    options.gameRecordRepository ?? createPrismaGameRecordRepository();
   const gameRoomService =
     options.gameRoomService ??
     createGameRoomService({
-      gameRecordRepository: createPrismaGameRecordRepository()
+      gameRecordRepository
     });
 
   const app = Fastify({
@@ -43,6 +49,7 @@ export async function createApp(options: CreateAppOptions = {}) {
   });
   await registerRoutes(app, {
     authService,
+    gameRecordRepository,
     userService
   });
   registerGameSocketServer({

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 
 import { AdminUsersPage } from "../pages/AdminUsersPage.js";
 import { GamePage } from "../pages/GamePage.js";
+import { HistoryPage } from "../pages/HistoryPage.js";
 import { LobbyPage } from "../pages/LobbyPage.js";
 import { LoginPage } from "../pages/LoginPage.js";
 import { useAuthStore } from "../stores/authStore.js";
@@ -53,6 +54,10 @@ export function App(): JSX.Element {
 
   if (currentPath === APP_ROUTES.gameDemo) {
     return <GamePage token={token} user={user} />;
+  }
+
+  if (currentPath === APP_ROUTES.gameHistory) {
+    return <HistoryPage token={token} user={user} />;
   }
 
   return <LobbyPage token={token} user={user} />;

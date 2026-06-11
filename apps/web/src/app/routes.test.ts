@@ -66,16 +66,25 @@ describe("app routes", () => {
     );
   });
 
+  it("keeps players on game history", () => {
+    expect(
+      getRouteForAuth({ role: "player", status: "authenticated" }, APP_ROUTES.gameHistory)
+    ).toBe(APP_ROUTES.gameHistory);
+  });
+
   it("prevents players from entering player account management", () => {
     expect(
       getRouteForAuth({ role: "player", status: "authenticated" }, APP_ROUTES.adminUsers)
     ).toBe(APP_ROUTES.lobby);
   });
 
-  it("prevents administrators from entering the demo game table", () => {
+  it("prevents administrators from entering player game pages", () => {
     expect(getRouteForAuth({ role: "admin", status: "authenticated" }, APP_ROUTES.gameDemo)).toBe(
       APP_ROUTES.adminUsers
     );
+    expect(
+      getRouteForAuth({ role: "admin", status: "authenticated" }, APP_ROUTES.gameHistory)
+    ).toBe(APP_ROUTES.adminUsers);
   });
 
   it("routes unknown paths to the role default page", () => {

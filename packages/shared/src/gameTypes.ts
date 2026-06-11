@@ -53,6 +53,34 @@ export type GameResultInfo = {
   winningTile?: TileInfo;
 };
 
+export type GameRecordStatus = "playing" | "ended";
+
+export type GameHistoryItem = {
+  roomId: string;
+  ruleName: string;
+  status: GameRecordStatus;
+  startedAt: string;
+  endedAt?: string;
+  endReason?: "hu" | "draw";
+  winnerSeatIndex?: number;
+  winType?: WinType;
+  winningTile?: string;
+  fanTotal?: number;
+  totalPoints?: number;
+};
+
+export type GameHistoryDetail = GameHistoryItem & {
+  events: GameEventMessage[];
+};
+
+export type ListGameHistoryResponse = {
+  records: GameHistoryItem[];
+};
+
+export type GetGameHistoryResponse = {
+  record: GameHistoryDetail;
+};
+
 export type OtherPlayerView = {
   seatIndex: number;
   username: string;

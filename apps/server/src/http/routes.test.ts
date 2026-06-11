@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { createApp } from "../app.js";
 import { hashPassword, verifyPassword } from "../modules/auth/password.js";
+import { createMemoryGameRecordRepository } from "../modules/game/gameRecordRepository.js";
 import { createGameRoomService } from "../modules/game/gameRoomService.js";
 import type {
   CreateUserInput,
@@ -88,6 +89,7 @@ class MemoryUserRepository implements UserRepository {
 
 async function createTestApp() {
   const userRepository = new MemoryUserRepository();
+  const gameRecordRepository = createMemoryGameRecordRepository();
   await userRepository.create({
     username: "admin",
     passwordHash: await hashPassword("admin123"),
@@ -101,11 +103,12 @@ async function createTestApp() {
 
   const app = await createApp({
     authTokenSecret: "test-secret",
-    gameRoomService: createGameRoomService(),
+    gameRecordRepository,
+    gameRoomService: createGameRoomService({ gameRecordRepository }),
     userRepository
   });
 
-  return { app, userRepository };
+  return { app, gameRecordRepository, userRepository };
 }
 
 describe("routes", () => {
@@ -173,6 +176,119 @@ describe("routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ ok: true });
+
+    await app.close();
+  });
+
+  it("lists and reads the current player's game history", async () => {
+    const { app, gameRecordRepository } = await createTestApp();
+
+    const loginResponse = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: {
+        username: "player1",
+        password: "player123"
+      }
+    });
+    const token = loginResponse.json<{ token: string }>().token;
+
+    await gameRecordRepository.createRecord({
+      humanSeatIndex: 0,
+      playerUserId: 2,
+      roomId: "quick-history-1",
+      ruleName: "simple"
+    });
+    await gameRecordRepository.appendEvent("quick-history-1", {
+      createdAt: "2026-06-09T10:00:00.000Z",
+      id: "event-history-1",
+      text: "player1 加入快速对局"
+    });
+    await gameRecordRepository.createRecord({
+      humanSeatIndex: 0,
+      playerUserId: 999,
+      roomId: "quick-other-player",
+      ruleName: "simple"
+    });
+
+    const listResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${token}`
+      },
+      method: "GET",
+      url: "/games/history"
+    });
+
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json()).toMatchObject({
+      records: [
+        {
+          roomId: "quick-history-1",
+          ruleName: "simple",
+          status: "playing"
+        }
+      ]
+    });
+
+    const detailResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${token}`
+      },
+      method: "GET",
+      url: "/games/history/quick-history-1"
+    });
+
+    expect(detailResponse.statusCode).toBe(200);
+    expect(detailResponse.json()).toMatchObject({
+      record: {
+        events: [
+          expect.objectContaining({
+            text: "player1 加入快速对局"
+          })
+        ],
+        roomId: "quick-history-1"
+      }
+    });
+
+    const otherPlayerResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${token}`
+      },
+      method: "GET",
+      url: "/games/history/quick-other-player"
+    });
+
+    expect(otherPlayerResponse.statusCode).toBe(404);
+
+    await app.close();
+  });
+
+  it("restricts game history to authenticated players", async () => {
+    const { app } = await createTestApp();
+    const adminLoginResponse = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: {
+        username: "admin",
+        password: "admin123"
+      }
+    });
+    const adminToken = adminLoginResponse.json<{ token: string }>().token;
+
+    const anonymousResponse = await app.inject({
+      method: "GET",
+      url: "/games/history"
+    });
+    expect(anonymousResponse.statusCode).toBe(401);
+
+    const adminResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${adminToken}`
+      },
+      method: "GET",
+      url: "/games/history"
+    });
+    expect(adminResponse.statusCode).toBe(403);
 
     await app.close();
   });

@@ -1,7 +1,11 @@
 import type {
   AuthUser,
   CreatePlayerRequest,
+  GetGameHistoryResponse,
+  GameHistoryDetail,
+  GameHistoryItem,
   LoginRequest,
+  ListGameHistoryResponse,
   LoginResponse,
   LogoutResponse,
   PlayerListResponse,
@@ -114,4 +118,20 @@ export async function resetPlayerPassword(
     method: "PATCH",
     token
   });
+}
+
+export async function listGameHistory(token: string): Promise<GameHistoryItem[]> {
+  const response = await request<ListGameHistoryResponse>("/games/history", { token });
+  return response.records;
+}
+
+export async function getGameHistory(
+  token: string,
+  roomId: string
+): Promise<GameHistoryDetail> {
+  const response = await request<GetGameHistoryResponse>(
+    `/games/history/${encodeURIComponent(roomId)}`,
+    { token }
+  );
+  return response.record;
 }

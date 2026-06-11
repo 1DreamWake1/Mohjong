@@ -480,6 +480,56 @@
   justify-content: flex-end;
 }
 
+.historyRow,
+.historyRowActive {
+  align-items: center;
+  border: 1px solid #e1e7ee;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 14px;
+  text-align: left;
+  width: 100%;
+}
+
+.historyRow {
+  background: #ffffff;
+  color: #243241;
+}
+
+.historyRowActive {
+  background: #eefdf7;
+  border-color: #5ee3c4;
+  color: #134e4a;
+}
+
+.historyRow span,
+.historyRowActive span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.historyRow strong,
+.historyRowActive strong {
+  overflow-wrap: anywhere;
+}
+
+.historyRow small,
+.historyRowActive small {
+  color: #657386;
+  font-size: 0.8125rem;
+}
+
+.historyRow em,
+.historyRowActive em {
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 @media (max-width: 760px) {
   .shell,
   .adminShell,
@@ -499,7 +549,9 @@
   .adminHeader,
   .lobbyHeader,
   .tableHeader,
-  .playerRow {
+  .playerRow,
+  .historyRow,
+  .historyRowActive {
     align-items: stretch;
     flex-direction: column;
   }

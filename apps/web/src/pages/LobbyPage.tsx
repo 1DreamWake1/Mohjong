@@ -81,6 +81,13 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
             >
               快速开始
             </button>
+            <button
+              className={styles.secondaryButton}
+              onClick={() => replaceRoute(APP_ROUTES.gameHistory)}
+              type="button"
+            >
+              历史对局
+            </button>
             <button className={styles.secondaryButton} disabled>
               创建房间
             </button>
