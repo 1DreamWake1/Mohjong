@@ -55,6 +55,49 @@ export type GameResultInfo = {
 
 export type GameRecordStatus = "playing" | "ended";
 
+export type GameLobbyRoomStatus = "waiting" | "playing" | "ended";
+
+export type GameLobbySeat = {
+  seatIndex: number;
+  userId?: number;
+  username?: string;
+  isBot: boolean;
+  isReady: boolean;
+};
+
+export type GameLobbyRoom = {
+  roomId: string;
+  ownerUserId: number;
+  status: GameLobbyRoomStatus;
+  seats: GameLobbySeat[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateGameRoomResponse = {
+  room: GameLobbyRoom;
+};
+
+export type GetCurrentGameRoomResponse = {
+  room: GameLobbyRoom | null;
+};
+
+export type JoinGameRoomResponse = {
+  room: GameLobbyRoom;
+};
+
+export type SetGameRoomReadyRequest = {
+  isReady: boolean;
+};
+
+export type SetGameRoomReadyResponse = {
+  room: GameLobbyRoom;
+};
+
+export type StartGameRoomResponse = {
+  room: GameLobbyRoom;
+};
+
 export type GameHistoryItem = {
   roomId: string;
   ruleName: string;

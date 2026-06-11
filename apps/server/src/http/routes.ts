@@ -2,18 +2,26 @@ import type { FastifyInstance } from "fastify";
 import type {
   CreatePlayerRequest,
   GetGameHistoryResponse,
+  CreateGameRoomResponse,
   ListGameHistoryResponse,
+  GetCurrentGameRoomResponse,
+  JoinGameRoomResponse,
   LoginRequest,
   LogoutResponse,
-  ResetPlayerPasswordRequest
+  ResetPlayerPasswordRequest,
+  SetGameRoomReadyRequest,
+  SetGameRoomReadyResponse,
+  StartGameRoomResponse
 } from "@mahjong/shared";
 
 import type { AuthService } from "../modules/auth/authService.js";
 import type { GameRecordRepository } from "../modules/game/gameRecordRepository.js";
+import type { GameLobbyService } from "../modules/game/gameLobbyService.js";
 import type { createUserService } from "../modules/users/userService.js";
 
 type RouteServices = {
   authService: AuthService;
+  gameLobbyService: GameLobbyService;
   gameRecordRepository: GameRecordRepository;
   userService: ReturnType<typeof createUserService>;
 };
@@ -67,6 +75,14 @@ function parseResetPlayerPasswordRequest(
   }
 
   return { password };
+}
+
+function parseSetGameRoomReadyRequest(value: unknown): SetGameRoomReadyRequest | null {
+  if (!isRecord(value) || typeof value.isReady !== "boolean") {
+    return null;
+  }
+
+  return { isReady: value.isReady };
 }
 
 function parseIdParam(value: unknown): number | null {
@@ -157,6 +173,143 @@ export async function registerRoutes(
   app.post("/auth/logout", async (): Promise<LogoutResponse> => ({
     ok: true
   }));
+
+  app.get("/rooms/current", async (request, reply): Promise<GetCurrentGameRoomResponse | void> => {
+    const user = await requireUser(
+      app,
+      services,
+      request.headers.authorization
+    );
+
+    if (!user) {
+      return reply.code(401).send({ message: "Unauthorized" });
+    }
+    if (user.role !== "player") {
+      return reply.code(403).send({ message: "Forbidden" });
+    }
+
+    return { room: services.gameLobbyService.getCurrentRoom(user) };
+  });
+
+  app.post("/rooms", async (request, reply): Promise<CreateGameRoomResponse | void> => {
+    const user = await requireUser(
+      app,
+      services,
+      request.headers.authorization
+    );
+
+    if (!user) {
+      return reply.code(401).send({ message: "Unauthorized" });
+    }
+    if (user.role !== "player") {
+      return reply.code(403).send({ message: "Forbidden" });
+    }
+
+    return reply.code(201).send({ room: services.gameLobbyService.createRoom(user) });
+  });
+
+  app.post(
+    "/rooms/:roomId/join",
+    async (request, reply): Promise<JoinGameRoomResponse | void> => {
+      const user = await requireUser(
+        app,
+        services,
+        request.headers.authorization
+      );
+
+      if (!user) {
+        return reply.code(401).send({ message: "Unauthorized" });
+      }
+      if (user.role !== "player") {
+        return reply.code(403).send({ message: "Forbidden" });
+      }
+
+      const roomId = parseRoomIdParam(request.params);
+      if (!roomId) {
+        return reply.code(400).send({ message: "Invalid room id" });
+      }
+
+      const result = services.gameLobbyService.joinRoom(user, roomId);
+      if (!result.ok && result.reason === "not_found") {
+        return reply.code(404).send({ message: "Room not found" });
+      }
+      if (!result.ok && result.reason === "full") {
+        return reply.code(409).send({ message: "Room is full" });
+      }
+      if (!result.ok) {
+        return reply.code(409).send({ message: "Player is already in another room" });
+      }
+
+      return { room: result.room };
+    }
+  );
+
+  app.patch(
+    "/rooms/current/ready",
+    async (request, reply): Promise<SetGameRoomReadyResponse | void> => {
+      const user = await requireUser(
+        app,
+        services,
+        request.headers.authorization
+      );
+
+      if (!user) {
+        return reply.code(401).send({ message: "Unauthorized" });
+      }
+      if (user.role !== "player") {
+        return reply.code(403).send({ message: "Forbidden" });
+      }
+
+      const input = parseSetGameRoomReadyRequest(request.body);
+      if (!input) {
+        return reply.code(400).send({ message: "Invalid ready request" });
+      }
+
+      const result = services.gameLobbyService.setReady(user, input.isReady);
+      if (!result.ok && result.reason === "not_found") {
+        return reply.code(404).send({ message: "Room not found" });
+      }
+      if (!result.ok) {
+        return reply.code(409).send({ message: "Room has already started" });
+      }
+
+      return { room: result.room };
+    }
+  );
+
+  app.post(
+    "/rooms/current/start",
+    async (request, reply): Promise<StartGameRoomResponse | void> => {
+      const user = await requireUser(
+        app,
+        services,
+        request.headers.authorization
+      );
+
+      if (!user) {
+        return reply.code(401).send({ message: "Unauthorized" });
+      }
+      if (user.role !== "player") {
+        return reply.code(403).send({ message: "Forbidden" });
+      }
+
+      const result = services.gameLobbyService.startRoom(user);
+      if (!result.ok && result.reason === "not_found") {
+        return reply.code(404).send({ message: "Room not found" });
+      }
+      if (!result.ok && result.reason === "forbidden") {
+        return reply.code(403).send({ message: "Only room owner can start the room" });
+      }
+      if (!result.ok && result.reason === "not_ready") {
+        return reply.code(409).send({ message: "Not all players are ready" });
+      }
+      if (!result.ok) {
+        return reply.code(409).send({ message: "Room has already started" });
+      }
+
+      return { room: result.room };
+    }
+  );
 
   app.get("/games/history", async (request, reply): Promise<ListGameHistoryResponse | void> => {
     const user = await requireUser(

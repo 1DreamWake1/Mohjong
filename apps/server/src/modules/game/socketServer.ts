@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { Server, type Socket } from "socket.io";
 
 import type { AuthService } from "../auth/authService.js";
+import { createGameLobbyService, type GameLobbyService } from "./gameLobbyService.js";
 import { createGameRoomService, type GameRoomService } from "./gameRoomService.js";
 
 type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -11,12 +12,13 @@ type SocketData = {
   user: AuthUser;
 };
 
-type GameSocketOperation = "action" | "join" | "start" | "sync";
+type GameSocketOperation = "action" | "join" | "lobby" | "start" | "sync";
 type TimeoutHandle = ReturnType<typeof setTimeout>;
 
 const playerOnlyErrors: Record<GameSocketOperation, string> = {
   action: "Only players can act in games",
   join: "Only players can join games",
+  lobby: "Only players can watch lobby rooms",
   start: "Only players can start games",
   sync: "Only players can sync games"
 };
@@ -168,6 +170,7 @@ function scheduleHumanTimeout(input: {
 export function registerGameSocketServer(input: {
   app: FastifyInstance;
   authService: AuthService;
+  gameLobbyService?: GameLobbyService;
   gameRoomService?: GameRoomService;
 }): Server<ClientToServerEvents, ServerToClientEvents> {
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(input.app.server, {
@@ -175,10 +178,15 @@ export function registerGameSocketServer(input: {
       origin: true
     }
   });
+  const gameLobbyService = input.gameLobbyService ?? createGameLobbyService();
   const gameRoomService = input.gameRoomService ?? createGameRoomService();
   const activeSocketByRoomId = new Map<string, GameSocket>();
   const scheduledBotRoomIds = new Set<string>();
   const scheduledHumanTimeoutsByRoomId = new Map<string, TimeoutHandle>();
+
+  gameLobbyService.subscribeRoomUpdates((room) => {
+    io.to(`lobby:${room.roomId}`).emit("lobby:room", { room });
+  });
 
   io.use(async (socket, next) => {
     const token = readSocketToken(socket.handshake.auth.token);
@@ -201,6 +209,7 @@ export function registerGameSocketServer(input: {
     const gameSocket = socket as GameSocket;
     const user = (gameSocket.data as SocketData).user;
     const socketRoomIds = new Set<string>();
+    const lobbyRoomIds = new Set<string>();
 
     function trackRoomSocket(roomId: string): void {
       socketRoomIds.add(roomId);
@@ -224,6 +233,31 @@ export function registerGameSocketServer(input: {
           activeSocketByRoomId.delete(roomId);
         }
       }
+    });
+
+    gameSocket.on("lobby:watch", (payload) => {
+      const accessError = getGameSocketAccessError(user, "lobby");
+      if (accessError) {
+        gameSocket.emit("game:error", { message: accessError });
+        return;
+      }
+
+      const room = gameLobbyService.getCurrentRoom(user);
+      if (!room || room.roomId !== payload.roomId) {
+        gameSocket.emit("game:error", { message: "Lobby room not found" });
+        return;
+      }
+
+      for (const roomId of lobbyRoomIds) {
+        if (roomId !== room.roomId) {
+          gameSocket.leave(`lobby:${roomId}`);
+          lobbyRoomIds.delete(roomId);
+        }
+      }
+
+      lobbyRoomIds.add(room.roomId);
+      gameSocket.join(`lobby:${room.roomId}`);
+      gameSocket.emit("lobby:room", { room });
     });
 
     gameSocket.on("game:join", (payload) => {

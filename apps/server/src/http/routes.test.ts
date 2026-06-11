@@ -100,6 +100,11 @@ async function createTestApp() {
     passwordHash: await hashPassword("player123"),
     role: "player"
   });
+  await userRepository.create({
+    username: "player2",
+    passwordHash: await hashPassword("player123"),
+    role: "player"
+  });
 
   const app = await createApp({
     authTokenSecret: "test-secret",
@@ -287,6 +292,169 @@ describe("routes", () => {
       },
       method: "GET",
       url: "/games/history"
+    });
+    expect(adminResponse.statusCode).toBe(403);
+
+    await app.close();
+  });
+
+  it("allows players to create, read, and join lobby rooms", async () => {
+    const { app } = await createTestApp();
+
+    const ownerLoginResponse = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: {
+        username: "player1",
+        password: "player123"
+      }
+    });
+    const ownerToken = ownerLoginResponse.json<{ token: string }>().token;
+    const joinerLoginResponse = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: {
+        username: "player2",
+        password: "player123"
+      }
+    });
+    const joinerToken = joinerLoginResponse.json<{ token: string }>().token;
+
+    const createResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${ownerToken}`
+      },
+      method: "POST",
+      url: "/rooms"
+    });
+
+    expect(createResponse.statusCode).toBe(201);
+    const roomId = createResponse.json<{ room: { roomId: string } }>().room.roomId;
+
+    const joinResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${joinerToken}`
+      },
+      method: "POST",
+      url: `/rooms/${roomId}/join`
+    });
+
+    expect(joinResponse.statusCode).toBe(200);
+    expect(joinResponse.json()).toMatchObject({
+      room: {
+        roomId,
+        seats: expect.arrayContaining([
+          expect.objectContaining({ username: "player1" }),
+          expect.objectContaining({ username: "player2" })
+        ]),
+        status: "waiting"
+      }
+    });
+
+    const currentResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${joinerToken}`
+      },
+      method: "GET",
+      url: "/rooms/current"
+    });
+
+    expect(currentResponse.statusCode).toBe(200);
+    expect(currentResponse.json()).toMatchObject({
+      room: {
+        roomId,
+        seats: expect.arrayContaining([expect.objectContaining({ username: "player2" })])
+      }
+    });
+
+    const notReadyResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${joinerToken}`
+      },
+      method: "PATCH",
+      url: "/rooms/current/ready",
+      payload: {
+        isReady: false
+      }
+    });
+
+    expect(notReadyResponse.statusCode).toBe(200);
+
+    const blockedStartResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${ownerToken}`
+      },
+      method: "POST",
+      url: "/rooms/current/start"
+    });
+    expect(blockedStartResponse.statusCode).toBe(409);
+
+    await app.inject({
+      headers: {
+        authorization: `Bearer ${joinerToken}`
+      },
+      method: "PATCH",
+      url: "/rooms/current/ready",
+      payload: {
+        isReady: true
+      }
+    });
+
+    const forbiddenStartResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${joinerToken}`
+      },
+      method: "POST",
+      url: "/rooms/current/start"
+    });
+    expect(forbiddenStartResponse.statusCode).toBe(403);
+
+    const startResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${ownerToken}`
+      },
+      method: "POST",
+      url: "/rooms/current/start"
+    });
+
+    expect(startResponse.statusCode).toBe(200);
+    expect(startResponse.json()).toMatchObject({
+      room: {
+        roomId,
+        seats: expect.arrayContaining([
+          expect.objectContaining({ isBot: true, isReady: true })
+        ]),
+        status: "playing"
+      }
+    });
+
+    await app.close();
+  });
+
+  it("restricts lobby room routes to authenticated players", async () => {
+    const { app } = await createTestApp();
+    const adminLoginResponse = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: {
+        username: "admin",
+        password: "admin123"
+      }
+    });
+    const adminToken = adminLoginResponse.json<{ token: string }>().token;
+
+    const anonymousResponse = await app.inject({
+      method: "POST",
+      url: "/rooms"
+    });
+    expect(anonymousResponse.statusCode).toBe(401);
+
+    const adminResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${adminToken}`
+      },
+      method: "POST",
+      url: "/rooms"
     });
     expect(adminResponse.statusCode).toBe(403);
 

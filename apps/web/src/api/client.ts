@@ -1,15 +1,22 @@
 import type {
   AuthUser,
   CreatePlayerRequest,
+  CreateGameRoomResponse,
   GetGameHistoryResponse,
+  GetCurrentGameRoomResponse,
   GameHistoryDetail,
   GameHistoryItem,
+  GameLobbyRoom,
+  JoinGameRoomResponse,
   LoginRequest,
   ListGameHistoryResponse,
   LoginResponse,
   LogoutResponse,
   PlayerListResponse,
   ResetPlayerPasswordRequest,
+  SetGameRoomReadyRequest,
+  SetGameRoomReadyResponse,
+  StartGameRoomResponse,
   UserSummary
 } from "@mahjong/shared";
 
@@ -134,4 +141,48 @@ export async function getGameHistory(
     { token }
   );
   return response.record;
+}
+
+export async function getCurrentGameRoom(token: string): Promise<GameLobbyRoom | null> {
+  const response = await request<GetCurrentGameRoomResponse>("/rooms/current", { token });
+  return response.room;
+}
+
+export async function createGameRoom(token: string): Promise<GameLobbyRoom> {
+  const response = await request<CreateGameRoomResponse>("/rooms", {
+    method: "POST",
+    token
+  });
+  return response.room;
+}
+
+export async function joinGameRoom(token: string, roomId: string): Promise<GameLobbyRoom> {
+  const response = await request<JoinGameRoomResponse>(
+    `/rooms/${encodeURIComponent(roomId)}/join`,
+    {
+      method: "POST",
+      token
+    }
+  );
+  return response.room;
+}
+
+export async function setGameRoomReady(
+  token: string,
+  input: SetGameRoomReadyRequest
+): Promise<GameLobbyRoom> {
+  const response = await request<SetGameRoomReadyResponse>("/rooms/current/ready", {
+    body: JSON.stringify(input),
+    method: "PATCH",
+    token
+  });
+  return response.room;
+}
+
+export async function startGameRoom(token: string): Promise<GameLobbyRoom> {
+  const response = await request<StartGameRoomResponse>("/rooms/current/start", {
+    method: "POST",
+    token
+  });
+  return response.room;
 }

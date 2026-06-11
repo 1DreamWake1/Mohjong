@@ -1,6 +1,14 @@
-import type { AuthUser } from "@mahjong/shared";
-import { useEffect, useMemo } from "react";
+import type { AuthUser, GameLobbyRoom, GameLobbySeat } from "@mahjong/shared";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 
+import {
+  createGameRoom,
+  getCurrentGameRoom,
+  joinGameRoom,
+  setGameRoomReady,
+  startGameRoom
+} from "../api/client.js";
+import { isUnauthorizedError } from "../api/errors.js";
 import styles from "../app/App.module.css";
 import { APP_ROUTES, replaceRoute } from "../app/routes.js";
 import { useAuthStore } from "../stores/authStore.js";
@@ -12,13 +20,50 @@ type LobbyPageProps = {
   user: AuthUser;
 };
 
+const seatNames = ["东", "南", "西", "北"];
+
+export function getLobbySeatText(seat: GameLobbySeat): string {
+  if (seat.isBot) {
+    return "Bot";
+  }
+
+  return seat.username ?? "空座";
+}
+
+export function canStartLobbyRoom(room: GameLobbyRoom, userId: number): boolean {
+  return (
+    room.ownerUserId === userId &&
+    room.status === "waiting" &&
+    room.seats
+      .filter((seat) => seat.userId !== undefined && !seat.isBot)
+      .every((seat) => seat.isReady)
+  );
+}
+
 export function LobbyPage(props: LobbyPageProps): JSX.Element {
+  const clearSession = useAuthStore((state) => state.clearSession);
   const signOut = useAuthStore((state) => state.signOut);
   const disconnectSocket = useSocketStore((state) => state.disconnectSocket);
   const prepareSocket = useSocketStore((state) => state.prepareSocket);
+  const socket = useSocketStore((state) => state.socket);
   const socketStatus = useSocketStore((state) => state.status);
+  const [joinRoomId, setJoinRoomId] = useState("");
+  const [room, setRoom] = useState<GameLobbyRoom | null>(null);
+  const [roomError, setRoomError] = useState<string | null>(null);
+  const [isRoomBusy, setIsRoomBusy] = useState(false);
   const createdAtText = useMemo(() => formatDateTime(props.user.createdAt), [props.user.createdAt]);
   const socketStatusText = socketStatus === "ready" ? "已准备" : "未准备";
+  const currentSeat = room?.seats.find((seat) => seat.userId === props.user.id);
+  const canStartRoom = room ? canStartLobbyRoom(room, props.user.id) : false;
+
+  function handleRoomError(error: unknown): void {
+    if (isUnauthorizedError(error)) {
+      clearSession();
+      return;
+    }
+
+    setRoomError(error instanceof Error ? error.message : "房间操作失败");
+  }
 
   useEffect(() => {
     prepareSocket(props.token);
@@ -26,6 +71,120 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
       disconnectSocket();
     };
   }, [disconnectSocket, prepareSocket, props.token]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    getCurrentGameRoom(props.token)
+      .then((currentRoom) => {
+        if (isActive) {
+          setRoom(currentRoom);
+        }
+      })
+      .catch((error: unknown) => {
+        if (isActive) {
+          handleRoomError(error);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [props.token]);
+
+  useEffect(() => {
+    if (!socket || !room) {
+      return;
+    }
+
+    const handleConnect = () => {
+      socket.emit("lobby:watch", { roomId: room.roomId });
+    };
+    const handleLobbyRoom: Parameters<typeof socket.on<"lobby:room">>[1] = (payload) => {
+      setRoom(payload.room);
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("lobby:room", handleLobbyRoom);
+    if (socket.connected) {
+      handleConnect();
+    } else {
+      socket.connect();
+    }
+
+    return () => {
+      socket.off("connect", handleConnect);
+      socket.off("lobby:room", handleLobbyRoom);
+    };
+  }, [room?.roomId, socket]);
+
+  async function handleCreateRoom(): Promise<void> {
+    setIsRoomBusy(true);
+    setRoomError(null);
+
+    try {
+      setRoom(await createGameRoom(props.token));
+    } catch (error) {
+      handleRoomError(error);
+    } finally {
+      setIsRoomBusy(false);
+    }
+  }
+
+  async function handleJoinRoom(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    const normalizedRoomId = joinRoomId.trim();
+    if (normalizedRoomId.length === 0) {
+      setRoomError("请输入房间号");
+      return;
+    }
+
+    setIsRoomBusy(true);
+    setRoomError(null);
+
+    try {
+      setRoom(await joinGameRoom(props.token, normalizedRoomId));
+      setJoinRoomId("");
+    } catch (error) {
+      handleRoomError(error);
+    } finally {
+      setIsRoomBusy(false);
+    }
+  }
+
+  async function handleToggleReady(): Promise<void> {
+    if (!currentSeat || !room || room.status !== "waiting") {
+      return;
+    }
+
+    setIsRoomBusy(true);
+    setRoomError(null);
+
+    try {
+      setRoom(await setGameRoomReady(props.token, { isReady: !currentSeat.isReady }));
+    } catch (error) {
+      handleRoomError(error);
+    } finally {
+      setIsRoomBusy(false);
+    }
+  }
+
+  async function handleStartRoom(): Promise<void> {
+    if (!room) {
+      return;
+    }
+
+    setIsRoomBusy(true);
+    setRoomError(null);
+
+    try {
+      setRoom(await startGameRoom(props.token));
+    } catch (error) {
+      handleRoomError(error);
+    } finally {
+      setIsRoomBusy(false);
+    }
+  }
 
   return (
     <main className={styles.lobbyShell}>
@@ -88,13 +247,70 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
             >
               历史对局
             </button>
-            <button className={styles.secondaryButton} disabled>
+            <button
+              className={styles.secondaryButton}
+              disabled={isRoomBusy}
+              onClick={() => void handleCreateRoom()}
+              type="button"
+            >
               创建房间
             </button>
-            <button className={styles.secondaryButton} disabled>
-              加入房间
-            </button>
+            <form className={styles.inlineJoinForm} onSubmit={(event) => void handleJoinRoom(event)}>
+              <input
+                aria-label="房间号"
+                onChange={(event) => setJoinRoomId(event.target.value)}
+                placeholder="输入房间号"
+                value={joinRoomId}
+              />
+              <button className={styles.secondaryButton} disabled={isRoomBusy} type="submit">
+                加入房间
+              </button>
+            </form>
           </div>
+          {roomError ? <p className={styles.error}>{roomError}</p> : null}
+        </section>
+
+        <section className={styles.lobbyPanel}>
+          <div className={styles.panelHeader}>
+            <div>
+              <p className={styles.panelLabel}>当前房间</p>
+              <h2>{room?.roomId ?? "暂无房间"}</h2>
+            </div>
+            <span className={styles.statusBadge}>{room?.status === "waiting" ? "等待中" : "-"}</span>
+          </div>
+          {room ? (
+            <>
+              <div className={styles.roomSeatGrid}>
+                {room.seats.map((seat) => (
+                  <div className={styles.roomSeat} key={seat.seatIndex}>
+                    <span>{seatNames[seat.seatIndex]}位</span>
+                    <strong>{getLobbySeatText(seat)}</strong>
+                    <small>{seat.isReady ? "已准备" : "未准备"}</small>
+                  </div>
+                ))}
+              </div>
+              <div className={styles.roomActions}>
+                <button
+                  className={styles.secondaryButton}
+                  disabled={isRoomBusy || !currentSeat || room.status !== "waiting"}
+                  onClick={() => void handleToggleReady()}
+                  type="button"
+                >
+                  {currentSeat?.isReady ? "取消准备" : "准备"}
+                </button>
+                <button
+                  className={styles.primaryButton}
+                  disabled={isRoomBusy || !canStartRoom}
+                  onClick={() => void handleStartRoom()}
+                  type="button"
+                >
+                  开始房间
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className={styles.emptyState}>创建房间或输入房间号加入</p>
+          )}
         </section>
       </section>
     </main>

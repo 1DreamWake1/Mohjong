@@ -36,6 +36,7 @@ describe("socketServer", () => {
     expect(getGameSocketAccessError(player, "start")).toBeNull();
     expect(getGameSocketAccessError(player, "action")).toBeNull();
     expect(getGameSocketAccessError(player, "sync")).toBeNull();
+    expect(getGameSocketAccessError(player, "lobby")).toBeNull();
   });
 
   it("rejects administrators from player-only game socket operations", () => {
@@ -43,6 +44,7 @@ describe("socketServer", () => {
     expect(getGameSocketAccessError(admin, "start")).toBe("Only players can start games");
     expect(getGameSocketAccessError(admin, "action")).toBe("Only players can act in games");
     expect(getGameSocketAccessError(admin, "sync")).toBe("Only players can sync games");
+    expect(getGameSocketAccessError(admin, "lobby")).toBe("Only players can watch lobby rooms");
   });
 
   it("uses a 30 second human action timeout", () => {

@@ -336,6 +336,55 @@
   gap: 10px;
 }
 
+.inlineJoinForm {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.inlineJoinForm input {
+  border: 1px solid #c7d1dc;
+  border-radius: 6px;
+  font: inherit;
+  min-height: 42px;
+  min-width: 0;
+  padding: 9px 11px;
+}
+
+.roomSeatGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.roomSeat {
+  background: #f7fafc;
+  border: 1px solid #d7dee8;
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.roomSeat span,
+.roomSeat small {
+  color: #657386;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.roomSeat strong {
+  color: #243241;
+  overflow-wrap: anywhere;
+}
+
+.roomActions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .segmentedControls {
   display: grid;
   gap: 8px;
@@ -612,6 +661,12 @@
   }
 
   .replayControls {
+    grid-template-columns: 1fr;
+  }
+
+  .inlineJoinForm,
+  .roomActions,
+  .roomSeatGrid {
     grid-template-columns: 1fr;
   }
 

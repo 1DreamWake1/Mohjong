@@ -12,6 +12,10 @@ import {
   createGameRoomService,
   type GameRoomService
 } from "./modules/game/gameRoomService.js";
+import {
+  createGameLobbyService,
+  type GameLobbyService
+} from "./modules/game/gameLobbyService.js";
 import { registerGameSocketServer } from "./modules/game/socketServer.js";
 import { createPrismaUserRepository } from "./modules/users/userRepository.js";
 import type { UserRepository } from "./modules/users/userRepository.js";
@@ -19,6 +23,7 @@ import { createUserService } from "./modules/users/userService.js";
 
 export type CreateAppOptions = {
   authTokenSecret?: string;
+  gameLobbyService?: GameLobbyService;
   gameRecordRepository?: GameRecordRepository;
   gameRoomService?: GameRoomService;
   userRepository?: UserRepository;
@@ -34,6 +39,7 @@ export async function createApp(options: CreateAppOptions = {}) {
   const userService = createUserService(userRepository);
   const gameRecordRepository =
     options.gameRecordRepository ?? createPrismaGameRecordRepository();
+  const gameLobbyService = options.gameLobbyService ?? createGameLobbyService();
   const gameRoomService =
     options.gameRoomService ??
     createGameRoomService({
@@ -49,12 +55,14 @@ export async function createApp(options: CreateAppOptions = {}) {
   });
   await registerRoutes(app, {
     authService,
+    gameLobbyService,
     gameRecordRepository,
     userService
   });
   registerGameSocketServer({
     app,
     authService,
+    gameLobbyService,
     gameRoomService
   });
 
