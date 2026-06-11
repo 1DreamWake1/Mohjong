@@ -12,8 +12,8 @@
 ORM：Prisma
 核心算法：独立 TypeScript 包
 本地部署：Node.js 进程直接运行
-Linux 测试部署：Ubuntu 虚拟机 + Node.js + SQLite
-后续扩展：Docker Compose + PostgreSQL + Nginx/Caddy
+Linux 测试部署：Ubuntu 虚拟机 + Docker Compose + SQLite
+后续部署：Docker Compose 为主，按需接入 PostgreSQL + Nginx/Caddy
 ```
 
 这条路线的核心原则是：
@@ -22,6 +22,7 @@ Linux 测试部署：Ubuntu 虚拟机 + Node.js + SQLite
 - 前后端统一使用 TypeScript，降低沟通和类型维护成本。
 - 麻将核心算法独立出来，避免和页面、服务器、数据库耦合。
 - 数据库先用 SQLite，满足本地测试和小规模玩家使用。
+- 后续部署以 Docker Compose 为主要方式，降低环境差异和迁移成本。
 - 架构上预留未来迁移 PostgreSQL、地方规则、多房间和公网部署的空间。
 
 ## 2. 当前需求对技术选型的影响
@@ -250,9 +251,9 @@ apps/server/
 - 数据文件便于备份和迁移。
 - Prisma 支持良好。
 
-### 5.2 后续推荐：PostgreSQL
+### 5.2 后续数据库：继续 SQLite，必要时迁移 PostgreSQL
 
-当项目进入公网部署或多人长期使用阶段，建议迁移 PostgreSQL。
+后续 Docker 部署初期仍可以继续使用 SQLite，并通过宿主机挂载卷保存数据库文件。当项目进入公网部署、多人长期使用或统计查询明显增加后，再迁移 PostgreSQL。
 
 迁移触发条件：
 
@@ -541,7 +542,7 @@ Ubuntu 虚拟机
 SQLite 数据文件
 ```
 
-本地测试阶段不强制使用 Nginx。等需要模拟正式部署或绑定域名时，再引入 Nginx 或 Caddy。
+本地开发阶段不强制使用 Docker。后续测试部署和长期运行优先使用 Docker Compose，把 web、server、数据库文件卷和可选反向代理放到同一套部署描述中。等需要模拟正式部署或绑定域名时，再在 Compose 中引入 Nginx 或 Caddy。
 
 ## 11. 推荐开发顺序
 
@@ -594,7 +595,7 @@ PostgreSQL 优点：
 - 并发和数据可靠性更强。
 - 生态成熟。
 
-当前推荐 SQLite，后续进入公网或长期运行再迁移 PostgreSQL。
+当前推荐 SQLite。后续部署优先切到 Docker Compose 托管应用和 SQLite 数据卷；当公网或长期运行对并发、统计和备份提出更高要求时，再迁移 PostgreSQL。
 
 ### 12.3 前端：React vs Vue
 
@@ -673,4 +674,3 @@ Ubuntu 虚拟机本地测试
 ```
 
 该方案对当前规模足够简单，同时不会堵死后续扩展地方规则、正式 Linux 部署、数据库升级和公网访问的路线。
-

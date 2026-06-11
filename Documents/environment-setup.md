@@ -151,18 +151,18 @@ sudo ufw allow 5173/tcp
 sudo ufw status
 ```
 
-## 7. 可选部署依赖
+## 7. Docker 部署依赖
 
-以下组件不是本地开发必需项，按部署方式选择：
+本地开发可以继续直接使用 Node.js 和 pnpm。后续测试部署和长期运行主要使用 Docker Compose，优先准备 Docker 相关依赖；反向代理和 PostgreSQL 按部署规模逐步接入。
 
 | 依赖                    | 何时需要                                                     |
 | ----------------------- | ------------------------------------------------------------ |
-| Docker / Docker Compose | 容器化部署、统一运行环境、后续引入 PostgreSQL 或反向代理组合 |
-| Nginx                   | 公网反向代理、静态资源代理、域名接入                         |
-| Caddy                   | 简化 HTTPS 证书和反向代理配置                                |
+| Docker / Docker Compose | 主要部署方式，统一 web、server、SQLite 数据卷和可选周边服务 |
+| Nginx                   | Docker 部署中的公网反向代理、静态资源代理、域名接入          |
+| Caddy                   | Docker 部署中简化 HTTPS 证书和反向代理配置                   |
 | PostgreSQL              | SQLite 无法满足长期运行、并发写入、统计查询或备份恢复需求时  |
-| PM2                     | 简化 Node.js 进程守护和日志管理                              |
-| systemd 服务配置        | 生产或长期运行环境中托管 server 进程                         |
+| PM2                     | 仅在不使用 Docker、需要直接托管 Node.js 进程时考虑           |
+| systemd 服务配置        | 仅在不使用 Docker、需要系统级托管 server 进程时考虑          |
 
 ## 8. 环境验证命令
 

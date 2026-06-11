@@ -1,6 +1,6 @@
 # 在线麻将项目文档索引
 
-当前文档按六个主题组织：
+当前文档按七个主题组织：
 
 1. 需求
 2. 架构设计
@@ -80,8 +80,9 @@
 数据库：SQLite
 ORM：Prisma
 核心算法：独立 TypeScript 包
-本地/Linux 测试：Ubuntu 虚拟机 + Node.js + SQLite
-后续扩展：Docker Compose + PostgreSQL + Nginx/Caddy
+本地开发：Ubuntu 虚拟机 + Node.js + SQLite
+Linux 测试部署：Ubuntu 虚拟机 + Docker Compose + SQLite
+后续部署：Docker Compose 为主，按需接入 PostgreSQL + Nginx/Caddy
 ```
 
 ## 4. 开发计划
@@ -102,8 +103,21 @@ ORM：Prisma
 3. 完成玩家入口页面、前端路由和体验完善。
 4. 完成麻将游戏前端显示画面。
 5. 合并麻将游戏核心业务算法，形成完整闭环。
+6. 完善快速对局简单规则。
+7. 增加对局记录和事件持久化。
+8. 增加历史对局查询 API。
+9. 增加前端历史对局页面。
+10. 增强历史对局筛选和检索。
+11. 增强历史调试详情。
+12. 增加历史事件回放控件。
+13. 增加完整牌桌状态快照回放。
+14. 完善真实多人房间。
+15. 增强进行中牌局恢复和房间生命周期。
+16. 增强规则配置化。
+17. 增加管理员对局后台。
+18. 完善 Docker 部署和长期运行能力。
 
-当前状态：阶段 12 已完成，后续重点进入完整牌桌状态快照回放、地方规则和对局体验增强。
+当前状态：阶段 12 已完成，阶段 13 作为下一步优先开发；后续重点进入完整牌桌状态快照回放、真实多人房间、牌局恢复、地方规则和 Docker 长期运行能力。
 
 ## 5. 环境准备
 
@@ -139,14 +153,14 @@ ORM：Prisma
 - 固定当前快速对局规则范围。
 - 明确自摸、点炮、流局、碰杠流转和简单结算验收标准。
 
-## 7. 历史参考文档
+## 8. 历史参考文档
 
 以下文档为前期讨论沉淀，后续可以作为参考，不作为当前主线入口：
 
 - [initial-local-test-requirements-and-development-plan.md](./initial-local-test-requirements-and-development-plan.md)
 - [online-mahjong-architecture-and-development-plan.md](./online-mahjong-architecture-and-development-plan.md)
 
-后续如果文档继续扩展，建议优先更新六个主文档：
+后续如果文档继续扩展，建议优先更新七个主文档：
 
 - `requirements.md`
 - `architecture-design.md`
@@ -154,3 +168,4 @@ ORM：Prisma
 - `development-plan.md`
 - `environment-setup.md`
 - `phase-2-runbook.md`
+- `simple-rules.md`

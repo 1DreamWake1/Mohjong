@@ -321,9 +321,9 @@ SQLite 数据库文件
 
 当本地测试稳定后，可以逐步扩展：
 
-- SQLite 迁移到 PostgreSQL。
-- Node.js 直接运行迁移到 Docker Compose。
-- 增加 Nginx 或 Caddy。
+- Docker Compose 作为主要部署方式，统一 web、server、SQLite 数据卷和可选反向代理。
+- SQLite 继续通过 Docker volume 或宿主机目录持久化；长期运行压力增加后再迁移到 PostgreSQL。
+- 按公网访问需要在 Compose 中增加 Nginx 或 Caddy。
 - 增加 HTTPS。
 - 增加域名。
 - 增加对局记录和回放。
@@ -340,4 +340,3 @@ SQLite 数据库文件
 - 玩家账号只能由管理员创建。
 - 初期不做高并发架构。
 - 初期不做公网正式部署架构。
-
