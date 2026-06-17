@@ -25,7 +25,7 @@ const seatNames = ["东", "南", "西", "北"];
 
 export function getLobbySeatText(seat: GameLobbySeat): string {
   if (seat.isBot) {
-    return "Bot";
+    return seat.username ?? "Bot";
   }
 
   return seat.username ?? "空座";
@@ -47,6 +47,10 @@ export function canEnterLobbyGame(room: GameLobbyRoom | null): boolean {
 
 export function canLeaveLobbyRoom(room: GameLobbyRoom | null): boolean {
   return room?.status === "waiting" || room?.status === "ended";
+}
+
+export function canCreateOrJoinLobbyRoom(room: GameLobbyRoom | null): boolean {
+  return !room || room.status === "ended";
 }
 
 export function getLobbyRoomStatusText(room: GameLobbyRoom | null): string {
@@ -80,6 +84,7 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
   const canStartRoom = room ? canStartLobbyRoom(room, props.user.id) : false;
   const canEnterGame = canEnterLobbyGame(room);
   const canLeaveRoom = canLeaveLobbyRoom(room);
+  const canCreateOrJoinRoom = canCreateOrJoinLobbyRoom(room);
 
   function handleRoomError(error: unknown): void {
     if (isUnauthorizedError(error)) {
@@ -294,7 +299,7 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
             </button>
             <button
               className={styles.secondaryButton}
-              disabled={isRoomBusy}
+              disabled={isRoomBusy || !canCreateOrJoinRoom}
               onClick={() => void handleCreateRoom()}
               type="button"
             >
@@ -307,7 +312,11 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
                 placeholder="输入房间号"
                 value={joinRoomId}
               />
-              <button className={styles.secondaryButton} disabled={isRoomBusy} type="submit">
+              <button
+                className={styles.secondaryButton}
+                disabled={isRoomBusy || !canCreateOrJoinRoom}
+                type="submit"
+              >
                 加入房间
               </button>
             </form>
@@ -367,6 +376,16 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
                 >
                   退出房间
                 </button>
+                {room.status === "ended" ? (
+                  <button
+                    className={styles.primaryButton}
+                    disabled={isRoomBusy}
+                    onClick={() => void handleCreateRoom()}
+                    type="button"
+                  >
+                    再开一局
+                  </button>
+                ) : null}
               </div>
             </>
           ) : (

@@ -27,6 +27,26 @@ export function canRestartGame(phase: GamePhase): boolean {
   return phase === "ended";
 }
 
+export function getReturnToLobbyConfirmation(phase: GamePhase, roomId: string): string | null {
+  if (phase === "ended") {
+    return null;
+  }
+
+  return roomId.startsWith("quick-")
+    ? "返回大厅将直接结束当前单人牌局，确认返回？"
+    : "返回大厅后将由机器人接手你的座位继续牌局，确认返回？";
+}
+
+export function getSignOutDuringGameConfirmation(phase: GamePhase, roomId: string): string | null {
+  if (phase === "ended") {
+    return null;
+  }
+
+  return roomId.startsWith("quick-")
+    ? "退出登录将直接结束当前单人牌局，确认退出？"
+    : "退出登录后将由机器人接手你的座位继续牌局，确认退出？";
+}
+
 export function getRecentGameEvents(events: GameEventMessage[], limit = 5): GameEventMessage[] {
   return events.slice(-limit).reverse();
 }
@@ -73,6 +93,7 @@ export function GamePage(props: GamePageProps): JSX.Element {
   const recentEvents = getRecentGameEvents(view.eventMessages);
   const resultSummary = view.result ? getGameResultSummary(view.result) : null;
   const latestRoomIdRef = useRef(view.roomId);
+  const pendingSignOutRef = useRef(false);
 
   useEffect(() => {
     latestRoomIdRef.current = view.roomId;
@@ -100,6 +121,15 @@ export function GamePage(props: GamePageProps): JSX.Element {
     const handleEnded: Parameters<typeof socket.on<"game:ended">>[1] = () => {
       setStatus("ended");
     };
+    const handleLeft: Parameters<typeof socket.on<"game:left">>[1] = () => {
+      if (pendingSignOutRef.current) {
+        pendingSignOutRef.current = false;
+        void signOut();
+        return;
+      }
+
+      replaceRoute(APP_ROUTES.lobby);
+    };
     const handleTimeout: Parameters<typeof socket.on<"game:timeout">>[1] = (payload) => {
       setErrorMessage(payload.message);
     };
@@ -122,6 +152,7 @@ export function GamePage(props: GamePageProps): JSX.Element {
     socket.on("game:event", handleEvent);
     socket.on("game:timeout", handleTimeout);
     socket.on("game:ended", handleEnded);
+    socket.on("game:left", handleLeft);
     socket.connect();
     setStatus("joining");
 
@@ -132,8 +163,9 @@ export function GamePage(props: GamePageProps): JSX.Element {
       socket.off("game:event", handleEvent);
       socket.off("game:timeout", handleTimeout);
       socket.off("game:ended", handleEnded);
+      socket.off("game:left", handleLeft);
     };
-  }, [setErrorMessage, setStatus, setView, socket]);
+  }, [setErrorMessage, setStatus, setView, signOut, socket]);
 
   function handleAction(action: Action): void {
     if (!socket || action.type === "discard" && !action.tileId) {
@@ -155,6 +187,45 @@ export function GamePage(props: GamePageProps): JSX.Element {
     socket.emit("game:join", {});
   }
 
+  function handleReturnToLobby(): void {
+    const confirmation = getReturnToLobbyConfirmation(view.phase, view.roomId);
+    if (!confirmation) {
+      replaceRoute(APP_ROUTES.lobby);
+      return;
+    }
+
+    if (!window.confirm(confirmation)) {
+      return;
+    }
+
+    if (!socket) {
+      setErrorMessage("Socket 未连接");
+      return;
+    }
+
+    socket.emit("game:leave");
+  }
+
+  function handleSignOut(): void {
+    const confirmation = getSignOutDuringGameConfirmation(view.phase, view.roomId);
+    if (!confirmation) {
+      void signOut();
+      return;
+    }
+
+    if (!window.confirm(confirmation)) {
+      return;
+    }
+
+    if (!socket) {
+      setErrorMessage("Socket 未连接");
+      return;
+    }
+
+    pendingSignOutRef.current = true;
+    socket.emit("game:leave");
+  }
+
   return (
     <main className={styles.gameShell}>
       <header className={styles.lobbyHeader}>
@@ -167,12 +238,12 @@ export function GamePage(props: GamePageProps): JSX.Element {
           <span>{props.user.username}</span>
           <button
             className={styles.secondaryButton}
-            onClick={() => replaceRoute(APP_ROUTES.lobby)}
+            onClick={handleReturnToLobby}
             type="button"
           >
             返回大厅
           </button>
-          <button className={styles.secondaryButton} onClick={() => void signOut()} type="button">
+          <button className={styles.secondaryButton} onClick={handleSignOut} type="button">
             退出
           </button>
         </div>

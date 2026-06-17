@@ -34,6 +34,13 @@ export type GameRoomService = ReturnType<typeof createGameRoomService>;
 export type CreateGameRoomServiceOptions = {
   gameRecordRepository?: GameRecordRepository;
 };
+type LeaveActiveGameResult =
+  | {
+      ended: boolean;
+      mode: "quick-ended" | "bot-takeover" | "ended-no-humans" | "already-ended";
+      room: GameRoom;
+    }
+  | { error: string };
 
 const maxRoomEvents = 20;
 let nextRoomNumber = 1;
@@ -187,6 +194,19 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
         state: room.state
       })
     );
+  }
+
+  function finishRoomAsDraw(room: GameRoom, eventText: string): void {
+    if (room.state.phase === "ended") {
+      return;
+    }
+
+    room.state.phase = "ended";
+    room.state.endReason = "draw";
+    delete room.state.pendingDiscard;
+    recordRoomEvent(room, eventText);
+    recordRoomEvent(room, describeGameEnd(room.state));
+    recordGameEnd(room);
   }
 
   function createQuickRoom(user: AuthUser): GameRoom {
@@ -393,6 +413,48 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     return true;
   }
 
+  function leaveActiveGame(user: AuthUser): LeaveActiveGameResult {
+    const room = getRoomForUser(user);
+    if (!room) {
+      return { error: "No active game room" };
+    }
+
+    const seatIndex = room.humanSeatIndexByUserId.get(user.id);
+    if (seatIndex === undefined) {
+      return { error: "Player is not seated in this game" };
+    }
+
+    activeRoomIdByUserId.delete(user.id);
+
+    if (room.state.phase === "ended") {
+      room.humanSeatIndexByUserId.delete(user.id);
+      return { ended: true, mode: "already-ended", room };
+    }
+
+    if (room.id.startsWith("quick-")) {
+      room.humanSeatIndexByUserId.delete(user.id);
+      finishRoomAsDraw(room, `${user.username} 返回大厅，单人牌局结束`);
+      return { ended: true, mode: "quick-ended", room };
+    }
+
+    room.humanSeatIndexByUserId.delete(user.id);
+    const player = room.state.players[seatIndex];
+    if (!player) {
+      return { error: "Player seat is not available" };
+    }
+
+    player.isBot = true;
+    player.username = `${user.username}托管Bot`;
+    recordRoomEvent(room, `${user.username} 返回大厅，${player.username} 接手牌局`);
+
+    if (room.humanSeatIndexByUserId.size === 0) {
+      finishRoomAsDraw(room, "房间内没有真人玩家，牌局结束");
+      return { ended: true, mode: "ended-no-humans", room };
+    }
+
+    return { ended: false, mode: "bot-takeover", room };
+  }
+
   async function waitForPersistentWrites(roomId?: string): Promise<void> {
     if (roomId) {
       await persistentWriteQueueByRoomId.get(roomId);
@@ -411,6 +473,7 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     getPlayerView,
     getRoom,
     getRoomForUser,
+    leaveActiveGame,
     waitForPersistentWrites
   };
 }

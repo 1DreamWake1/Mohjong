@@ -24,6 +24,10 @@ export type FinishGameLobbyRoomResult =
   | { ok: true; room: GameLobbyRoom }
   | { ok: false; reason: "not_found" };
 
+export type ReplaceLobbyPlayerWithBotResult =
+  | { ok: true; room: GameLobbyRoom }
+  | { ok: false; reason: "not_found" | "not_playing" };
+
 let nextLobbyRoomNumber = 1;
 
 function createLobbyRoomId(): string {
@@ -87,6 +91,10 @@ function findNextHumanSeat(room: MutableLobbyRoom): GameLobbySeat | undefined {
   return room.seats.find((seat) => seat.userId !== undefined && !seat.isBot);
 }
 
+function hasHumanSeats(room: MutableLobbyRoom): boolean {
+  return room.seats.some((seat) => seat.userId !== undefined && !seat.isBot);
+}
+
 export function createGameLobbyService() {
   const roomsById = new Map<string, MutableLobbyRoom>();
   const activeRoomIdByUserId = new Map<number, string>();
@@ -116,7 +124,7 @@ export function createGameLobbyService() {
 
   function createRoom(user: AuthUser): GameLobbyRoom {
     const activeRoom = getCurrentRoom(user);
-    if (activeRoom && activeRoom.status === "waiting") {
+    if (activeRoom && activeRoom.status !== "ended") {
       return activeRoom;
     }
     if (activeRoom?.status === "ended") {
@@ -278,6 +286,41 @@ export function createGameLobbyService() {
     return { ok: true, room: cloneRoom(room) };
   }
 
+  function replacePlayerWithBot(
+    user: AuthUser,
+    roomId: string
+  ): ReplaceLobbyPlayerWithBotResult {
+    const room = roomsById.get(roomId);
+    const seat = room ? findUserSeat(room, user.id) : undefined;
+    if (!room || !seat) {
+      activeRoomIdByUserId.delete(user.id);
+      return { ok: false, reason: "not_found" };
+    }
+    if (room.status !== "playing") {
+      return { ok: false, reason: "not_playing" };
+    }
+
+    activeRoomIdByUserId.delete(user.id);
+    delete seat.userId;
+    seat.isBot = true;
+    seat.isReady = true;
+    seat.username = `${user.username}托管Bot`;
+
+    if (room.ownerUserId === user.id) {
+      const nextOwnerSeat = findNextHumanSeat(room);
+      if (nextOwnerSeat?.userId) {
+        room.ownerUserId = nextOwnerSeat.userId;
+      }
+    }
+
+    if (!hasHumanSeats(room)) {
+      room.status = "ended";
+    }
+    room.updatedAt = new Date().toISOString();
+    notifyRoomUpdated(room);
+    return { ok: true, room: cloneRoom(room) };
+  }
+
   function subscribeRoomUpdates(listener: GameLobbyRoomListener): () => void {
     roomListeners.add(listener);
     return () => {
@@ -292,6 +335,7 @@ export function createGameLobbyService() {
     getCurrentRoom,
     joinRoom,
     leaveRoom,
+    replacePlayerWithBot,
     setReady,
     startRoom,
     subscribeRoomUpdates

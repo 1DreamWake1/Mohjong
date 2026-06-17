@@ -33,6 +33,7 @@ describe("socketServer", () => {
 
   it("allows players to use game socket operations", () => {
     expect(getGameSocketAccessError(player, "join")).toBeNull();
+    expect(getGameSocketAccessError(player, "leave")).toBeNull();
     expect(getGameSocketAccessError(player, "start")).toBeNull();
     expect(getGameSocketAccessError(player, "action")).toBeNull();
     expect(getGameSocketAccessError(player, "sync")).toBeNull();
@@ -41,6 +42,7 @@ describe("socketServer", () => {
 
   it("rejects administrators from player-only game socket operations", () => {
     expect(getGameSocketAccessError(admin, "join")).toBe("Only players can join games");
+    expect(getGameSocketAccessError(admin, "leave")).toBe("Only players can leave games");
     expect(getGameSocketAccessError(admin, "start")).toBe("Only players can start games");
     expect(getGameSocketAccessError(admin, "action")).toBe("Only players can act in games");
     expect(getGameSocketAccessError(admin, "sync")).toBe("Only players can sync games");

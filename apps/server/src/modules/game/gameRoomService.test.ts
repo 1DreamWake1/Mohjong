@@ -238,6 +238,100 @@ describe("gameRoomService", () => {
     expect(service.getRoomForUser(secondPlayer, room.id)).toBeNull();
   });
 
+  it("ends a quick room when the human player returns to lobby", async () => {
+    const gameRecordRepository = createMemoryGameRecordRepository();
+    const service = createGameRoomService({ gameRecordRepository });
+    const room = service.getOrCreateQuickRoom(player);
+
+    const result = service.leaveActiveGame(player);
+
+    expect(result).toMatchObject({
+      ended: true,
+      mode: "quick-ended",
+      room: {
+        id: room.id,
+        state: {
+          endReason: "draw",
+          phase: "ended"
+        }
+      }
+    });
+    expect(service.getRoomForUser(player)).toBeNull();
+
+    await service.waitForPersistentWrites(room.id);
+    expect(gameRecordRepository.getRecord(room.id)).toMatchObject({
+      endReason: "draw",
+      events: expect.arrayContaining([
+        expect.objectContaining({ text: "player-a 返回大厅，单人牌局结束" }),
+        expect.objectContaining({ text: "牌局流局" })
+      ]),
+      status: "ended"
+    });
+  });
+
+  it("replaces a leaving multiplayer human with a bot", () => {
+    const service = createGameRoomService();
+    const room = service.createRoomFromLobby({
+      createdAt: "2026-06-11T10:00:00.000Z",
+      ownerUserId: player.id,
+      roomId: "room-0102",
+      seats: [
+        { isBot: false, isReady: true, seatIndex: 0, userId: player.id, username: player.username },
+        { isBot: false, isReady: true, seatIndex: 1, userId: secondPlayer.id, username: secondPlayer.username },
+        { isBot: true, isReady: true, seatIndex: 2, username: "玩家Bot2" },
+        { isBot: true, isReady: true, seatIndex: 3, username: "玩家Bot3" }
+      ],
+      status: "playing",
+      updatedAt: "2026-06-11T10:00:00.000Z"
+    });
+
+    const result = service.leaveActiveGame(player);
+
+    expect(result).toMatchObject({
+      ended: false,
+      mode: "bot-takeover",
+      room: {
+        id: room.id
+      }
+    });
+    expect(room.state.players[0]).toMatchObject({
+      isBot: true,
+      username: "player-a托管Bot"
+    });
+    expect(service.getRoomForUser(player, room.id)).toBeNull();
+    expect(service.getRoomForUser(secondPlayer, room.id)).toBe(room);
+  });
+
+  it("ends multiplayer games after the last human returns to lobby", () => {
+    const service = createGameRoomService();
+    const room = service.createRoomFromLobby({
+      createdAt: "2026-06-11T10:00:00.000Z",
+      ownerUserId: player.id,
+      roomId: "room-0103",
+      seats: [
+        { isBot: false, isReady: true, seatIndex: 0, userId: player.id, username: player.username },
+        { isBot: true, isReady: true, seatIndex: 1, username: "玩家Bot1" },
+        { isBot: true, isReady: true, seatIndex: 2, username: "玩家Bot2" },
+        { isBot: true, isReady: true, seatIndex: 3, username: "玩家Bot3" }
+      ],
+      status: "playing",
+      updatedAt: "2026-06-11T10:00:00.000Z"
+    });
+
+    expect(service.leaveActiveGame(player)).toMatchObject({
+      ended: true,
+      mode: "ended-no-humans",
+      room: {
+        state: {
+          endReason: "draw",
+          phase: "ended"
+        }
+      }
+    });
+    expect(room.state.players[0]?.isBot).toBe(true);
+    expect(service.getRoomForUser(player, room.id)).toBeNull();
+  });
+
   it("includes draw result details in the player view", () => {
     const service = createGameRoomService();
     const room = service.getOrCreateQuickRoom(player);

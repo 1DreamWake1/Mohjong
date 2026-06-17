@@ -4,7 +4,9 @@ import {
   canRestartGame,
   getGameConnectRequest,
   getGameResultSummary,
-  getRecentGameEvents
+  getReturnToLobbyConfirmation,
+  getRecentGameEvents,
+  getSignOutDuringGameConfirmation
 } from "./GamePage.js";
 
 vi.mock("../stores/authStore.js", () => ({
@@ -47,6 +49,26 @@ describe("GamePage", () => {
     expect(canRestartGame("ended")).toBe(true);
     expect(canRestartGame("playing")).toBe(false);
     expect(canRestartGame("waiting")).toBe(false);
+  });
+
+  it("describes return-to-lobby consequences before leaving active games", () => {
+    expect(getReturnToLobbyConfirmation("playing", "quick-0001")).toBe(
+      "返回大厅将直接结束当前单人牌局，确认返回？"
+    );
+    expect(getReturnToLobbyConfirmation("playing", "room-0001")).toBe(
+      "返回大厅后将由机器人接手你的座位继续牌局，确认返回？"
+    );
+    expect(getReturnToLobbyConfirmation("ended", "room-0001")).toBeNull();
+  });
+
+  it("describes sign-out consequences before leaving active games", () => {
+    expect(getSignOutDuringGameConfirmation("playing", "quick-0001")).toBe(
+      "退出登录将直接结束当前单人牌局，确认退出？"
+    );
+    expect(getSignOutDuringGameConfirmation("playing", "room-0001")).toBe(
+      "退出登录后将由机器人接手你的座位继续牌局，确认退出？"
+    );
+    expect(getSignOutDuringGameConfirmation("ended", "room-0001")).toBeNull();
   });
 
   it("shows the newest game events first with a bounded list", () => {

@@ -12,12 +12,13 @@ type SocketData = {
   user: AuthUser;
 };
 
-type GameSocketOperation = "action" | "join" | "lobby" | "start" | "sync";
+type GameSocketOperation = "action" | "join" | "leave" | "lobby" | "start" | "sync";
 type TimeoutHandle = ReturnType<typeof setTimeout>;
 
 const playerOnlyErrors: Record<GameSocketOperation, string> = {
   action: "Only players can act in games",
   join: "Only players can join games",
+  leave: "Only players can leave games",
   lobby: "Only players can watch lobby rooms",
   start: "Only players can start games",
   sync: "Only players can sync games"
@@ -273,6 +274,19 @@ export function registerGameSocketServer(input: {
       });
     }
 
+    function untrackRoomSocket(roomId: string): void {
+      socketRoomIds.delete(roomId);
+      const roomSockets = activeSocketsByRoomId.get(roomId);
+      if (!roomSockets) {
+        return;
+      }
+
+      roomSockets.delete(gameSocket);
+      if (roomSockets.size === 0) {
+        activeSocketsByRoomId.delete(roomId);
+      }
+    }
+
     gameSocket.on("disconnect", () => {
       for (const roomId of socketRoomIds) {
         const roomSockets = activeSocketsByRoomId.get(roomId);
@@ -391,6 +405,42 @@ export function registerGameSocketServer(input: {
           sockets: roomSockets
         });
         emitLatestRoomEventToSockets(result.room, roomSockets);
+      }
+      scheduleRoomBots(result.room.id);
+    });
+
+    gameSocket.on("game:leave", () => {
+      const accessError = getGameSocketAccessError(user, "leave");
+      if (accessError) {
+        gameSocket.emit("game:error", { message: accessError });
+        return;
+      }
+
+      const result = gameRoomService.leaveActiveGame(user);
+      if ("error" in result) {
+        gameSocket.emit("game:error", { message: result.error });
+        return;
+      }
+
+      gameLobbyService.replacePlayerWithBot(user, result.room.id);
+      if (result.ended) {
+        syncLobbyRoomEnd(gameLobbyService, result.room);
+      }
+
+      untrackRoomSocket(result.room.id);
+      gameSocket.emit("game:left", {
+        mode: result.mode,
+        roomId: result.room.id
+      });
+
+      const roomSockets = activeSocketsByRoomId.get(result.room.id);
+      if (roomSockets) {
+        emitLatestRoomEventToSockets(result.room, roomSockets);
+        emitRoomStateToSockets({
+          gameRoomService,
+          roomId: result.room.id,
+          sockets: roomSockets
+        });
       }
       scheduleRoomBots(result.room.id);
     });

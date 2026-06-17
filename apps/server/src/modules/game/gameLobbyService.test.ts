@@ -180,6 +180,19 @@ describe("gameLobbyService", () => {
     expect(service.getCurrentRoom(player)?.roomId).toBe(nextRoom.roomId);
   });
 
+  it("keeps players in active playing rooms from creating another room", () => {
+    const service = createGameLobbyService();
+    const player = createPlayer(1, "player1");
+    const room = service.createRoom(player);
+    service.startRoom(player);
+
+    const currentRoom = service.createRoom(player);
+
+    expect(currentRoom.roomId).toBe(room.roomId);
+    expect(currentRoom.status).toBe("playing");
+    expect(service.getCurrentRoom(player)?.roomId).toBe(room.roomId);
+  });
+
   it("keeps players in active rooms from joining another room", () => {
     const service = createGameLobbyService();
     const player = createPlayer(1, "player1");
@@ -281,5 +294,53 @@ describe("gameLobbyService", () => {
       status: "ended"
     });
     expect(updates).toContain(`${room.roomId}:ended`);
+  });
+
+  it("replaces a playing room player with a bot", () => {
+    const service = createGameLobbyService();
+    const owner = createPlayer(1, "player1");
+    const joiner = createPlayer(2, "player2");
+    const room = service.createRoom(owner);
+    service.joinRoom(joiner, room.roomId);
+    service.startRoom(owner);
+
+    expect(service.replacePlayerWithBot(owner, room.roomId)).toMatchObject({
+      ok: true,
+      room: {
+        ownerUserId: joiner.id,
+        status: "playing",
+        seats: expect.arrayContaining([
+          expect.objectContaining({
+            isBot: true,
+            seatIndex: 0,
+            username: "player1托管Bot"
+          })
+        ])
+      }
+    });
+    expect(service.getCurrentRoom(owner)).toBeNull();
+    expect(service.getCurrentRoom(joiner)?.ownerUserId).toBe(joiner.id);
+  });
+
+  it("ends a playing room when no human players remain", () => {
+    const service = createGameLobbyService();
+    const owner = createPlayer(1, "player1");
+    const room = service.createRoom(owner);
+    service.startRoom(owner);
+
+    expect(service.replacePlayerWithBot(owner, room.roomId)).toMatchObject({
+      ok: true,
+      room: {
+        status: "ended",
+        seats: expect.arrayContaining([
+          expect.objectContaining({
+            isBot: true,
+            seatIndex: 0,
+            username: "player1托管Bot"
+          })
+        ])
+      }
+    });
+    expect(service.getCurrentRoom(owner)).toBeNull();
   });
 });

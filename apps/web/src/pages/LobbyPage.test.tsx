@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  canCreateOrJoinLobbyRoom,
   canEnterLobbyGame,
   canLeaveLobbyRoom,
   canStartLobbyRoom,
@@ -47,6 +48,14 @@ describe("LobbyPage", () => {
         username: "player1"
       })
     ).toBe("player1");
+    expect(
+      getLobbySeatText({
+        isBot: true,
+        isReady: true,
+        seatIndex: 1,
+        username: "player1托管Bot"
+      })
+    ).toBe("player1托管Bot");
     expect(
       getLobbySeatText({
         isBot: true,
@@ -133,6 +142,27 @@ describe("LobbyPage", () => {
     expect(canLeaveLobbyRoom({ ...room, status: "playing" })).toBe(false);
     expect(canLeaveLobbyRoom({ ...room, status: "ended" })).toBe(true);
     expect(canLeaveLobbyRoom(null)).toBe(false);
+  });
+
+  it("allows creating or joining only without an active waiting or playing room", () => {
+    const room = {
+      createdAt: "2026-06-11T00:00:00.000Z",
+      ownerUserId: 1,
+      roomId: "room-0001",
+      seats: [
+        { isBot: false, isReady: true, seatIndex: 0, userId: 1, username: "player1" },
+        { isBot: false, isReady: false, seatIndex: 1 },
+        { isBot: false, isReady: false, seatIndex: 2 },
+        { isBot: false, isReady: false, seatIndex: 3 }
+      ],
+      status: "waiting" as const,
+      updatedAt: "2026-06-11T00:00:00.000Z"
+    };
+
+    expect(canCreateOrJoinLobbyRoom(null)).toBe(true);
+    expect(canCreateOrJoinLobbyRoom(room)).toBe(false);
+    expect(canCreateOrJoinLobbyRoom({ ...room, status: "playing" })).toBe(false);
+    expect(canCreateOrJoinLobbyRoom({ ...room, status: "ended" })).toBe(true);
   });
 
   it("formats lobby room status text", () => {
