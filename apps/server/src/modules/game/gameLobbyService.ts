@@ -1,4 +1,7 @@
 import type { AuthUser, GameLobbyRoom, GameLobbySeat } from "@mahjong/shared";
+import { getRulePreset, simpleRuleConfig, type RulePresetName } from "mahjong-core";
+
+import type { GameRecoverySnapshot } from "./gameRecordRepository.js";
 
 type MutableLobbyRoom = GameLobbyRoom;
 
@@ -31,6 +34,12 @@ export type ReplaceLobbyPlayerWithBotResult =
 export type ResetGameLobbyRoomResult =
   | { ok: true; room: GameLobbyRoom }
   | { ok: false; reason: "not_found" | "forbidden" | "not_ended" };
+
+export type CleanupLobbyRoomsOptions = {
+  endedRoomTtlMs: number;
+  nowMs?: number;
+  waitingRoomTtlMs: number;
+};
 
 let nextLobbyRoomNumber = 1;
 
@@ -111,6 +120,37 @@ export function createGameLobbyService() {
     }
   }
 
+  function cleanupExpiredRooms(options: CleanupLobbyRoomsOptions): string[] {
+    const nowMs = options.nowMs ?? Date.now();
+    const removedRoomIds: string[] = [];
+
+    for (const room of roomsById.values()) {
+      if (room.status === "playing") {
+        continue;
+      }
+
+      const ttlMs = room.status === "ended" ? options.endedRoomTtlMs : options.waitingRoomTtlMs;
+      const updatedAtMs = Date.parse(room.updatedAt);
+      if (!Number.isFinite(updatedAtMs) || nowMs - updatedAtMs < ttlMs) {
+        continue;
+      }
+
+      for (const seat of room.seats) {
+        if (seat.userId !== undefined && activeRoomIdByUserId.get(seat.userId) === room.roomId) {
+          activeRoomIdByUserId.delete(seat.userId);
+        }
+        clearSeat(seat);
+      }
+      room.status = "ended";
+      room.updatedAt = new Date(nowMs).toISOString();
+      notifyRoomUpdated(room);
+      roomsById.delete(room.roomId);
+      removedRoomIds.push(room.roomId);
+    }
+
+    return removedRoomIds;
+  }
+
   function getCurrentRoom(user: AuthUser): GameLobbyRoom | null {
     const roomId = activeRoomIdByUserId.get(user.id);
     if (!roomId) {
@@ -126,7 +166,51 @@ export function createGameLobbyService() {
     return cloneRoom(room);
   }
 
-  function createRoom(user: AuthUser): GameLobbyRoom {
+  function restorePlayingRoom(snapshot: GameRecoverySnapshot): GameLobbyRoom | null {
+    if (!snapshot.lobbyRoomId || roomsById.has(snapshot.lobbyRoomId)) {
+      return null;
+    }
+
+    const userIdBySeatIndex = new Map(
+      snapshot.humanSeats.map((seat) => [seat.seatIndex, seat.userId])
+    );
+    const humanUserIds = [...userIdBySeatIndex.values()];
+    const ownerUserId = humanUserIds.includes(snapshot.playerUserId)
+      ? snapshot.playerUserId
+      : humanUserIds[0];
+    if (ownerUserId === undefined) {
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    const room: MutableLobbyRoom = {
+      createdAt: now,
+      ownerUserId,
+      ruleName: snapshot.state.rules.name as RulePresetName,
+      ruleVersion: snapshot.state.rules.version,
+      roomId: snapshot.lobbyRoomId,
+      seats: snapshot.state.players.map((player) => {
+        const userId = userIdBySeatIndex.get(player.seatIndex);
+        return {
+          isBot: userId === undefined,
+          isReady: true,
+          seatIndex: player.seatIndex,
+          ...(userId === undefined ? {} : { userId }),
+          username: player.username
+        };
+      }),
+      status: "playing",
+      updatedAt: now
+    };
+    roomsById.set(room.roomId, room);
+    for (const userId of humanUserIds) {
+      activeRoomIdByUserId.set(userId, room.roomId);
+    }
+    notifyRoomUpdated(room);
+    return cloneRoom(room);
+  }
+
+  function createRoom(user: AuthUser, ruleName: RulePresetName = "simple"): GameLobbyRoom {
     const activeRoom = getCurrentRoom(user);
     if (activeRoom && activeRoom.status !== "ended") {
       return activeRoom;
@@ -136,9 +220,12 @@ export function createGameLobbyService() {
     }
 
     const now = new Date().toISOString();
+    const rules = getRulePreset(ruleName) ?? simpleRuleConfig;
     const room: MutableLobbyRoom = {
       createdAt: now,
       ownerUserId: user.id,
+      ruleName: rules.name as RulePresetName,
+      ruleVersion: rules.version,
       roomId: createLobbyRoomId(),
       seats: createEmptySeats(user),
       status: "waiting",
@@ -354,6 +441,7 @@ export function createGameLobbyService() {
   }
 
   return {
+    cleanupExpiredRooms,
     clearEndedRoomMembership,
     createRoom,
     finishRoom,
@@ -362,6 +450,7 @@ export function createGameLobbyService() {
     leaveRoom,
     replacePlayerWithBot,
     resetRoomForRematch,
+    restorePlayingRoom,
     setReady,
     startRoom,
     subscribeRoomUpdates

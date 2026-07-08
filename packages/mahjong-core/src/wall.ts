@@ -1,4 +1,4 @@
-import { standardRuleConfig, type RuleConfig } from "./rules.js";
+import { getRuleTileSet, standardRuleConfig, type RuleConfig } from "./rules.js";
 import { createTile, tileDefinitions, type Tile } from "./tiles.js";
 
 export type RandomSource = () => number;
@@ -13,12 +13,10 @@ export function createSeededRandom(seed: number): RandomSource {
 }
 
 export function createWall(rules: RuleConfig = standardRuleConfig): Tile[] {
+  const tileSet = getRuleTileSet(rules);
   return tileDefinitions.filter((definition) => {
-    if (definition.suit === "winds") {
-      return rules.useWinds;
-    }
-    if (definition.suit === "dragons") {
-      return rules.useDragons;
+    if (definition.suit === "winds" || definition.suit === "dragons") {
+      return tileSet === "standard";
     }
 
     return true;

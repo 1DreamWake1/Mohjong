@@ -2,6 +2,7 @@ import type {
   AuthUser,
   CreatePlayerRequest,
   CreateGameRoomResponse,
+  CreateGameRoomRequest,
   GetGameHistoryResponse,
   GetCurrentGameRoomResponse,
   GameHistoryDetail,
@@ -144,8 +145,12 @@ export async function getCurrentGameRoom(token: string): Promise<GameLobbyRoom |
   return response.room;
 }
 
-export async function createGameRoom(token: string): Promise<GameLobbyRoom> {
+export async function createGameRoom(
+  token: string,
+  input: CreateGameRoomRequest = {}
+): Promise<GameLobbyRoom> {
   const response = await request<CreateGameRoomResponse>("/rooms", {
+    body: JSON.stringify(input),
     method: "POST",
     token
   });

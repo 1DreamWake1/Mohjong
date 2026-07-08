@@ -1,4 +1,5 @@
 import type { AuthUser } from "@mahjong/shared";
+import { createInitialGame, simpleRuleConfig } from "mahjong-core";
 import { describe, expect, it } from "vitest";
 
 import { createGameLobbyService } from "./gameLobbyService.js";
@@ -20,6 +21,8 @@ describe("gameLobbyService", () => {
 
     expect(room).toMatchObject({
       ownerUserId: 1,
+      ruleName: "simple",
+      ruleVersion: 1,
       roomId: "room-0001",
       status: "waiting"
     });
@@ -29,6 +32,15 @@ describe("gameLobbyService", () => {
       seatIndex: 0,
       userId: 1,
       username: "player1"
+    });
+  });
+
+  it("stores the selected rule preset on a new room", () => {
+    const service = createGameLobbyService();
+
+    expect(service.createRoom(createPlayer(1, "player1"), "standard")).toMatchObject({
+      ruleName: "standard",
+      ruleVersion: 1
     });
   });
 
@@ -370,5 +382,89 @@ describe("gameLobbyService", () => {
         ]
       }
     });
+  });
+
+  it("restores a playing lobby room from a recovery snapshot", () => {
+    const service = createGameLobbyService();
+    const owner = createPlayer(1, "player1");
+    const state = createInitialGame({
+      players: [
+        { isBot: false, username: owner.username },
+        { isBot: true, username: "玩家Bot1" },
+        { isBot: true, username: "玩家Bot2" },
+        { isBot: true, username: "玩家Bot3" }
+      ],
+      rules: simpleRuleConfig,
+      seed: 1
+    });
+
+    expect(
+      service.restorePlayingRoom({
+        events: [],
+        humanSeatIndex: 0,
+        humanSeats: [{ seatIndex: 0, userId: owner.id }],
+        lobbyRoomId: "room-restored",
+        playerUserId: owner.id,
+        roomId: "room-restored-round-0001",
+        state,
+        version: 1
+      })
+    ).toMatchObject({
+      ownerUserId: owner.id,
+      roomId: "room-restored",
+      seats: [
+        expect.objectContaining({ isBot: false, userId: owner.id }),
+        expect.objectContaining({ isBot: true }),
+        expect.objectContaining({ isBot: true }),
+        expect.objectContaining({ isBot: true })
+      ],
+      status: "playing"
+    });
+    expect(service.getCurrentRoom(owner)?.roomId).toBe("room-restored");
+  });
+
+  it("cleans up expired waiting and ended rooms but keeps playing rooms", () => {
+    const waitingService = createGameLobbyService();
+    const waitingPlayer = createPlayer(20, "waiting-player");
+    const waitingRoom = waitingService.createRoom(waitingPlayer);
+    const waitingNowMs = Date.parse(waitingRoom.updatedAt) + 1_001;
+    expect(
+      waitingService.cleanupExpiredRooms({
+        endedRoomTtlMs: 500,
+        nowMs: waitingNowMs,
+        waitingRoomTtlMs: 1_000
+      })
+    ).toEqual([waitingRoom.roomId]);
+    expect(waitingService.getCurrentRoom(waitingPlayer)).toBeNull();
+
+    const endedService = createGameLobbyService();
+    const endedPlayer = createPlayer(21, "ended-player");
+    const endedRoom = endedService.createRoom(endedPlayer);
+    endedService.startRoom(endedPlayer);
+    const finishedRoom = endedService.finishRoom(endedRoom.roomId);
+    if (!finishedRoom.ok) {
+      throw new Error("Expected room to finish");
+    }
+    expect(
+      endedService.cleanupExpiredRooms({
+        endedRoomTtlMs: 1_000,
+        nowMs: Date.parse(finishedRoom.room.updatedAt) + 1_001,
+        waitingRoomTtlMs: 5_000
+      })
+    ).toEqual([endedRoom.roomId]);
+    expect(endedService.getCurrentRoom(endedPlayer)).toBeNull();
+
+    const playingService = createGameLobbyService();
+    const playingPlayer = createPlayer(22, "playing-player");
+    const playingRoom = playingService.createRoom(playingPlayer);
+    playingService.startRoom(playingPlayer);
+    expect(
+      playingService.cleanupExpiredRooms({
+        endedRoomTtlMs: 1,
+        nowMs: Date.parse(playingRoom.updatedAt) + 10_000,
+        waitingRoomTtlMs: 1
+      })
+    ).toEqual([]);
+    expect(playingService.getCurrentRoom(playingPlayer)?.status).toBe("playing");
   });
 });

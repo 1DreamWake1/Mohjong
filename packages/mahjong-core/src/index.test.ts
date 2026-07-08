@@ -10,9 +10,11 @@ import {
   createPlayerView,
   createTile,
   createWall,
+  getRulePreset,
   getLegalActions,
   identifyFans,
   runBasicBotGame,
+  shouldEndOnEmptyWall,
   simpleRuleConfig,
   standardRuleConfig,
   tileDefinitions
@@ -20,6 +22,25 @@ import {
 import type { Tile, TileCode } from "./index.js";
 
 describe("mahjong-core tiles and wall", () => {
+  it("exposes stable versioned rule presets", () => {
+    expect(simpleRuleConfig).toMatchObject({ name: "simple", version: 1 });
+    expect(standardRuleConfig).toMatchObject({ name: "standard", version: 1 });
+    expect(getRulePreset("simple")).toBe(simpleRuleConfig);
+    expect(getRulePreset("standard")).toBe(standardRuleConfig);
+    expect(getRulePreset("unknown")).toBeUndefined();
+    expect(simpleRuleConfig).toMatchObject({
+      actions: { chi: false, gang: true, peng: true },
+      drawCondition: "wallEmpty",
+      tileSet: "suited",
+      winningPatterns: { sevenPairs: true }
+    });
+    expect(standardRuleConfig.tileSet).toBe("standard");
+    expect(shouldEndOnEmptyWall(simpleRuleConfig)).toBe(true);
+    expect(Object.isFrozen(simpleRuleConfig)).toBe(true);
+    expect(Object.isFrozen(simpleRuleConfig.actions)).toBe(true);
+    expect(Object.isFrozen(standardRuleConfig)).toBe(true);
+  });
+
   it("defines 34 tile types and builds a 136 tile wall", () => {
     const wall = createWall();
     const uniqueIds = new Set(wall.map((tile) => tile.id));
@@ -39,7 +60,22 @@ describe("mahjong-core tiles and wall", () => {
 
 describe("mahjong-core hand evaluation", () => {
   it("accepts a standard 4 melds and 1 pair hand", () => {
-    const hand = handFromCodes(["m1", "m2", "m3", "m4", "m5", "m6", "p2", "p3", "p4", "s7", "s8", "s9", "red", "red"]);
+    const hand = handFromCodes([
+      "m1",
+      "m2",
+      "m3",
+      "m4",
+      "m5",
+      "m6",
+      "p2",
+      "p3",
+      "p4",
+      "s7",
+      "s8",
+      "s9",
+      "red",
+      "red"
+    ]);
 
     expect(canHu(hand, standardRuleConfig)).toEqual({
       canHu: true,
@@ -48,7 +84,22 @@ describe("mahjong-core hand evaluation", () => {
   });
 
   it("accepts seven pairs when the rule allows it", () => {
-    const hand = handFromCodes(["m1", "m1", "m9", "m9", "p2", "p2", "p8", "p8", "s3", "s3", "east", "east", "white", "white"]);
+    const hand = handFromCodes([
+      "m1",
+      "m1",
+      "m9",
+      "m9",
+      "p2",
+      "p2",
+      "p8",
+      "p8",
+      "s3",
+      "s3",
+      "east",
+      "east",
+      "white",
+      "white"
+    ]);
 
     expect(canHu(hand, standardRuleConfig)).toEqual({
       canHu: true,
@@ -57,15 +108,71 @@ describe("mahjong-core hand evaluation", () => {
   });
 
   it("rejects incomplete hands", () => {
-    const hand = handFromCodes(["m1", "m2", "m4", "m5", "m6", "p2", "p3", "p4", "s7", "s8", "s9", "red", "red", "white"]);
+    const hand = handFromCodes([
+      "m1",
+      "m2",
+      "m4",
+      "m5",
+      "m6",
+      "p2",
+      "p3",
+      "p4",
+      "s7",
+      "s8",
+      "s9",
+      "red",
+      "red",
+      "white"
+    ]);
 
     expect(canHu(hand, standardRuleConfig).canHu).toBe(false);
   });
 });
 
 describe("mahjong-core scoring", () => {
+  it("reads base and fan points from the rule scoring config", () => {
+    const hand = handFromCodes([
+      "m1",
+      "m2",
+      "m3",
+      "m4",
+      "m5",
+      "m6",
+      "p2",
+      "p3",
+      "p4",
+      "s7",
+      "s8",
+      "s9",
+      "red",
+      "red"
+    ]);
+    const score = calculateScore(hand, {
+      ...standardRuleConfig,
+      scoring: { basePoints: 100, fanPointValue: 25, mode: "standard" }
+    });
+
+    expect(score.basePoints).toBe(100);
+    expect(score.totalPoints).toBe(100 + score.fanTotal * 25);
+  });
+
   it("identifies pinfu, riichi and tanyao on a simple sequence hand", () => {
-    const hand = handFromCodes(["m2", "m3", "m4", "m3", "m4", "m5", "p4", "p5", "p6", "s6", "s7", "s8", "p8", "p8"]);
+    const hand = handFromCodes([
+      "m2",
+      "m3",
+      "m4",
+      "m3",
+      "m4",
+      "m5",
+      "p4",
+      "p5",
+      "p6",
+      "s6",
+      "s7",
+      "s8",
+      "p8",
+      "p8"
+    ]);
     const score = calculateScore(hand, standardRuleConfig, { isRiichi: true });
 
     expect(score.canHu).toBe(true);
@@ -75,7 +182,22 @@ describe("mahjong-core scoring", () => {
   });
 
   it("identifies chinitsu without also counting honitsu", () => {
-    const hand = handFromCodes(["m1", "m2", "m3", "m2", "m3", "m4", "m4", "m5", "m6", "m7", "m8", "m9", "m5", "m5"]);
+    const hand = handFromCodes([
+      "m1",
+      "m2",
+      "m3",
+      "m2",
+      "m3",
+      "m4",
+      "m4",
+      "m5",
+      "m6",
+      "m7",
+      "m8",
+      "m9",
+      "m5",
+      "m5"
+    ]);
     const fanTypes = identifyFans(hand, standardRuleConfig).map((fan) => fan.type);
 
     expect(fanTypes).toContain("chinitsu");
@@ -83,13 +205,43 @@ describe("mahjong-core scoring", () => {
   });
 
   it("identifies honitsu with one suit and honors", () => {
-    const hand = handFromCodes(["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "east", "east", "east", "red", "red"]);
+    const hand = handFromCodes([
+      "p1",
+      "p2",
+      "p3",
+      "p4",
+      "p5",
+      "p6",
+      "p7",
+      "p8",
+      "p9",
+      "east",
+      "east",
+      "east",
+      "red",
+      "red"
+    ]);
 
     expect(identifyFans(hand, standardRuleConfig).map((fan) => fan.type)).toContain("honitsu");
   });
 
   it("identifies toitoi and honroutou on all terminal and honor triplets", () => {
-    const hand = handFromCodes(["m1", "m1", "m1", "m9", "m9", "m9", "p1", "p1", "p1", "east", "east", "east", "red", "red"]);
+    const hand = handFromCodes([
+      "m1",
+      "m1",
+      "m1",
+      "m9",
+      "m9",
+      "m9",
+      "p1",
+      "p1",
+      "p1",
+      "east",
+      "east",
+      "east",
+      "red",
+      "red"
+    ]);
     const fanTypes = identifyFans(hand, standardRuleConfig).map((fan) => fan.type);
 
     expect(fanTypes).toContain("toitoi");
@@ -97,13 +249,43 @@ describe("mahjong-core scoring", () => {
   });
 
   it("identifies seven pairs", () => {
-    const hand = handFromCodes(["m1", "m1", "m9", "m9", "p2", "p2", "p8", "p8", "s3", "s3", "east", "east", "white", "white"]);
+    const hand = handFromCodes([
+      "m1",
+      "m1",
+      "m9",
+      "m9",
+      "p2",
+      "p2",
+      "p8",
+      "p8",
+      "s3",
+      "s3",
+      "east",
+      "east",
+      "white",
+      "white"
+    ]);
 
     expect(identifyFans(hand, standardRuleConfig).map((fan) => fan.type)).toContain("sevenPairs");
   });
 
   it("returns zero points for non-winning hands", () => {
-    const hand = handFromCodes(["m1", "m2", "m4", "m5", "m6", "p2", "p3", "p4", "s7", "s8", "s9", "red", "red", "white"]);
+    const hand = handFromCodes([
+      "m1",
+      "m2",
+      "m4",
+      "m5",
+      "m6",
+      "p2",
+      "p3",
+      "p4",
+      "s7",
+      "s8",
+      "s9",
+      "red",
+      "red",
+      "white"
+    ]);
 
     expect(calculateScore(hand, standardRuleConfig)).toMatchObject({
       canHu: false,
@@ -132,7 +314,11 @@ describe("mahjong-core game reducer", () => {
     expect(state.players[2].handTiles).toHaveLength(13);
     expect(state.players[3].handTiles).toHaveLength(13);
     expect(state.wall).toHaveLength(55);
-    expect(state.players.flatMap((player) => player.handTiles).every((tile) => tile.suit !== "winds" && tile.suit !== "dragons")).toBe(true);
+    expect(
+      state.players
+        .flatMap((player) => player.handTiles)
+        .every((tile) => tile.suit !== "winds" && tile.suit !== "dragons")
+    ).toBe(true);
     expect(state.wall.every((tile) => tile.suit !== "winds" && tile.suit !== "dragons")).toBe(true);
   });
 
@@ -147,7 +333,9 @@ describe("mahjong-core game reducer", () => {
       seed: 1
     });
 
-    expect(state.players.map((player) => ({ isBot: player.isBot, username: player.username }))).toEqual([
+    expect(
+      state.players.map((player) => ({ isBot: player.isBot, username: player.username }))
+    ).toEqual([
       { isBot: false, username: "player-a" },
       { isBot: true, username: "bot-a" },
       { isBot: true, username: "bot-b" },
@@ -210,7 +398,9 @@ describe("mahjong-core game reducer", () => {
 
     expect(view).toMatchObject({ seatIndex: 0, phase: "waiting" });
     expect(legalActions.length).toBeGreaterThan(0);
-    expect(legalActions.every((action) => action.type === "discard" || action.type === "hu")).toBe(true);
+    expect(legalActions.every((action) => action.type === "discard" || action.type === "hu")).toBe(
+      true
+    );
   });
 
   it("allows the next player to chi a discarded suited tile", () => {
@@ -231,7 +421,9 @@ describe("mahjong-core game reducer", () => {
       return;
     }
 
-    const chiAction = getLegalActions(discardResult.state, 1).find((action) => action.type === "chi");
+    const chiAction = getLegalActions(discardResult.state, 1).find(
+      (action) => action.type === "chi"
+    );
 
     expect(chiAction).toBeDefined();
 
@@ -281,8 +473,12 @@ describe("mahjong-core game reducer", () => {
 
     expect(discardResult.state.pendingDiscard).toBeUndefined();
     expect(discardResult.state.currentTurn).toBe(1);
-    expect(getLegalActions(discardResult.state, 1).some((action) => action.type === "chi")).toBe(false);
-    expect(getLegalActions(discardResult.state, 1).some((action) => action.type === "discard")).toBe(true);
+    expect(getLegalActions(discardResult.state, 1).some((action) => action.type === "chi")).toBe(
+      false
+    );
+    expect(
+      getLegalActions(discardResult.state, 1).some((action) => action.type === "discard")
+    ).toBe(true);
   });
 
   it("allows a later respondent to peng after earlier players pass", () => {
@@ -304,7 +500,9 @@ describe("mahjong-core game reducer", () => {
     expect(discardResult.state.currentTurn).toBe(2);
     expect(getLegalActions(discardResult.state, 1)).toEqual([]);
 
-    const pengAction = getLegalActions(discardResult.state, 2).find((action) => action.type === "peng");
+    const pengAction = getLegalActions(discardResult.state, 2).find(
+      (action) => action.type === "peng"
+    );
 
     expect(pengAction).toBeDefined();
 
@@ -345,7 +543,9 @@ describe("mahjong-core game reducer", () => {
 
     expect(discardResult.state.currentTurn).toBe(3);
 
-    const gangAction = getLegalActions(discardResult.state, 3).find((action) => action.type === "gang");
+    const gangAction = getLegalActions(discardResult.state, 3).find(
+      (action) => action.type === "gang"
+    );
 
     expect(gangAction).toBeDefined();
 
@@ -384,7 +584,9 @@ describe("mahjong-core game reducer", () => {
       throw new Error(discardResult.error);
     }
 
-    const gangAction = getLegalActions(discardResult.state, 3).find((action) => action.type === "gang");
+    const gangAction = getLegalActions(discardResult.state, 3).find(
+      (action) => action.type === "gang"
+    );
 
     expect(gangAction).toBeDefined();
 
@@ -425,7 +627,10 @@ describe("mahjong-core game reducer", () => {
     }
 
     expect(discardResult.state.currentTurn).toBe(3);
-    expect(getLegalActions(discardResult.state, 3).map((action) => action.type)).toEqual(["pass", "hu"]);
+    expect(getLegalActions(discardResult.state, 3).map((action) => action.type)).toEqual([
+      "pass",
+      "hu"
+    ]);
     expect(getLegalActions(discardResult.state, 2)).toEqual([]);
 
     const passResult = applyAction(discardResult.state, 3, { type: "pass" });
@@ -435,14 +640,31 @@ describe("mahjong-core game reducer", () => {
     }
 
     expect(passResult.state.currentTurn).toBe(2);
-    expect(getLegalActions(passResult.state, 2).some((action) => action.type === "peng")).toBe(true);
+    expect(getLegalActions(passResult.state, 2).some((action) => action.type === "peng")).toBe(
+      true
+    );
   });
 
   it("attaches score when a player wins", () => {
     const state = createInitialGame({ seed: 7 });
 
     state.currentTurn = 0;
-    state.players[0].handTiles = handFromCodes(["m2", "m3", "m4", "m3", "m4", "m5", "p4", "p5", "p6", "s6", "s7", "s8", "p8", "p8"]);
+    state.players[0].handTiles = handFromCodes([
+      "m2",
+      "m3",
+      "m4",
+      "m3",
+      "m4",
+      "m5",
+      "p4",
+      "p5",
+      "p6",
+      "s6",
+      "s7",
+      "s8",
+      "p8",
+      "p8"
+    ]);
 
     const result = applyAction(state, 0, { type: "hu" });
 
@@ -629,7 +851,22 @@ describe("mahjong-core game reducer", () => {
 
 describe("mahjong-core basic bot", () => {
   it("prefers isolated tiles as discards", () => {
-    const hand = handFromCodes(["m1", "m2", "m3", "m7", "p4", "p5", "p6", "s2", "s2", "east", "east", "red", "green", "white"]);
+    const hand = handFromCodes([
+      "m1",
+      "m2",
+      "m3",
+      "m7",
+      "p4",
+      "p5",
+      "p6",
+      "s2",
+      "s2",
+      "east",
+      "east",
+      "red",
+      "green",
+      "white"
+    ]);
 
     expect(["m7", "red", "green", "white"]).toContain(chooseDiscardTile(hand).code);
   });
@@ -675,7 +912,10 @@ function createClaimScenario(
   state.wall = [];
 
   for (const player of state.players) {
-    const codes = player.seatIndex === 0 ? [discardCode] : (playerHands[player.seatIndex as 0 | 1 | 2 | 3] ?? []);
+    const codes =
+      player.seatIndex === 0
+        ? [discardCode]
+        : (playerHands[player.seatIndex as 0 | 1 | 2 | 3] ?? []);
     player.handTiles = handFromCodes(codes);
     player.discardTiles = [];
     player.publicMelds = [];

@@ -10,6 +10,7 @@ import {
   applyAction,
   chooseBasicBotAction,
   createInitialGame,
+  getRulePreset,
   getLegalActions,
   simpleRuleConfig,
   type MahjongGameState
@@ -17,6 +18,7 @@ import {
 
 import {
   createNoopGameRecordRepository,
+  type GameRecoverySnapshot,
   type GameRecordRepository
 } from "./gameRecordRepository.js";
 import { createRoomPlayerView } from "./gameStateMapper.js";
@@ -34,6 +36,21 @@ type GameRoom = {
 export type GameRoomService = ReturnType<typeof createGameRoomService>;
 export type CreateGameRoomServiceOptions = {
   gameRecordRepository?: GameRecordRepository;
+  onPersistenceError?: (context: GamePersistenceErrorContext) => void;
+};
+export type GamePersistenceOperation =
+  | "append-event"
+  | "create-record"
+  | "finish-record"
+  | "save-recovery-snapshot";
+export type GamePersistenceErrorContext = {
+  error: unknown;
+  operation: GamePersistenceOperation;
+  roomId: string;
+};
+export type CleanupGameRoomsOptions = {
+  endedRoomTtlMs: number;
+  nowMs?: number;
 };
 type LeaveActiveGameResult =
   | {
@@ -162,13 +179,17 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
   const roundNumberByLobbyRoomId = new Map<string, number>();
   const gameRecordRepository = options.gameRecordRepository ?? createNoopGameRecordRepository();
   const persistentWriteQueueByRoomId = new Map<string, Promise<void>>();
+  const updatedAtMsByRoomId = new Map<string, number>();
 
-  function enqueuePersistentWrite(roomId: string, write: () => Promise<void>): void {
+  function enqueuePersistentWrite(
+    roomId: string,
+    operation: GamePersistenceOperation,
+    write: () => Promise<void>
+  ): void {
     const previousWrite = persistentWriteQueueByRoomId.get(roomId) ?? Promise.resolve();
-    const nextWrite = previousWrite
-      .catch(() => undefined)
-      .then(write)
-      .catch(() => undefined);
+    const nextWrite = previousWrite.then(write).catch((error: unknown) => {
+      options.onPersistenceError?.({ error, operation, roomId });
+    });
 
     persistentWriteQueueByRoomId.set(roomId, nextWrite);
   }
@@ -182,6 +203,29 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     });
   }
 
+  function createRecoverySnapshot(room: GameRoom): GameRecoverySnapshot {
+    return structuredClone({
+      events: room.events.map(stripEventSnapshot),
+      humanSeatIndex: room.humanSeatIndex,
+      humanSeats: [...room.humanSeatIndexByUserId.entries()].map(([userId, seatIndex]) => ({
+        seatIndex,
+        userId
+      })),
+      ...(room.lobbyRoomId ? { lobbyRoomId: room.lobbyRoomId } : {}),
+      playerUserId: room.playerUserId,
+      roomId: room.id,
+      state: room.state,
+      version: 1 as const
+    });
+  }
+
+  function saveRecoverySnapshot(room: GameRoom): void {
+    const snapshot = createRecoverySnapshot(room);
+    enqueuePersistentWrite(room.id, "save-recovery-snapshot", () =>
+      gameRecordRepository.saveRecoverySnapshot(room.id, snapshot)
+    );
+  }
+
   function recordRoomEvent(room: GameRoom, text: string): void {
     const baseEvent = createEvent(text);
     const event = {
@@ -192,11 +236,15 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
       })
     };
     room.events = appendExistingRoomEvent(room.events, event);
-    enqueuePersistentWrite(room.id, () => gameRecordRepository.appendEvent(room.id, event));
+    updatedAtMsByRoomId.set(room.id, Date.now());
+    enqueuePersistentWrite(room.id, "append-event", () =>
+      gameRecordRepository.appendEvent(room.id, event)
+    );
+    saveRecoverySnapshot(room);
   }
 
   function recordGameEnd(room: GameRoom): void {
-    enqueuePersistentWrite(room.id, () =>
+    enqueuePersistentWrite(room.id, "finish-record", () =>
       gameRecordRepository.finishRecord({
         roomId: room.id,
         state: room.state
@@ -236,13 +284,15 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     };
 
     roomsById.set(room.id, room);
+    updatedAtMsByRoomId.set(room.id, Date.now());
     activeRoomIdByUserId.set(user.id, room.id);
-    enqueuePersistentWrite(room.id, () =>
+    enqueuePersistentWrite(room.id, "create-record", () =>
       gameRecordRepository.createRecord({
         humanSeatIndex: room.humanSeatIndex,
         playerUserId: room.playerUserId,
         roomId: room.id,
-        ruleName: room.state.rules.name
+        ruleName: room.state.rules.name,
+        ruleVersion: room.state.rules.version
       })
     );
     recordRoomEvent(room, `${user.username} 加入快速对局`);
@@ -286,21 +336,23 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
           username:
             seat.username ?? (seat.isBot ? `玩家Bot${seat.seatIndex}` : `${seat.seatIndex + 1}号位`)
         })),
-        rules: simpleRuleConfig
+        rules: getRulePreset(lobbyRoom.ruleName ?? "simple") ?? simpleRuleConfig
       })
     };
 
     roomsById.set(room.id, room);
+    updatedAtMsByRoomId.set(room.id, Date.now());
     activeGameRoomIdByLobbyRoomId.set(lobbyRoom.roomId, room.id);
     for (const userId of humanSeatIndexByUserId.keys()) {
       activeRoomIdByUserId.set(userId, room.id);
     }
-    enqueuePersistentWrite(room.id, () =>
+    enqueuePersistentWrite(room.id, "create-record", () =>
       gameRecordRepository.createRecord({
         humanSeatIndex: room.humanSeatIndex,
         playerUserId: room.playerUserId,
         roomId: room.id,
-        ruleName: room.state.rules.name
+        ruleName: room.state.rules.name,
+        ruleVersion: room.state.rules.version
       })
     );
     recordRoomEvent(room, `${primaryHumanSeat.username ?? "房主"} 开始多人房间`);
@@ -341,6 +393,70 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
       seatIndex: getHumanSeatIndex(room, user),
       state: room.state
     });
+  }
+
+  async function restoreActiveRooms(): Promise<GameRecoverySnapshot[]> {
+    const { invalidRoomIds, snapshots } = await gameRecordRepository.listActiveRecoverySnapshots();
+    await gameRecordRepository.markRecordsAbnormal(
+      invalidRoomIds,
+      "服务重启时恢复快照无效，牌局异常结束"
+    );
+    for (const snapshot of snapshots) {
+      const room: GameRoom = {
+        events: snapshot.events,
+        humanSeatIndex: snapshot.humanSeatIndex,
+        humanSeatIndexByUserId: new Map(
+          snapshot.humanSeats.map((seat) => [seat.userId, seat.seatIndex])
+        ),
+        id: snapshot.roomId,
+        ...(snapshot.lobbyRoomId ? { lobbyRoomId: snapshot.lobbyRoomId } : {}),
+        playerUserId: snapshot.playerUserId,
+        state: snapshot.state
+      };
+
+      roomsById.set(room.id, room);
+      updatedAtMsByRoomId.set(room.id, Date.now());
+      for (const userId of room.humanSeatIndexByUserId.keys()) {
+        activeRoomIdByUserId.set(userId, room.id);
+      }
+      if (room.lobbyRoomId) {
+        activeGameRoomIdByLobbyRoomId.set(room.lobbyRoomId, room.id);
+        const roundNumber = Number(room.id.match(/-round-(\d+)$/)?.[1] ?? 0);
+        roundNumberByLobbyRoomId.set(
+          room.lobbyRoomId,
+          Math.max(roundNumberByLobbyRoomId.get(room.lobbyRoomId) ?? 0, roundNumber)
+        );
+      }
+    }
+
+    return snapshots;
+  }
+
+  function cleanupExpiredRooms(options: CleanupGameRoomsOptions): string[] {
+    const nowMs = options.nowMs ?? Date.now();
+    const removedRoomIds: string[] = [];
+
+    for (const room of roomsById.values()) {
+      const updatedAtMs = updatedAtMsByRoomId.get(room.id) ?? nowMs;
+      if (room.state.phase !== "ended" || nowMs - updatedAtMs < options.endedRoomTtlMs) {
+        continue;
+      }
+
+      roomsById.delete(room.id);
+      updatedAtMsByRoomId.delete(room.id);
+      persistentWriteQueueByRoomId.delete(room.id);
+      for (const userId of room.humanSeatIndexByUserId.keys()) {
+        if (activeRoomIdByUserId.get(userId) === room.id) {
+          activeRoomIdByUserId.delete(userId);
+        }
+      }
+      if (room.lobbyRoomId && activeGameRoomIdByLobbyRoomId.get(room.lobbyRoomId) === room.id) {
+        activeGameRoomIdByLobbyRoomId.delete(room.lobbyRoomId);
+      }
+      removedRoomIds.push(room.id);
+    }
+
+    return removedRoomIds;
   }
 
   function applyHumanAction(
@@ -497,6 +613,7 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
   }
 
   return {
+    cleanupExpiredRooms,
     applyHumanAction,
     applyHumanTimeout,
     applyNextBotAction,
@@ -506,6 +623,7 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     getRoom,
     getRoomForUser,
     leaveActiveGame,
+    restoreActiveRooms,
     waitForPersistentWrites
   };
 }

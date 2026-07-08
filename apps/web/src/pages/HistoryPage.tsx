@@ -14,14 +14,15 @@ type HistoryPageProps = {
   user: AuthUser;
 };
 
-export type GameHistoryFilter = "all" | "playing" | "ended" | "hu" | "draw";
+export type GameHistoryFilter = "all" | "playing" | "ended" | "hu" | "draw" | "abnormal";
 
 const gameHistoryFilters: Array<{ label: string; value: GameHistoryFilter }> = [
   { label: "全部", value: "all" },
   { label: "进行中", value: "playing" },
   { label: "已结束", value: "ended" },
   { label: "胡牌", value: "hu" },
-  { label: "流局", value: "draw" }
+  { label: "流局", value: "draw" },
+  { label: "异常结束", value: "abnormal" }
 ];
 
 export function getGameHistoryResultText(record: GameHistoryItem): string {
@@ -31,6 +32,10 @@ export function getGameHistoryResultText(record: GameHistoryItem): string {
 
   if (record.endReason === "draw") {
     return "流局";
+  }
+
+  if (record.endReason === "abnormal") {
+    return "异常结束";
   }
 
   const winTypeText =
@@ -96,7 +101,8 @@ export function filterGameHistory(
       (filter === "playing" && record.status === "playing") ||
       (filter === "ended" && record.status === "ended") ||
       (filter === "hu" && record.endReason === "hu") ||
-      (filter === "draw" && record.endReason === "draw");
+      (filter === "draw" && record.endReason === "draw") ||
+      (filter === "abnormal" && record.endReason === "abnormal");
     const matchesSearch =
       normalizedQuery.length === 0 || record.roomId.toLowerCase().includes(normalizedQuery);
 
@@ -340,7 +346,7 @@ export function HistoryPage(props: HistoryPageProps): JSX.Element {
               <dl className={styles.accountSummary}>
                 <div>
                   <dt>规则</dt>
-                  <dd>{selectedRecord.ruleName}</dd>
+                  <dd>{`${selectedRecord.ruleName} v${selectedRecord.ruleVersion ?? 1}`}</dd>
                 </div>
                 <div>
                   <dt>开始时间</dt>
@@ -364,7 +370,9 @@ export function HistoryPage(props: HistoryPageProps): JSX.Element {
                 </div>
                 <div>
                   <dt>胡牌牌</dt>
-                  <dd>{selectedRecord.result?.winningTile?.label ?? selectedRecord.winningTile ?? "-"}</dd>
+                  <dd>
+                    {selectedRecord.result?.winningTile?.label ?? selectedRecord.winningTile ?? "-"}
+                  </dd>
                 </div>
               </dl>
 

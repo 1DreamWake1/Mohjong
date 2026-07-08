@@ -16,8 +16,9 @@ vi.mock("../api/client.js", () => ({
 }));
 
 vi.mock("../stores/authStore.js", () => ({
-  useAuthStore: (selector: (state: { clearSession: () => void; signOut: () => Promise<void> }) => unknown) =>
-    selector({ clearSession: vi.fn(), signOut: vi.fn() })
+  useAuthStore: (
+    selector: (state: { clearSession: () => void; signOut: () => Promise<void> }) => unknown
+  ) => selector({ clearSession: vi.fn(), signOut: vi.fn() })
 }));
 
 describe("HistoryPage", () => {
@@ -50,6 +51,15 @@ describe("HistoryPage", () => {
         winType: "selfDraw"
       })
     ).toBe("自摸，40 分");
+    expect(
+      getGameHistoryResultText({
+        endReason: "abnormal",
+        roomId: "quick-4",
+        ruleName: "simple",
+        startedAt: "2026-06-09T10:00:00.000Z",
+        status: "ended"
+      })
+    ).toBe("异常结束");
   });
 
   it("sorts newest game history first", () => {
@@ -156,6 +166,13 @@ describe("HistoryPage", () => {
         ruleName: "simple",
         startedAt: "2026-06-09T09:00:00.000Z",
         status: "ended" as const
+      },
+      {
+        endReason: "abnormal" as const,
+        roomId: "quick-abnormal",
+        ruleName: "simple",
+        startedAt: "2026-06-09T08:00:00.000Z",
+        status: "ended" as const
       }
     ];
 
@@ -164,13 +181,17 @@ describe("HistoryPage", () => {
     ]);
     expect(filterGameHistory(records, "ended", "").map((record) => record.roomId)).toEqual([
       "quick-hu",
-      "quick-draw"
+      "quick-draw",
+      "quick-abnormal"
     ]);
     expect(filterGameHistory(records, "hu", "").map((record) => record.roomId)).toEqual([
       "quick-hu"
     ]);
     expect(filterGameHistory(records, "draw", "").map((record) => record.roomId)).toEqual([
       "quick-draw"
+    ]);
+    expect(filterGameHistory(records, "abnormal", "").map((record) => record.roomId)).toEqual([
+      "quick-abnormal"
     ]);
     expect(filterGameHistory(records, "all", "HU").map((record) => record.roomId)).toEqual([
       "quick-hu"

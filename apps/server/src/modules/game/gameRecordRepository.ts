@@ -3,13 +3,14 @@ import type {
   GameHistoryDetail,
   GameHistoryItem,
   GameHistoryResultSnapshot,
+  GameRecordEndReason,
   GameRecordStatus,
   PlayerView,
   TileInfo,
   WinType
 } from "@mahjong/shared";
 import type { PrismaClient } from "@prisma/client";
-import type { MahjongGameState } from "mahjong-core";
+import { normalizeRuleConfig, type MahjongGameState, type RuleConfig } from "mahjong-core";
 
 import { prisma as defaultPrisma } from "../../db/prisma.js";
 
@@ -19,6 +20,7 @@ export type CreateGameRecordInput = {
   result?: GameHistoryResultSnapshot;
   roomId: string;
   ruleName: string;
+  ruleVersion: number;
 };
 
 export type FinishGameRecordInput = {
@@ -26,16 +28,29 @@ export type FinishGameRecordInput = {
   roomId: string;
 };
 
+export type GameRecoverySnapshot = {
+  events: GameHistoryEvent[];
+  humanSeatIndex: number;
+  humanSeats: Array<{ seatIndex: number; userId: number }>;
+  lobbyRoomId?: string;
+  playerUserId: number;
+  roomId: string;
+  state: MahjongGameState;
+  version: 1;
+};
+
 export type GameRecordSnapshot = {
   endedAt?: string;
-  endReason?: "hu" | "draw";
+  endReason?: GameRecordEndReason;
   events: GameHistoryEvent[];
   fanTotal?: number;
   humanSeatIndex: number;
   playerUserId: number;
   result?: GameHistoryResultSnapshot;
+  recoverySnapshot?: GameRecoverySnapshot;
   roomId: string;
   ruleName: string;
+  ruleVersion: number;
   startedAt: string;
   status: "playing" | "ended";
   totalPoints?: number;
@@ -50,6 +65,12 @@ export type GameRecordRepository = {
   finishRecord(input: FinishGameRecordInput): Promise<void>;
   getRecordForPlayer(playerUserId: number, roomId: string): Promise<GameHistoryDetail | null>;
   listRecordsForPlayer(playerUserId: number): Promise<GameHistoryItem[]>;
+  listActiveRecoverySnapshots(): Promise<{
+    invalidRoomIds: string[];
+    snapshots: GameRecoverySnapshot[];
+  }>;
+  markRecordsAbnormal(roomIds: string[], message: string): Promise<void>;
+  saveRecoverySnapshot(roomId: string, snapshot: GameRecoverySnapshot): Promise<void>;
 };
 
 export function createNoopGameRecordRepository(): GameRecordRepository {
@@ -62,6 +83,15 @@ export function createNoopGameRecordRepository(): GameRecordRepository {
     },
     async listRecordsForPlayer() {
       return [];
+    },
+    async listActiveRecoverySnapshots() {
+      return { invalidRoomIds: [], snapshots: [] };
+    },
+    async markRecordsAbnormal() {
+      // No persistence is configured for this repository.
+    },
+    async saveRecoverySnapshot() {
+      // No persistence is configured for this repository.
     }
   };
 }
@@ -89,6 +119,7 @@ export function createMemoryGameRecordRepository(): GameRecordRepository & {
         playerUserId: input.playerUserId,
         roomId: input.roomId,
         ruleName: input.ruleName,
+        ruleVersion: input.ruleVersion,
         startedAt: new Date().toISOString(),
         status: "playing"
       });
@@ -149,8 +180,49 @@ export function createMemoryGameRecordRepository(): GameRecordRepository & {
     async listRecordsForPlayer(playerUserId) {
       return [...records.values()]
         .filter((record) => record.playerUserId === playerUserId)
-        .sort((leftRecord, rightRecord) => rightRecord.startedAt.localeCompare(leftRecord.startedAt))
+        .sort((leftRecord, rightRecord) =>
+          rightRecord.startedAt.localeCompare(leftRecord.startedAt)
+        )
         .map(toHistoryItem);
+    },
+
+    async listActiveRecoverySnapshots() {
+      const activeRecords = [...records.values()].filter((record) => record.status === "playing");
+      return {
+        invalidRoomIds: activeRecords
+          .filter((record) => !record.recoverySnapshot)
+          .map((record) => record.roomId),
+        snapshots: activeRecords.flatMap((record) =>
+          record.recoverySnapshot ? [structuredClone(record.recoverySnapshot)] : []
+        )
+      };
+    },
+
+    async markRecordsAbnormal(roomIds, message) {
+      for (const roomId of roomIds) {
+        const record = records.get(roomId);
+        if (!record || record.status !== "playing") {
+          continue;
+        }
+
+        record.status = "ended";
+        record.endReason = "abnormal";
+        record.endedAt = new Date().toISOString();
+        record.events.push({
+          createdAt: record.endedAt,
+          id: `abnormal-${roomId}`,
+          text: message
+        });
+      }
+    },
+
+    async saveRecoverySnapshot(roomId, snapshot) {
+      const record = records.get(roomId);
+      if (!record) {
+        return;
+      }
+
+      record.recoverySnapshot = structuredClone(snapshot);
     }
   };
 }
@@ -186,6 +258,7 @@ export function createPrismaGameRecordRepository(
           playerUserId: input.playerUserId,
           roomId: input.roomId,
           ruleName: input.ruleName,
+          ruleVersion: input.ruleVersion,
           status: "playing"
         }
       });
@@ -252,8 +325,110 @@ export function createPrismaGameRecordRepository(
       });
 
       return records.map(toHistoryItemFromPrisma);
+    },
+
+    async listActiveRecoverySnapshots() {
+      const records = await client.gameRecord.findMany({
+        select: { recoverySnapshot: true, roomId: true },
+        where: {
+          status: "playing"
+        }
+      });
+
+      const invalidRoomIds: string[] = [];
+      const snapshots = records.flatMap((record) => {
+        const snapshot = parseGameRecoverySnapshot(record.recoverySnapshot);
+        if (!snapshot) {
+          invalidRoomIds.push(record.roomId);
+          return [];
+        }
+        return [snapshot];
+      });
+      return { invalidRoomIds, snapshots };
+    },
+
+    async markRecordsAbnormal(roomIds, message) {
+      if (roomIds.length === 0) {
+        return;
+      }
+
+      const records = await client.gameRecord.findMany({
+        select: { id: true },
+        where: { roomId: { in: roomIds }, status: "playing" }
+      });
+      const endedAt = new Date();
+      if (records.length === 0) {
+        return;
+      }
+      await client.$transaction([
+        client.gameRecord.updateMany({
+          data: { endedAt, endReason: "abnormal", status: "ended" },
+          where: { roomId: { in: roomIds }, status: "playing" }
+        }),
+        client.gameEvent.createMany({
+          data: records.map((record) => ({
+            createdAt: endedAt,
+            message,
+            recordId: record.id
+          }))
+        })
+      ]);
+    },
+
+    async saveRecoverySnapshot(roomId, snapshot) {
+      await client.gameRecord.updateMany({
+        data: {
+          recoverySnapshot: JSON.stringify(snapshot)
+        },
+        where: { roomId }
+      });
     }
   };
+}
+
+export function parseGameRecoverySnapshot(value: string | null): GameRecoverySnapshot | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    const snapshot: unknown = JSON.parse(value);
+    if (
+      !isRecord(snapshot) ||
+      snapshot.version !== 1 ||
+      typeof snapshot.roomId !== "string" ||
+      typeof snapshot.playerUserId !== "number" ||
+      typeof snapshot.humanSeatIndex !== "number" ||
+      !Array.isArray(snapshot.events) ||
+      !Array.isArray(snapshot.humanSeats) ||
+      !isRecord(snapshot.state) ||
+      snapshot.state.phase !== "playing" ||
+      !Array.isArray(snapshot.state.players) ||
+      snapshot.state.players.length !== 4 ||
+      !Array.isArray(snapshot.state.wall) ||
+      !isRecord(snapshot.state.rules)
+    ) {
+      return undefined;
+    }
+
+    const humanSeatsAreValid = snapshot.humanSeats.every(
+      (seat) =>
+        isRecord(seat) &&
+        Number.isInteger(seat.userId) &&
+        Number.isInteger(seat.seatIndex) &&
+        Number(seat.seatIndex) >= 0 &&
+        Number(seat.seatIndex) < 4
+    );
+    if (!humanSeatsAreValid) {
+      return undefined;
+    }
+
+    const recoverySnapshot = snapshot as GameRecoverySnapshot;
+    recoverySnapshot.state.rules = normalizeRuleConfig(snapshot.state.rules as RuleConfig);
+    return recoverySnapshot;
+  } catch {
+    return undefined;
+  }
 }
 
 function createResultSnapshot(state: MahjongGameState): GameHistoryResultSnapshot {
@@ -283,18 +458,14 @@ function parseResultSnapshot(value: string | null): GameHistoryResultSnapshot | 
     const totalPoints = typeof parsedValue.totalPoints === "number" ? parsedValue.totalPoints : 0;
     const fans = Array.isArray(parsedValue.fans)
       ? parsedValue.fans.flatMap((fan): GameHistoryResultSnapshot["fans"] => {
-          if (
-            !isRecord(fan) ||
-            typeof fan.name !== "string" ||
-            typeof fan.value !== "number"
-          ) {
+          if (!isRecord(fan) || typeof fan.name !== "string" || typeof fan.value !== "number") {
             return [];
           }
 
           return [{ name: fan.name, value: fan.value }];
         })
       : [];
-    const endReason = toEndReason(readString(parsedValue.endReason));
+    const endReason = toResultEndReason(readString(parsedValue.endReason));
     const winType = toWinType(readString(parsedValue.winType));
     const winnerSeatIndex =
       typeof parsedValue.winnerSeatIndex === "number" ? parsedValue.winnerSeatIndex : undefined;
@@ -331,6 +502,7 @@ function toHistoryItem(record: GameRecordSnapshot): GameHistoryItem {
   return {
     roomId: record.roomId,
     ruleName: record.ruleName,
+    ruleVersion: record.ruleVersion,
     startedAt: record.startedAt,
     status: record.status,
     ...(record.endedAt ? { endedAt: record.endedAt } : {}),
@@ -343,9 +515,7 @@ function toHistoryItem(record: GameRecordSnapshot): GameHistoryItem {
   };
 }
 
-type PrismaGameRecordWithEvents = Awaited<
-  ReturnType<PrismaClient["gameRecord"]["findFirst"]>
-> & {
+type PrismaGameRecordWithEvents = Awaited<ReturnType<PrismaClient["gameRecord"]["findFirst"]>> & {
   events?: {
     createdAt: Date;
     id: number;
@@ -358,7 +528,11 @@ function toGameRecordStatus(value: string): GameRecordStatus {
   return value === "ended" ? "ended" : "playing";
 }
 
-function toEndReason(value: string | null): "hu" | "draw" | undefined {
+function toEndReason(value: string | null): GameRecordEndReason | undefined {
+  return value === "hu" || value === "draw" || value === "abnormal" ? value : undefined;
+}
+
+function toResultEndReason(value: string | null): "hu" | "draw" | undefined {
   return value === "hu" || value === "draw" ? value : undefined;
 }
 
@@ -438,8 +612,7 @@ function isAction(value: unknown): boolean {
       value.type === "pass") &&
     (value.tileId === undefined || typeof value.tileId === "string") &&
     (value.tileIds === undefined ||
-      (Array.isArray(value.tileIds) &&
-        value.tileIds.every((tileId) => typeof tileId === "string")))
+      (Array.isArray(value.tileIds) && value.tileIds.every((tileId) => typeof tileId === "string")))
   );
 }
 
@@ -477,6 +650,7 @@ function toHistoryItemFromPrisma(record: NonNullable<PrismaGameRecordWithEvents>
   return {
     roomId: record.roomId,
     ruleName: record.ruleName,
+    ruleVersion: record.ruleVersion,
     startedAt: record.startedAt.toISOString(),
     status: toGameRecordStatus(record.status),
     ...(record.endedAt ? { endedAt: record.endedAt.toISOString() } : {}),

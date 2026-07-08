@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createTile, getLegalActions, type TileCode } from "mahjong-core";
 
 import { createGameRoomService, describeGameEnd } from "./gameRoomService.js";
-import { createMemoryGameRecordRepository } from "./gameRecordRepository.js";
+import {
+  createMemoryGameRecordRepository,
+  createNoopGameRecordRepository
+} from "./gameRecordRepository.js";
 import type { AuthUser, GameLobbyRoom } from "@mahjong/shared";
 
 const player: AuthUser = {
@@ -37,6 +40,124 @@ describe("gameRoomService", () => {
     ]);
   });
 
+  it("persists a complete recovery snapshot after each game event", async () => {
+    const gameRecordRepository = createMemoryGameRecordRepository();
+    const service = createGameRoomService({ gameRecordRepository });
+    const room = service.getOrCreateQuickRoom(player);
+    await service.waitForPersistentWrites(room.id);
+
+    expect(gameRecordRepository.getRecord(room.id)?.recoverySnapshot).toMatchObject({
+      humanSeatIndex: 0,
+      humanSeats: [{ seatIndex: 0, userId: player.id }],
+      playerUserId: player.id,
+      roomId: room.id,
+      state: {
+        phase: "playing",
+        players: expect.arrayContaining([
+          expect.objectContaining({ isBot: false, username: player.username }),
+          expect.objectContaining({ isBot: true })
+        ]),
+        wall: expect.any(Array)
+      },
+      version: 1
+    });
+
+    const tileId = room.state.players[0].handTiles[0]?.id;
+    if (!tileId) {
+      throw new Error("Expected a tile to discard");
+    }
+    service.applyHumanAction(player, { tileId, type: "discard" });
+    await service.waitForPersistentWrites(room.id);
+
+    const recoverySnapshot = gameRecordRepository.getRecord(room.id)?.recoverySnapshot;
+    expect(recoverySnapshot?.state.lastDiscardedTileId).toBe(tileId);
+    expect(recoverySnapshot?.events.at(-1)?.text).toContain("打出");
+  });
+
+  it("restores active rooms and player indexes from persisted snapshots", async () => {
+    const gameRecordRepository = createMemoryGameRecordRepository();
+    const firstService = createGameRoomService({ gameRecordRepository });
+    const originalRoom = firstService.getOrCreateQuickRoom(player);
+    const tileId = originalRoom.state.players[0].handTiles[0]?.id;
+    if (!tileId) {
+      throw new Error("Expected a tile to discard");
+    }
+    firstService.applyHumanAction(player, { tileId, type: "discard" });
+    await firstService.waitForPersistentWrites(originalRoom.id);
+
+    const restoredService = createGameRoomService({ gameRecordRepository });
+    const snapshots = await restoredService.restoreActiveRooms();
+    const restoredRoom = restoredService.getRoomForUser(player);
+
+    expect(snapshots).toHaveLength(1);
+    expect(restoredRoom).toMatchObject({
+      id: originalRoom.id,
+      state: {
+        lastDiscardedTileId: tileId,
+        phase: "playing"
+      }
+    });
+    expect(restoredService.getPlayerView(restoredRoom!, player).seatIndex).toBe(0);
+  });
+
+  it("cleans up expired ended games but keeps active games", () => {
+    const service = createGameRoomService();
+    const endedRoom = service.getOrCreateQuickRoom(player);
+    endedRoom.state.phase = "ended";
+    endedRoom.state.endReason = "draw";
+
+    expect(
+      service.cleanupExpiredRooms({
+        endedRoomTtlMs: 1_000,
+        nowMs: Date.now() + 1_001
+      })
+    ).toEqual([endedRoom.id]);
+    expect(service.getRoom(endedRoom.id)).toBeNull();
+    expect(service.getRoomForUser(player)).toBeNull();
+
+    const activeRoom = service.getOrCreateQuickRoom(player);
+    expect(
+      service.cleanupExpiredRooms({
+        endedRoomTtlMs: 1,
+        nowMs: Date.now() + 10_000
+      })
+    ).toEqual([]);
+    expect(service.getRoom(activeRoom.id)).toBe(activeRoom);
+  });
+
+  it("reports persistence failures and continues later queued writes", async () => {
+    const appendEvent = vi.fn(async () => undefined);
+    const repository = {
+      ...createNoopGameRecordRepository(),
+      appendEvent,
+      async saveRecoverySnapshot() {
+        throw new Error("snapshot write failed");
+      }
+    };
+    const onPersistenceError = vi.fn();
+    const service = createGameRoomService({
+      gameRecordRepository: repository,
+      onPersistenceError
+    });
+    const room = service.getOrCreateQuickRoom(player);
+    await service.waitForPersistentWrites(room.id);
+
+    const tileId = room.state.players[0].handTiles[0]?.id;
+    if (!tileId) {
+      throw new Error("Expected a tile to discard");
+    }
+    service.applyHumanAction(player, { tileId, type: "discard" });
+    await service.waitForPersistentWrites(room.id);
+
+    expect(appendEvent).toHaveBeenCalledTimes(2);
+    expect(onPersistenceError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "save-recovery-snapshot",
+        roomId: room.id
+      })
+    );
+  });
+
   it("uses simple suited-only rules for quick rooms", () => {
     const service = createGameRoomService();
     const room = service.getOrCreateQuickRoom(player);
@@ -46,9 +167,9 @@ describe("gameRoomService", () => {
     ];
 
     expect(room.state.rules).toMatchObject({
-      allowChi: false,
-      useDragons: false,
-      useWinds: false
+      actions: { chi: false, gang: true, peng: true },
+      drawCondition: "wallEmpty",
+      tileSet: "suited"
     });
     expect(allVisibleTiles.every((tile) => tile.suit !== "winds" && tile.suit !== "dragons")).toBe(
       true
@@ -168,6 +289,8 @@ describe("gameRoomService", () => {
     const lobbyRoom: GameLobbyRoom = {
       createdAt: "2026-06-11T10:00:00.000Z",
       ownerUserId: player.id,
+      ruleName: "standard",
+      ruleVersion: 1,
       roomId: "room-0100",
       seats: [
         {
@@ -217,6 +340,8 @@ describe("gameRoomService", () => {
       username: secondPlayer.username
     });
     expect(gameRecordRepository.getRecord(room.id)).toMatchObject({
+      ruleName: "standard",
+      ruleVersion: 1,
       humanSeatIndex: 0,
       playerUserId: player.id,
       roomId: room.id,

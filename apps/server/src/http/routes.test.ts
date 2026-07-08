@@ -201,7 +201,8 @@ describe("routes", () => {
       humanSeatIndex: 0,
       playerUserId: 2,
       roomId: "quick-history-1",
-      ruleName: "simple"
+      ruleName: "simple",
+      ruleVersion: 1
     });
     await gameRecordRepository.appendEvent("quick-history-1", {
       createdAt: "2026-06-09T10:00:00.000Z",
@@ -212,7 +213,8 @@ describe("routes", () => {
       humanSeatIndex: 0,
       playerUserId: 999,
       roomId: "quick-other-player",
-      ruleName: "simple"
+      ruleName: "simple",
+      ruleVersion: 1
     });
 
     const listResponse = await app.inject({
@@ -319,15 +321,29 @@ describe("routes", () => {
     });
     const joinerToken = joinerLoginResponse.json<{ token: string }>().token;
 
+    const invalidCreateResponse = await app.inject({
+      headers: {
+        authorization: `Bearer ${ownerToken}`
+      },
+      method: "POST",
+      payload: { ruleName: "unsupported" },
+      url: "/rooms"
+    });
+    expect(invalidCreateResponse.statusCode).toBe(400);
+
     const createResponse = await app.inject({
       headers: {
         authorization: `Bearer ${ownerToken}`
       },
       method: "POST",
+      payload: { ruleName: "standard" },
       url: "/rooms"
     });
 
     expect(createResponse.statusCode).toBe(201);
+    expect(createResponse.json()).toMatchObject({
+      room: { ruleName: "standard", ruleVersion: 1 }
+    });
     const roomId = createResponse.json<{ room: { roomId: string } }>().room.roomId;
 
     const joinResponse = await app.inject({

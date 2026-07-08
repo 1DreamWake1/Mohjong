@@ -54,6 +54,7 @@ export type GameResultInfo = {
 };
 
 export type GameRecordStatus = "playing" | "ended";
+export type GameRecordEndReason = "hu" | "draw" | "abnormal";
 
 export type GameLobbyRoomStatus = "waiting" | "playing" | "ended";
 
@@ -68,10 +69,16 @@ export type GameLobbySeat = {
 export type GameLobbyRoom = {
   roomId: string;
   ownerUserId: number;
+  ruleName?: "simple" | "standard";
+  ruleVersion?: number;
   status: GameLobbyRoomStatus;
   seats: GameLobbySeat[];
   createdAt: string;
   updatedAt: string;
+};
+
+export type CreateGameRoomRequest = {
+  ruleName?: "simple" | "standard";
 };
 
 export type CreateGameRoomResponse = {
@@ -109,10 +116,11 @@ export type ResetGameRoomResponse = {
 export type GameHistoryItem = {
   roomId: string;
   ruleName: string;
+  ruleVersion?: number;
   status: GameRecordStatus;
   startedAt: string;
   endedAt?: string;
-  endReason?: "hu" | "draw";
+  endReason?: GameRecordEndReason;
   winnerSeatIndex?: number;
   winType?: WinType;
   winningTile?: string;

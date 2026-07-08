@@ -1,4 +1,4 @@
-import type { RuleConfig } from "./rules.js";
+import { allowsSevenPairs, type RuleConfig } from "./rules.js";
 import { getTileDefinition, isSuited, tileDefinitions, type Tile, type TileCode } from "./tiles.js";
 
 export type HuPattern = "standard" | "sevenPairs";
@@ -25,7 +25,7 @@ export function canHu(tiles: readonly Tile[], rules: RuleConfig): HuResult {
 
   const counts = countTiles(tiles);
 
-  if (rules.allowSevenPairs && isSevenPairs(counts)) {
+  if (allowsSevenPairs(rules) && isSevenPairs(counts)) {
     return { canHu: true, pattern: "sevenPairs" };
   }
 

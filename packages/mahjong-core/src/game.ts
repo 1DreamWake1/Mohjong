@@ -1,7 +1,12 @@
 import type { Action, MeldInfo, PlayerView, WinType } from "@mahjong/shared";
 
 import { canHu } from "./hand.js";
-import { standardRuleConfig, type RuleConfig } from "./rules.js";
+import {
+  getRuleActions,
+  shouldEndOnEmptyWall,
+  standardRuleConfig,
+  type RuleConfig
+} from "./rules.js";
 import { calculateScore, type ScoreResult } from "./scoring.js";
 import { compareTiles, isSameTileType, isSuited, type Tile } from "./tiles.js";
 import { createSeededRandom, createShuffledWall, type RandomSource } from "./wall.js";
@@ -343,7 +348,8 @@ function getAvailableClaimActionsForSeat(state: MahjongGameState, seatIndex: num
     actions.push({ type: "hu", tileId: pendingDiscard.tile.id });
   }
 
-  if (state.rules.allowGang && sameTiles.length >= 3) {
+  const allowedActions = getRuleActions(state.rules);
+  if (allowedActions.gang && sameTiles.length >= 3) {
     actions.push({
       type: "gang",
       tileId: pendingDiscard.tile.id,
@@ -351,7 +357,7 @@ function getAvailableClaimActionsForSeat(state: MahjongGameState, seatIndex: num
     });
   }
 
-  if (state.rules.allowPeng && sameTiles.length >= 2) {
+  if (allowedActions.peng && sameTiles.length >= 2) {
     actions.push({
       type: "peng",
       tileId: pendingDiscard.tile.id,
@@ -359,7 +365,7 @@ function getAvailableClaimActionsForSeat(state: MahjongGameState, seatIndex: num
     });
   }
 
-  if (state.rules.allowChi && seatIndex === pendingDiscard.nextSeatIndex) {
+  if (allowedActions.chi && seatIndex === pendingDiscard.nextSeatIndex) {
     actions.push(...getChiActions(player.handTiles, pendingDiscard.tile));
   }
 
@@ -491,7 +497,7 @@ function getTurnGangActions(state: MahjongGameState, seatIndex: number): Action[
     handGroups.set(tile.code, tiles);
   }
 
-  if (state.rules.allowGang) {
+  if (getRuleActions(state.rules).gang) {
     for (const tiles of handGroups.values()) {
       if (tiles.length === 4) {
         actions.push({ type: "gang", tileIds: tiles.map((tile) => tile.id) });
@@ -658,7 +664,7 @@ function getChiActions(handTiles: readonly Tile[], discardedTile: Tile): Action[
 }
 
 function drawOrEnd(state: MahjongGameState, seatIndex: number): void {
-  if (state.wall.length === 0) {
+  if (state.wall.length === 0 && shouldEndOnEmptyWall(state.rules)) {
     state.phase = "ended";
     state.endReason = "draw";
     return;

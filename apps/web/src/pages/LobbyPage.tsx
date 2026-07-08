@@ -24,6 +24,10 @@ type LobbyPageProps = {
 
 const seatNames = ["东", "南", "西", "北"];
 
+export function getRulePresetText(ruleName: GameLobbyRoom["ruleName"]): string {
+  return ruleName === "standard" ? "标准规则" : "简单规则";
+}
+
 export function getLobbySeatText(seat: GameLobbySeat): string {
   if (seat.isBot) {
     return seat.username ?? "Bot";
@@ -80,6 +84,7 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
   const socket = useSocketStore((state) => state.socket);
   const socketStatus = useSocketStore((state) => state.status);
   const [joinRoomId, setJoinRoomId] = useState("");
+  const [selectedRuleName, setSelectedRuleName] = useState<"simple" | "standard">("simple");
   const [room, setRoom] = useState<GameLobbyRoom | null>(null);
   const [roomError, setRoomError] = useState<string | null>(null);
   const [isRoomBusy, setIsRoomBusy] = useState(false);
@@ -160,7 +165,7 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
     setRoomError(null);
 
     try {
-      setRoom(await createGameRoom(props.token));
+      setRoom(await createGameRoom(props.token, { ruleName: selectedRuleName }));
     } catch (error) {
       handleRoomError(error);
     } finally {
@@ -320,6 +325,28 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
             >
               历史对局
             </button>
+            <div aria-label="房间规则" className={styles.segmentedControls} role="group">
+              <button
+                className={
+                  selectedRuleName === "simple" ? styles.segmentButtonActive : styles.segmentButton
+                }
+                disabled={isRoomBusy || !canCreateOrJoinRoom}
+                onClick={() => setSelectedRuleName("simple")}
+                type="button"
+              >
+                简单规则
+              </button>
+              <button
+                className={
+                  selectedRuleName === "standard" ? styles.segmentButtonActive : styles.segmentButton
+                }
+                disabled={isRoomBusy || !canCreateOrJoinRoom}
+                onClick={() => setSelectedRuleName("standard")}
+                type="button"
+              >
+                标准规则
+              </button>
+            </div>
             <button
               className={styles.secondaryButton}
               disabled={isRoomBusy || !canCreateOrJoinRoom}
@@ -369,6 +396,9 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
                   </div>
                 ))}
               </div>
+              <p className={styles.roomRuleSummary}>
+                {getRulePresetText(room.ruleName)} v{room.ruleVersion ?? 1}
+              </p>
               <div className={styles.roomActions}>
                 <button
                   className={styles.secondaryButton}

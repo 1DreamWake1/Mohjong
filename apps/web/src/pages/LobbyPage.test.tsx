@@ -6,6 +6,7 @@ import {
   canLeaveLobbyRoom,
   canResetLobbyRoom,
   canStartLobbyRoom,
+  getRulePresetText,
   getLobbyRoomStatusText,
   getLobbySeatText
 } from "./LobbyPage.js";
@@ -42,6 +43,12 @@ vi.mock("../stores/socketStore.js", () => ({
 }));
 
 describe("LobbyPage", () => {
+  it("formats room rule presets", () => {
+    expect(getRulePresetText("simple")).toBe("简单规则");
+    expect(getRulePresetText("standard")).toBe("标准规则");
+    expect(getRulePresetText(undefined)).toBe("简单规则");
+  });
+
   it("formats lobby seat text", () => {
     expect(
       getLobbySeatText({

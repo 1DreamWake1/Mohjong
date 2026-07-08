@@ -1,5 +1,5 @@
 import { canHu, countTiles, isSevenPairs } from "./hand.js";
-import type { RuleConfig } from "./rules.js";
+import { allowsSevenPairs, getScoringConfig, type RuleConfig } from "./rules.js";
 import { getTileDefinition, isSuited, tileDefinitions, type Tile, type TileCode } from "./tiles.js";
 
 export type FanType =
@@ -43,21 +43,26 @@ const fanDefinitions: Record<FanType, Fan> = {
   honroutou: { type: "honroutou", name: "混老头", value: 2 }
 };
 
-export function calculateScore(tiles: readonly Tile[], rules: RuleConfig, options: ScoreOptions = {}): ScoreResult {
+export function calculateScore(
+  tiles: readonly Tile[],
+  rules: RuleConfig,
+  options: ScoreOptions = {}
+): ScoreResult {
+  const scoring = getScoringConfig(rules);
   if (!canHu(tiles, rules).canHu) {
     return {
       canHu: false,
       fans: [],
       fanTotal: 0,
-      basePoints: options.basePoints ?? 20,
+      basePoints: options.basePoints ?? scoring.basePoints,
       totalPoints: 0
     };
   }
 
   const fans = identifyFans(tiles, rules, options);
   const fanTotal = fans.reduce((total, fan) => total + fan.value, 0);
-  const basePoints = options.basePoints ?? 20;
-  const fanPointValue = options.fanPointValue ?? 10;
+  const basePoints = options.basePoints ?? scoring.basePoints;
+  const fanPointValue = options.fanPointValue ?? scoring.fanPointValue;
 
   return {
     canHu: true,
@@ -68,7 +73,11 @@ export function calculateScore(tiles: readonly Tile[], rules: RuleConfig, option
   };
 }
 
-export function identifyFans(tiles: readonly Tile[], rules: RuleConfig, options: ScoreOptions = {}): Fan[] {
+export function identifyFans(
+  tiles: readonly Tile[],
+  rules: RuleConfig,
+  options: ScoreOptions = {}
+): Fan[] {
   if (!canHu(tiles, rules).canHu) {
     return [];
   }
@@ -98,7 +107,7 @@ export function identifyFans(tiles: readonly Tile[], rules: RuleConfig, options:
     fanTypes.push("toitoi");
   }
 
-  if (rules.allowSevenPairs && isSevenPairs(counts)) {
+  if (allowsSevenPairs(rules) && isSevenPairs(counts)) {
     fanTypes.push("sevenPairs");
   }
 
@@ -205,7 +214,11 @@ function getSequence(code: TileCode): [TileCode, TileCode, TileCode] | undefined
 
   const prefix = code[0];
 
-  return [code, `${prefix}${definition.rank + 1}` as TileCode, `${prefix}${definition.rank + 2}` as TileCode];
+  return [
+    code,
+    `${prefix}${definition.rank + 1}` as TileCode,
+    `${prefix}${definition.rank + 2}` as TileCode
+  ];
 }
 
 function addCount(counts: Map<TileCode, number>, code: TileCode, delta: number): void {

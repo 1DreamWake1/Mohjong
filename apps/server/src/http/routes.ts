@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type {
   CreatePlayerRequest,
+  CreateGameRoomRequest,
   GetGameHistoryResponse,
   CreateGameRoomResponse,
   ListGameHistoryResponse,
@@ -84,6 +85,19 @@ function parseSetGameRoomReadyRequest(value: unknown): SetGameRoomReadyRequest |
   }
 
   return { isReady: value.isReady };
+}
+
+function parseCreateGameRoomRequest(value: unknown): CreateGameRoomRequest | null {
+  if (value === undefined || value === null) {
+    return {};
+  }
+  if (!isRecord(value)) {
+    return null;
+  }
+  if (value.ruleName !== undefined && value.ruleName !== "simple" && value.ruleName !== "standard") {
+    return null;
+  }
+  return value.ruleName === undefined ? {} : { ruleName: value.ruleName };
 }
 
 function parseIdParam(value: unknown): number | null {
@@ -194,7 +208,14 @@ export async function registerRoutes(app: FastifyInstance, services: RouteServic
       return reply.code(403).send({ message: "Forbidden" });
     }
 
-    return reply.code(201).send({ room: services.gameLobbyService.createRoom(user) });
+    const input = parseCreateGameRoomRequest(request.body);
+    if (!input) {
+      return reply.code(400).send({ message: "Invalid game room request" });
+    }
+
+    return reply
+      .code(201)
+      .send({ room: services.gameLobbyService.createRoom(user, input.ruleName) });
   });
 
   app.post("/rooms/:roomId/join", async (request, reply): Promise<JoinGameRoomResponse | void> => {
