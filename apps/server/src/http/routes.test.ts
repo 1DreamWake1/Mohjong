@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../app.js";
 import { hashPassword, verifyPassword } from "../modules/auth/password.js";
 import { createMemoryGameRecordRepository } from "../modules/game/gameRecordRepository.js";
+import { createGameLobbyService } from "../modules/game/gameLobbyService.js";
 import { createGameRoomService } from "../modules/game/gameRoomService.js";
 import type {
   CreateUserInput,
@@ -57,9 +58,7 @@ class MemoryUserRepository implements UserRepository {
   async listPlayers(): Promise<UserSummary[]> {
     return [...this.users.values()]
       .filter((user) => user.role === "player")
-      .sort((leftUser, rightUser) =>
-        leftUser.username.localeCompare(rightUser.username)
-      )
+      .sort((leftUser, rightUser) => leftUser.username.localeCompare(rightUser.username))
       .map((user) => ({
         id: user.id,
         username: user.username,
@@ -69,10 +68,7 @@ class MemoryUserRepository implements UserRepository {
       }));
   }
 
-  async updatePlayerPassword(
-    id: number,
-    passwordHash: string
-  ): Promise<boolean> {
+  async updatePlayerPassword(id: number, passwordHash: string): Promise<boolean> {
     const user = this.users.get(id);
     if (!user || user.role !== "player") {
       return false;
@@ -107,14 +103,16 @@ async function createTestApp() {
   });
 
   const gameRoomService = createGameRoomService({ gameRecordRepository });
+  const gameLobbyService = createGameLobbyService();
   const app = await createApp({
     authTokenSecret: "test-secret",
+    gameLobbyService,
     gameRecordRepository,
     gameRoomService,
     userRepository
   });
 
-  return { app, gameRecordRepository, gameRoomService, userRepository };
+  return { app, gameLobbyService, gameRecordRepository, gameRoomService, userRepository };
 }
 
 describe("routes", () => {
@@ -300,7 +298,7 @@ describe("routes", () => {
   });
 
   it("allows players to create, read, and join lobby rooms", async () => {
-    const { app, gameRoomService } = await createTestApp();
+    const { app, gameLobbyService, gameRoomService } = await createTestApp();
 
     const ownerLoginResponse = await app.inject({
       method: "POST",
@@ -380,13 +378,18 @@ describe("routes", () => {
     });
 
     expect(notReadyResponse.statusCode).toBe(200);
-    expect(gameRoomService.getRoomForUser({
-      createdAt: "2026-06-01T00:00:00.000Z",
-      id: 2,
-      role: "player",
-      updatedAt: "2026-06-01T00:00:00.000Z",
-      username: "player1"
-    }, roomId)).toBeNull();
+    expect(
+      gameRoomService.getRoomForUser(
+        {
+          createdAt: "2026-06-01T00:00:00.000Z",
+          id: 2,
+          role: "player",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+          username: "player1"
+        },
+        roomId
+      )
+    ).toBeNull();
 
     const blockedStartResponse = await app.inject({
       headers: {
@@ -429,29 +432,94 @@ describe("routes", () => {
     expect(startResponse.json()).toMatchObject({
       room: {
         roomId,
-        seats: expect.arrayContaining([
-          expect.objectContaining({ isBot: true, isReady: true })
-        ]),
+        seats: expect.arrayContaining([expect.objectContaining({ isBot: true, isReady: true })]),
         status: "playing"
       }
     });
-    expect(gameRoomService.getRoomForUser({
-      createdAt: "2026-06-01T00:00:00.000Z",
-      id: 2,
-      role: "player",
-      updatedAt: "2026-06-01T00:00:00.000Z",
-      username: "player1"
-    }, roomId)).toMatchObject({
-      id: roomId
+    expect(
+      gameRoomService.getRoomForUser(
+        {
+          createdAt: "2026-06-01T00:00:00.000Z",
+          id: 2,
+          role: "player",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+          username: "player1"
+        },
+        roomId
+      )
+    ).toMatchObject({
+      id: `${roomId}-round-0001`
     });
-    expect(gameRoomService.getRoomForUser({
-      createdAt: "2026-06-01T00:00:00.000Z",
-      id: 3,
-      role: "player",
-      updatedAt: "2026-06-01T00:00:00.000Z",
-      username: "player2"
-    }, roomId)).toMatchObject({
-      id: roomId
+
+    const firstGameRound = gameRoomService.getRoom(roomId);
+    if (!firstGameRound) {
+      throw new Error("Expected first multiplayer game round");
+    }
+    firstGameRound.state.phase = "ended";
+    firstGameRound.state.endReason = "draw";
+    gameLobbyService.finishRoom(roomId);
+    const forbiddenRematchResponse = await app.inject({
+      headers: { authorization: `Bearer ${joinerToken}` },
+      method: "POST",
+      url: "/rooms/current/rematch"
+    });
+    expect(forbiddenRematchResponse.statusCode).toBe(403);
+
+    const rematchResponse = await app.inject({
+      headers: { authorization: `Bearer ${ownerToken}` },
+      method: "POST",
+      url: "/rooms/current/rematch"
+    });
+    expect(rematchResponse.statusCode).toBe(200);
+    expect(rematchResponse.json()).toMatchObject({
+      room: {
+        roomId,
+        status: "waiting",
+        seats: expect.arrayContaining([
+          expect.objectContaining({ isReady: true, username: "player1" }),
+          expect.objectContaining({ isReady: false, username: "player2" }),
+          expect.objectContaining({ isBot: false, isReady: false })
+        ])
+      }
+    });
+
+    await app.inject({
+      headers: { authorization: `Bearer ${joinerToken}` },
+      method: "PATCH",
+      payload: { isReady: true },
+      url: "/rooms/current/ready"
+    });
+    const secondStartResponse = await app.inject({
+      headers: { authorization: `Bearer ${ownerToken}` },
+      method: "POST",
+      url: "/rooms/current/start"
+    });
+    expect(secondStartResponse.statusCode).toBe(200);
+    expect(
+      gameRoomService.getRoomForUser(
+        {
+          createdAt: "2026-06-01T00:00:00.000Z",
+          id: 2,
+          role: "player",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+          username: "player1"
+        },
+        roomId
+      )
+    ).toMatchObject({ id: `${roomId}-round-0002` });
+    expect(
+      gameRoomService.getRoomForUser(
+        {
+          createdAt: "2026-06-01T00:00:00.000Z",
+          id: 3,
+          role: "player",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+          username: "player2"
+        },
+        roomId
+      )
+    ).toMatchObject({
+      id: `${roomId}-round-0002`
     });
 
     await app.close();
@@ -504,7 +572,13 @@ describe("routes", () => {
     });
 
     expect(leaveResponse.statusCode).toBe(200);
-    const leaveBody = leaveResponse.json<{ room: { ownerUserId: number; roomId: string; seats: Array<{ seatIndex: number; userId?: number }> } }>();
+    const leaveBody = leaveResponse.json<{
+      room: {
+        ownerUserId: number;
+        roomId: string;
+        seats: Array<{ seatIndex: number; userId?: number }>;
+      };
+    }>();
     expect(leaveBody).toMatchObject({
       room: {
         ownerUserId: 2,
@@ -615,9 +689,7 @@ describe("routes", () => {
 
     expect(listResponse.statusCode).toBe(200);
     expect(listResponse.json<{ players: UserSummary[] }>().players).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ username: "new_player" })
-      ])
+      expect.arrayContaining([expect.objectContaining({ username: "new_player" })])
     );
 
     const deleteResponse = await app.inject({
@@ -661,9 +733,7 @@ describe("routes", () => {
 
     const updatedPlayer = await userRepository.findByUsername("player1");
     expect(updatedPlayer).not.toBeNull();
-    expect(
-      await verifyPassword("newpass123", updatedPlayer?.passwordHash ?? "")
-    ).toBe(true);
+    expect(await verifyPassword("newpass123", updatedPlayer?.passwordHash ?? "")).toBe(true);
 
     const playerLoginResponse = await app.inject({
       method: "POST",

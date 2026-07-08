@@ -6,6 +6,7 @@ import {
   getCurrentGameRoom,
   joinGameRoom,
   leaveCurrentGameRoom,
+  resetGameRoomForRematch,
   setGameRoomReady,
   startGameRoom
 } from "../api/client.js";
@@ -53,6 +54,10 @@ export function canCreateOrJoinLobbyRoom(room: GameLobbyRoom | null): boolean {
   return !room || room.status === "ended";
 }
 
+export function canResetLobbyRoom(room: GameLobbyRoom | null, userId: number): boolean {
+  return room?.status === "ended" && room.ownerUserId === userId;
+}
+
 export function getLobbyRoomStatusText(room: GameLobbyRoom | null): string {
   if (room?.status === "waiting") {
     return "等待中";
@@ -85,6 +90,7 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
   const canEnterGame = canEnterLobbyGame(room);
   const canLeaveRoom = canLeaveLobbyRoom(room);
   const canCreateOrJoinRoom = canCreateOrJoinLobbyRoom(room);
+  const canResetRoom = canResetLobbyRoom(room, props.user.id);
 
   function handleRoomError(error: unknown): void {
     if (isUnauthorizedError(error)) {
@@ -236,6 +242,22 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
     }
   }
 
+  async function handleResetRoom(): Promise<void> {
+    if (!canResetRoom) {
+      return;
+    }
+
+    setIsRoomBusy(true);
+    setRoomError(null);
+    try {
+      setRoom(await resetGameRoomForRematch(props.token));
+    } catch (error) {
+      handleRoomError(error);
+    } finally {
+      setIsRoomBusy(false);
+    }
+  }
+
   return (
     <main className={styles.lobbyShell}>
       <header className={styles.lobbyHeader}>
@@ -285,6 +307,7 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
           <div className={styles.actionStack}>
             <button
               className={styles.primaryButton}
+              disabled={isRoomBusy || Boolean(room)}
               onClick={() => replaceRoute(APP_ROUTES.gameDemo)}
               type="button"
             >
@@ -305,7 +328,10 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
             >
               创建房间
             </button>
-            <form className={styles.inlineJoinForm} onSubmit={(event) => void handleJoinRoom(event)}>
+            <form
+              className={styles.inlineJoinForm}
+              onSubmit={(event) => void handleJoinRoom(event)}
+            >
               <input
                 aria-label="房间号"
                 onChange={(event) => setJoinRoomId(event.target.value)}
@@ -377,14 +403,18 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
                   退出房间
                 </button>
                 {room.status === "ended" ? (
-                  <button
-                    className={styles.primaryButton}
-                    disabled={isRoomBusy}
-                    onClick={() => void handleCreateRoom()}
-                    type="button"
-                  >
-                    再开一局
-                  </button>
+                  canResetRoom ? (
+                    <button
+                      className={styles.primaryButton}
+                      disabled={isRoomBusy}
+                      onClick={() => void handleResetRoom()}
+                      type="button"
+                    >
+                      召集原成员
+                    </button>
+                  ) : (
+                    <span className={styles.helperText}>等待房主再开一局</span>
+                  )
                 ) : null}
               </div>
             </>

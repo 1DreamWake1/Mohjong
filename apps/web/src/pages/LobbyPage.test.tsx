@@ -4,6 +4,7 @@ import {
   canCreateOrJoinLobbyRoom,
   canEnterLobbyGame,
   canLeaveLobbyRoom,
+  canResetLobbyRoom,
   canStartLobbyRoom,
   getLobbyRoomStatusText,
   getLobbySeatText
@@ -14,13 +15,15 @@ vi.mock("../api/client.js", () => ({
   getCurrentGameRoom: vi.fn(),
   joinGameRoom: vi.fn(),
   leaveCurrentGameRoom: vi.fn(),
+  resetGameRoomForRematch: vi.fn(),
   setGameRoomReady: vi.fn(),
   startGameRoom: vi.fn()
 }));
 
 vi.mock("../stores/authStore.js", () => ({
-  useAuthStore: (selector: (state: { clearSession: () => void; signOut: () => Promise<void> }) => unknown) =>
-    selector({ clearSession: vi.fn(), signOut: vi.fn() })
+  useAuthStore: (
+    selector: (state: { clearSession: () => void; signOut: () => Promise<void> }) => unknown
+  ) => selector({ clearSession: vi.fn(), signOut: vi.fn() })
 }));
 
 vi.mock("../stores/socketStore.js", () => ({
@@ -93,9 +96,7 @@ describe("LobbyPage", () => {
       canStartLobbyRoom(
         {
           ...room,
-          seats: room.seats.map((seat) =>
-            seat.userId === 2 ? { ...seat, isReady: false } : seat
-          )
+          seats: room.seats.map((seat) => (seat.userId === 2 ? { ...seat, isReady: false } : seat))
         },
         1
       )
@@ -184,5 +185,20 @@ describe("LobbyPage", () => {
     expect(getLobbyRoomStatusText({ ...room, status: "playing" })).toBe("进行中");
     expect(getLobbyRoomStatusText({ ...room, status: "ended" })).toBe("已结束");
     expect(getLobbyRoomStatusText(null)).toBe("-");
+  });
+
+  it("allows only the owner to reset an ended room", () => {
+    const room = {
+      createdAt: "2026-06-11T00:00:00.000Z",
+      ownerUserId: 1,
+      roomId: "room-0001",
+      seats: [],
+      status: "ended" as const,
+      updatedAt: "2026-06-11T00:00:00.000Z"
+    };
+
+    expect(canResetLobbyRoom(room, 1)).toBe(true);
+    expect(canResetLobbyRoom(room, 2)).toBe(false);
+    expect(canResetLobbyRoom({ ...room, status: "waiting" }, 1)).toBe(false);
   });
 });

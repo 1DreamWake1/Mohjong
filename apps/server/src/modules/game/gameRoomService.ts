@@ -26,6 +26,7 @@ type GameRoom = {
   humanSeatIndex: number;
   humanSeatIndexByUserId: Map<number, number>;
   id: string;
+  lobbyRoomId?: string;
   playerUserId: number;
   state: MahjongGameState;
 };
@@ -156,7 +157,9 @@ export function describeGameEnd(state: MahjongGameState): string {
 
 export function createGameRoomService(options: CreateGameRoomServiceOptions = {}) {
   const roomsById = new Map<string, GameRoom>();
+  const activeGameRoomIdByLobbyRoomId = new Map<string, string>();
   const activeRoomIdByUserId = new Map<number, string>();
+  const roundNumberByLobbyRoomId = new Map<string, number>();
   const gameRecordRepository = options.gameRecordRepository ?? createNoopGameRecordRepository();
   const persistentWriteQueueByRoomId = new Map<string, Promise<void>>();
 
@@ -247,10 +250,14 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
   }
 
   function createRoomFromLobby(lobbyRoom: GameLobbyRoom): GameRoom {
-    const existingRoom = roomsById.get(lobbyRoom.roomId);
-    if (existingRoom) {
+    const activeGameRoomId = activeGameRoomIdByLobbyRoomId.get(lobbyRoom.roomId);
+    const existingRoom = activeGameRoomId ? roomsById.get(activeGameRoomId) : undefined;
+    if (existingRoom && existingRoom.state.phase !== "ended") {
       return existingRoom;
     }
+
+    const roundNumber = (roundNumberByLobbyRoomId.get(lobbyRoom.roomId) ?? 0) + 1;
+    roundNumberByLobbyRoomId.set(lobbyRoom.roomId, roundNumber);
 
     const humanSeats = lobbyRoom.seats.filter((seat) => seat.userId !== undefined && !seat.isBot);
     const primaryHumanSeat =
@@ -270,7 +277,8 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
       events: [],
       humanSeatIndex: primaryHumanSeat.seatIndex,
       humanSeatIndexByUserId,
-      id: lobbyRoom.roomId,
+      id: `${lobbyRoom.roomId}-round-${roundNumber.toString().padStart(4, "0")}`,
+      lobbyRoomId: lobbyRoom.roomId,
       playerUserId: primaryHumanSeat.userId,
       state: createInitialGame({
         players: lobbyRoom.seats.map((seat) => ({
@@ -283,6 +291,7 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     };
 
     roomsById.set(room.id, room);
+    activeGameRoomIdByLobbyRoomId.set(lobbyRoom.roomId, room.id);
     for (const userId of humanSeatIndexByUserId.keys()) {
       activeRoomIdByUserId.set(userId, room.id);
     }
@@ -299,11 +308,15 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
   }
 
   function getRoom(roomId: string): GameRoom | null {
-    return roomsById.get(roomId) ?? null;
+    const gameRoomId = activeGameRoomIdByLobbyRoomId.get(roomId) ?? roomId;
+    return roomsById.get(gameRoomId) ?? null;
   }
 
   function getRoomForUser(user: AuthUser, roomId?: string): GameRoom | null {
-    const targetRoomId = roomId ?? activeRoomIdByUserId.get(user.id);
+    const requestedRoomId = roomId ?? activeRoomIdByUserId.get(user.id);
+    const targetRoomId = requestedRoomId
+      ? (activeGameRoomIdByLobbyRoomId.get(requestedRoomId) ?? requestedRoomId)
+      : undefined;
     if (!targetRoomId) {
       return null;
     }

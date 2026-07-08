@@ -207,19 +207,19 @@ describe("gameRoomService", () => {
     expect(service.getRoomForUser(player, lobbyRoom.roomId)).toBe(room);
     expect(service.getRoomForUser(secondPlayer, lobbyRoom.roomId)).toBe(room);
     expect(service.getPlayerView(room, player)).toMatchObject({
-      roomId: lobbyRoom.roomId,
+      roomId: room.id,
       seatIndex: 0,
       username: player.username
     });
     expect(service.getPlayerView(room, secondPlayer)).toMatchObject({
-      roomId: lobbyRoom.roomId,
+      roomId: room.id,
       seatIndex: 1,
       username: secondPlayer.username
     });
-    expect(gameRecordRepository.getRecord(lobbyRoom.roomId)).toMatchObject({
+    expect(gameRecordRepository.getRecord(room.id)).toMatchObject({
       humanSeatIndex: 0,
       playerUserId: player.id,
-      roomId: lobbyRoom.roomId,
+      roomId: room.id,
       status: "playing"
     });
   });
@@ -240,8 +240,38 @@ describe("gameRoomService", () => {
       updatedAt: "2026-06-11T10:00:00.000Z"
     });
 
-    expect(room.id).toBe("room-0101");
+    expect(room.id).toBe("room-0101-round-0001");
     expect(service.getRoomForUser(secondPlayer, room.id)).toBeNull();
+  });
+
+  it("creates a unique game round when a lobby room starts again", async () => {
+    const gameRecordRepository = createMemoryGameRecordRepository();
+    const service = createGameRoomService({ gameRecordRepository });
+    const lobbyRoom: GameLobbyRoom = {
+      createdAt: "2026-06-11T10:00:00.000Z",
+      ownerUserId: player.id,
+      roomId: "room-rematch",
+      seats: [
+        { isBot: false, isReady: true, seatIndex: 0, userId: player.id, username: player.username },
+        { isBot: true, isReady: true, seatIndex: 1, username: "玩家Bot1" },
+        { isBot: true, isReady: true, seatIndex: 2, username: "玩家Bot2" },
+        { isBot: true, isReady: true, seatIndex: 3, username: "玩家Bot3" }
+      ],
+      status: "playing",
+      updatedAt: "2026-06-11T10:00:00.000Z"
+    };
+    const firstRound = service.createRoomFromLobby(lobbyRoom);
+    firstRound.state.phase = "ended";
+    firstRound.state.endReason = "draw";
+
+    const secondRound = service.createRoomFromLobby(lobbyRoom);
+    await service.waitForPersistentWrites();
+
+    expect(firstRound.id).toBe("room-rematch-round-0001");
+    expect(secondRound.id).toBe("room-rematch-round-0002");
+    expect(service.getRoomForUser(player, lobbyRoom.roomId)).toBe(secondRound);
+    expect(gameRecordRepository.getRecord(firstRound.id)).not.toBeNull();
+    expect(gameRecordRepository.getRecord(secondRound.id)).not.toBeNull();
   });
 
   it("ends a quick room when the human player returns to lobby", async () => {

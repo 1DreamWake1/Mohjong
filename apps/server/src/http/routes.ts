@@ -10,6 +10,7 @@ import type {
   LoginRequest,
   LogoutResponse,
   ResetPlayerPasswordRequest,
+  ResetGameRoomResponse,
   SetGameRoomReadyRequest,
   SetGameRoomReadyResponse,
   StartGameRoomResponse
@@ -29,11 +30,10 @@ type RouteServices = {
   userService: ReturnType<typeof createUserService>;
 };
 
-type AuthenticatedUser = Awaited<
-  ReturnType<AuthService["getCurrentUser"]>
-> extends infer Result
-  ? NonNullable<Result>
-  : never;
+type AuthenticatedUser =
+  Awaited<ReturnType<AuthService["getCurrentUser"]>> extends infer Result
+    ? NonNullable<Result>
+    : never;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object";
@@ -65,9 +65,7 @@ function parseCreatePlayerRequest(value: unknown): CreatePlayerRequest | null {
   return { username, password };
 }
 
-function parseResetPlayerPasswordRequest(
-  value: unknown
-): ResetPlayerPasswordRequest | null {
+function parseResetPlayerPasswordRequest(value: unknown): ResetPlayerPasswordRequest | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -137,10 +135,7 @@ async function requireUser(
   return user;
 }
 
-export async function registerRoutes(
-  app: FastifyInstance,
-  services: RouteServices
-): Promise<void> {
+export async function registerRoutes(app: FastifyInstance, services: RouteServices): Promise<void> {
   app.get("/health", async () => ({
     status: "ok"
   }));
@@ -160,11 +155,7 @@ export async function registerRoutes(
   });
 
   app.get("/auth/me", async (request, reply) => {
-    const user = await requireUser(
-      app,
-      services,
-      request.headers.authorization
-    );
+    const user = await requireUser(app, services, request.headers.authorization);
 
     if (!user) {
       return reply.code(401).send({ message: "Unauthorized" });
@@ -173,16 +164,15 @@ export async function registerRoutes(
     return { user };
   });
 
-  app.post("/auth/logout", async (): Promise<LogoutResponse> => ({
-    ok: true
-  }));
+  app.post(
+    "/auth/logout",
+    async (): Promise<LogoutResponse> => ({
+      ok: true
+    })
+  );
 
   app.get("/rooms/current", async (request, reply): Promise<GetCurrentGameRoomResponse | void> => {
-    const user = await requireUser(
-      app,
-      services,
-      request.headers.authorization
-    );
+    const user = await requireUser(app, services, request.headers.authorization);
 
     if (!user) {
       return reply.code(401).send({ message: "Unauthorized" });
@@ -195,11 +185,7 @@ export async function registerRoutes(
   });
 
   app.post("/rooms", async (request, reply): Promise<CreateGameRoomResponse | void> => {
-    const user = await requireUser(
-      app,
-      services,
-      request.headers.authorization
-    );
+    const user = await requireUser(app, services, request.headers.authorization);
 
     if (!user) {
       return reply.code(401).send({ message: "Unauthorized" });
@@ -211,48 +197,37 @@ export async function registerRoutes(
     return reply.code(201).send({ room: services.gameLobbyService.createRoom(user) });
   });
 
-  app.post(
-    "/rooms/:roomId/join",
-    async (request, reply): Promise<JoinGameRoomResponse | void> => {
-      const user = await requireUser(
-        app,
-        services,
-        request.headers.authorization
-      );
+  app.post("/rooms/:roomId/join", async (request, reply): Promise<JoinGameRoomResponse | void> => {
+    const user = await requireUser(app, services, request.headers.authorization);
 
-      if (!user) {
-        return reply.code(401).send({ message: "Unauthorized" });
-      }
-      if (user.role !== "player") {
-        return reply.code(403).send({ message: "Forbidden" });
-      }
-
-      const roomId = parseRoomIdParam(request.params);
-      if (!roomId) {
-        return reply.code(400).send({ message: "Invalid room id" });
-      }
-
-      const result = services.gameLobbyService.joinRoom(user, roomId);
-      if (!result.ok && result.reason === "not_found") {
-        return reply.code(404).send({ message: "Room not found" });
-      }
-      if (!result.ok && result.reason === "full") {
-        return reply.code(409).send({ message: "Room is full" });
-      }
-      if (!result.ok) {
-        return reply.code(409).send({ message: "Player is already in another room" });
-      }
-
-      return { room: result.room };
+    if (!user) {
+      return reply.code(401).send({ message: "Unauthorized" });
     }
-  );
+    if (user.role !== "player") {
+      return reply.code(403).send({ message: "Forbidden" });
+    }
+
+    const roomId = parseRoomIdParam(request.params);
+    if (!roomId) {
+      return reply.code(400).send({ message: "Invalid room id" });
+    }
+
+    const result = services.gameLobbyService.joinRoom(user, roomId);
+    if (!result.ok && result.reason === "not_found") {
+      return reply.code(404).send({ message: "Room not found" });
+    }
+    if (!result.ok && result.reason === "full") {
+      return reply.code(409).send({ message: "Room is full" });
+    }
+    if (!result.ok) {
+      return reply.code(409).send({ message: "Player is already in another room" });
+    }
+
+    return { room: result.room };
+  });
 
   app.delete("/rooms/current", async (request, reply): Promise<LeaveGameRoomResponse | void> => {
-    const user = await requireUser(
-      app,
-      services,
-      request.headers.authorization
-    );
+    const user = await requireUser(app, services, request.headers.authorization);
 
     if (!user) {
       return reply.code(401).send({ message: "Unauthorized" });
@@ -275,11 +250,7 @@ export async function registerRoutes(
   app.patch(
     "/rooms/current/ready",
     async (request, reply): Promise<SetGameRoomReadyResponse | void> => {
-      const user = await requireUser(
-        app,
-        services,
-        request.headers.authorization
-      );
+      const user = await requireUser(app, services, request.headers.authorization);
 
       if (!user) {
         return reply.code(401).send({ message: "Unauthorized" });
@@ -306,13 +277,35 @@ export async function registerRoutes(
   );
 
   app.post(
+    "/rooms/current/rematch",
+    async (request, reply): Promise<ResetGameRoomResponse | void> => {
+      const user = await requireUser(app, services, request.headers.authorization);
+      if (!user) {
+        return reply.code(401).send({ message: "Unauthorized" });
+      }
+      if (user.role !== "player") {
+        return reply.code(403).send({ message: "Forbidden" });
+      }
+
+      const result = services.gameLobbyService.resetRoomForRematch(user);
+      if (!result.ok && result.reason === "not_found") {
+        return reply.code(404).send({ message: "Room not found" });
+      }
+      if (!result.ok && result.reason === "forbidden") {
+        return reply.code(403).send({ message: "Only room owner can restart the room" });
+      }
+      if (!result.ok) {
+        return reply.code(409).send({ message: "Room has not ended" });
+      }
+
+      return { room: result.room };
+    }
+  );
+
+  app.post(
     "/rooms/current/start",
     async (request, reply): Promise<StartGameRoomResponse | void> => {
-      const user = await requireUser(
-        app,
-        services,
-        request.headers.authorization
-      );
+      const user = await requireUser(app, services, request.headers.authorization);
 
       if (!user) {
         return reply.code(401).send({ message: "Unauthorized" });
@@ -341,11 +334,7 @@ export async function registerRoutes(
   );
 
   app.get("/games/history", async (request, reply): Promise<ListGameHistoryResponse | void> => {
-    const user = await requireUser(
-      app,
-      services,
-      request.headers.authorization
-    );
+    const user = await requireUser(app, services, request.headers.authorization);
 
     if (!user) {
       return reply.code(401).send({ message: "Unauthorized" });
@@ -362,11 +351,7 @@ export async function registerRoutes(
   app.get(
     "/games/history/:roomId",
     async (request, reply): Promise<GetGameHistoryResponse | void> => {
-      const user = await requireUser(
-        app,
-        services,
-        request.headers.authorization
-      );
+      const user = await requireUser(app, services, request.headers.authorization);
 
       if (!user) {
         return reply.code(401).send({ message: "Unauthorized" });
@@ -390,11 +375,7 @@ export async function registerRoutes(
   );
 
   app.get("/admin/players", async (request, reply) => {
-    const user = await requireUser(
-      app,
-      services,
-      request.headers.authorization
-    );
+    const user = await requireUser(app, services, request.headers.authorization);
 
     if (!user) {
       return reply.code(401).send({ message: "Unauthorized" });
@@ -407,11 +388,7 @@ export async function registerRoutes(
   });
 
   app.post("/admin/players", async (request, reply) => {
-    const user = await requireUser(
-      app,
-      services,
-      request.headers.authorization
-    );
+    const user = await requireUser(app, services, request.headers.authorization);
 
     if (!user) {
       return reply.code(401).send({ message: "Unauthorized" });
@@ -437,11 +414,7 @@ export async function registerRoutes(
   });
 
   app.delete("/admin/players/:id", async (request, reply) => {
-    const user = await requireUser(
-      app,
-      services,
-      request.headers.authorization
-    );
+    const user = await requireUser(app, services, request.headers.authorization);
 
     if (!user) {
       return reply.code(401).send({ message: "Unauthorized" });
@@ -456,17 +429,11 @@ export async function registerRoutes(
     }
 
     const deleted = await services.userService.deletePlayer(id);
-    return deleted
-      ? reply.code(204).send()
-      : reply.code(404).send({ message: "Player not found" });
+    return deleted ? reply.code(204).send() : reply.code(404).send({ message: "Player not found" });
   });
 
   app.patch("/admin/players/:id/password", async (request, reply) => {
-    const user = await requireUser(
-      app,
-      services,
-      request.headers.authorization
-    );
+    const user = await requireUser(app, services, request.headers.authorization);
 
     if (!user) {
       return reply.code(401).send({ message: "Unauthorized" });

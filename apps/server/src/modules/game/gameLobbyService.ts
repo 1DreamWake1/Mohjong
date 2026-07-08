@@ -28,6 +28,10 @@ export type ReplaceLobbyPlayerWithBotResult =
   | { ok: true; room: GameLobbyRoom }
   | { ok: false; reason: "not_found" | "not_playing" };
 
+export type ResetGameLobbyRoomResult =
+  | { ok: true; room: GameLobbyRoom }
+  | { ok: false; reason: "not_found" | "forbidden" | "not_ended" };
+
 let nextLobbyRoomNumber = 1;
 
 function createLobbyRoomId(): string {
@@ -228,10 +232,7 @@ export function createGameLobbyService() {
     return { ok: true, room: removeUserFromRoom(user.id, room) };
   }
 
-  function setReady(
-    user: AuthUser,
-    isReady: boolean
-  ): SetGameLobbyRoomReadyResult {
+  function setReady(user: AuthUser, isReady: boolean): SetGameLobbyRoomReadyResult {
     const roomId = activeRoomIdByUserId.get(user.id);
     const room = roomId ? roomsById.get(roomId) : undefined;
     const seat = room ? findUserSeat(room, user.id) : undefined;
@@ -286,10 +287,7 @@ export function createGameLobbyService() {
     return { ok: true, room: cloneRoom(room) };
   }
 
-  function replacePlayerWithBot(
-    user: AuthUser,
-    roomId: string
-  ): ReplaceLobbyPlayerWithBotResult {
+  function replacePlayerWithBot(user: AuthUser, roomId: string): ReplaceLobbyPlayerWithBotResult {
     const room = roomsById.get(roomId);
     const seat = room ? findUserSeat(room, user.id) : undefined;
     if (!room || !seat) {
@@ -321,6 +319,33 @@ export function createGameLobbyService() {
     return { ok: true, room: cloneRoom(room) };
   }
 
+  function resetRoomForRematch(user: AuthUser): ResetGameLobbyRoomResult {
+    const roomId = activeRoomIdByUserId.get(user.id);
+    const room = roomId ? roomsById.get(roomId) : undefined;
+    if (!room || !findUserSeat(room, user.id)) {
+      return { ok: false, reason: "not_found" };
+    }
+    if (room.ownerUserId !== user.id) {
+      return { ok: false, reason: "forbidden" };
+    }
+    if (room.status !== "ended") {
+      return { ok: false, reason: "not_ended" };
+    }
+
+    for (const seat of room.seats) {
+      if (seat.isBot) {
+        clearSeat(seat);
+        continue;
+      }
+
+      seat.isReady = seat.userId === room.ownerUserId;
+    }
+    room.status = "waiting";
+    room.updatedAt = new Date().toISOString();
+    notifyRoomUpdated(room);
+    return { ok: true, room: cloneRoom(room) };
+  }
+
   function subscribeRoomUpdates(listener: GameLobbyRoomListener): () => void {
     roomListeners.add(listener);
     return () => {
@@ -336,6 +361,7 @@ export function createGameLobbyService() {
     joinRoom,
     leaveRoom,
     replacePlayerWithBot,
+    resetRoomForRematch,
     setReady,
     startRoom,
     subscribeRoomUpdates

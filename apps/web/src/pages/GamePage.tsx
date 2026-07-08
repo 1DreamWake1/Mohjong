@@ -1,4 +1,10 @@
-import type { Action, AuthUser, GameEventMessage, GamePhase, GameResultInfo } from "@mahjong/shared";
+import type {
+  Action,
+  AuthUser,
+  GameEventMessage,
+  GamePhase,
+  GameResultInfo
+} from "@mahjong/shared";
 import { useEffect, useRef, useState } from "react";
 
 import styles from "../app/App.module.css";
@@ -13,9 +19,9 @@ type GamePageProps = {
   user: AuthUser;
 };
 
-export function getGameConnectRequest(roomId: string):
-  | { event: "game:start" }
-  | { event: "game:sync"; payload: { gameId: string } } {
+export function getGameConnectRequest(
+  roomId: string
+): { event: "game:start" } | { event: "game:sync"; payload: { gameId: string } } {
   if (roomId.startsWith("quick-")) {
     return { event: "game:sync", payload: { gameId: roomId } };
   }
@@ -25,6 +31,10 @@ export function getGameConnectRequest(roomId: string):
 
 export function canRestartGame(phase: GamePhase): boolean {
   return phase === "ended";
+}
+
+export function getGameEndAction(roomId: string): "restart" | "return-to-room" {
+  return roomId.startsWith("quick-") ? "restart" : "return-to-room";
 }
 
 export function getReturnToLobbyConfirmation(phase: GamePhase, roomId: string): string | null {
@@ -168,7 +178,7 @@ export function GamePage(props: GamePageProps): JSX.Element {
   }, [setErrorMessage, setStatus, setView, signOut, socket]);
 
   function handleAction(action: Action): void {
-    if (!socket || action.type === "discard" && !action.tileId) {
+    if (!socket || (action.type === "discard" && !action.tileId)) {
       setErrorMessage(action.type === "discard" ? "请先选择要打出的手牌" : "Socket 未连接");
       return;
     }
@@ -177,6 +187,11 @@ export function GamePage(props: GamePageProps): JSX.Element {
   }
 
   function handleRestartGame(): void {
+    if (getGameEndAction(view.roomId) === "return-to-room") {
+      replaceRoute(APP_ROUTES.lobby);
+      return;
+    }
+
     if (!socket) {
       setErrorMessage("Socket 未连接");
       return;
@@ -236,11 +251,7 @@ export function GamePage(props: GamePageProps): JSX.Element {
         <div className={styles.headerActions}>
           <span className={styles.roleBadge}>玩家</span>
           <span>{props.user.username}</span>
-          <button
-            className={styles.secondaryButton}
-            onClick={handleReturnToLobby}
-            type="button"
-          >
+          <button className={styles.secondaryButton} onClick={handleReturnToLobby} type="button">
             返回大厅
           </button>
           <button className={styles.secondaryButton} onClick={handleSignOut} type="button">
@@ -254,14 +265,21 @@ export function GamePage(props: GamePageProps): JSX.Element {
           <section className={styles.lobbyPanel}>
             <div>
               <p className={styles.panelLabel}>快速对局</p>
-              <h2>{status === "joining" ? "加入中" : view.phase === "ended" ? "已结束" : "进行中"}</h2>
+              <h2>
+                {status === "joining" ? "加入中" : view.phase === "ended" ? "已结束" : "进行中"}
+              </h2>
             </div>
             <p className={styles.helperText}>
-              Socket：{socketStatus === "connected" ? "已连接" : socketStatus === "ready" ? "准备中" : "未准备"}
+              Socket：
+              {socketStatus === "connected"
+                ? "已连接"
+                : socketStatus === "ready"
+                  ? "准备中"
+                  : "未准备"}
             </p>
             {canRestartGame(view.phase) ? (
               <button className={styles.secondaryButton} onClick={handleRestartGame} type="button">
-                再开一局
+                {getGameEndAction(view.roomId) === "restart" ? "再开一局" : "返回原房间"}
               </button>
             ) : null}
             {eventNotice ? <p className={styles.helperText}>{eventNotice}</p> : null}

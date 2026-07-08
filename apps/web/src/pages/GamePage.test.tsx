@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   canRestartGame,
+  getGameEndAction,
   getGameConnectRequest,
   getGameResultSummary,
   getReturnToLobbyConfirmation,
@@ -51,6 +52,11 @@ describe("GamePage", () => {
     expect(canRestartGame("waiting")).toBe(false);
   });
 
+  it("restarts quick games directly and returns multiplayer games to their room", () => {
+    expect(getGameEndAction("quick-0001")).toBe("restart");
+    expect(getGameEndAction("room-0001-round-0001")).toBe("return-to-room");
+  });
+
   it("describes return-to-lobby consequences before leaving active games", () => {
     expect(getReturnToLobbyConfirmation("playing", "quick-0001")).toBe(
       "返回大厅将直接结束当前单人牌局，确认返回？"
@@ -92,7 +98,10 @@ describe("GamePage", () => {
       getGameResultSummary({
         endReason: "hu",
         fanTotal: 2,
-        fans: [{ name: "平和", value: 1 }, { name: "断幺九", value: 1 }],
+        fans: [
+          { name: "平和", value: 1 },
+          { name: "断幺九", value: 1 }
+        ],
         totalPoints: 40,
         winType: "selfDraw",
         winningTile: {

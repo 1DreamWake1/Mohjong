@@ -128,10 +128,10 @@ function emitLatestRoomEventToSockets(
 
 function syncLobbyRoomEnd(
   gameLobbyService: GameLobbyService,
-  room: { id: string; state: { phase: string } }
+  room: { id: string; lobbyRoomId?: string; state: { phase: string } }
 ): void {
   if (room.state.phase === "ended") {
-    gameLobbyService.finishRoom(room.id);
+    gameLobbyService.finishRoom(room.lobbyRoomId ?? room.id);
   }
 }
 
@@ -386,7 +386,7 @@ export function registerGameSocketServer(input: {
               return;
             }
 
-            gameLobbyService.replacePlayerWithBot(user, result.room.id);
+            gameLobbyService.replacePlayerWithBot(user, result.room.lobbyRoomId ?? result.room.id);
             if (result.ended) {
               syncLobbyRoomEnd(gameLobbyService, result.room);
             }
@@ -463,7 +463,8 @@ export function registerGameSocketServer(input: {
 
       const activeRoom = gameRoomService.getRoomForUser(user);
       const room =
-        getGameStartMode(Boolean(activeRoom)) === "sync-active-room"
+        getGameStartMode(Boolean(activeRoom && activeRoom.state.phase !== "ended")) ===
+        "sync-active-room"
           ? activeRoom
           : gameRoomService.getOrCreateQuickRoom(user);
 
@@ -535,7 +536,7 @@ export function registerGameSocketServer(input: {
         getDisconnectGraceKey(result.room.id, user.id)
       );
 
-      gameLobbyService.replacePlayerWithBot(user, result.room.id);
+      gameLobbyService.replacePlayerWithBot(user, result.room.lobbyRoomId ?? result.room.id);
       if (result.ended) {
         syncLobbyRoomEnd(gameLobbyService, result.room);
       }

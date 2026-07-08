@@ -102,6 +102,10 @@ export type StartGameRoomResponse = {
   room: GameLobbyRoom;
 };
 
+export type ResetGameRoomResponse = {
+  room: GameLobbyRoom;
+};
+
 export type GameHistoryItem = {
   roomId: string;
   ruleName: string;

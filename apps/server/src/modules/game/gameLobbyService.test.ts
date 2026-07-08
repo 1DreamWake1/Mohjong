@@ -343,4 +343,32 @@ describe("gameLobbyService", () => {
     });
     expect(service.getCurrentRoom(owner)).toBeNull();
   });
+
+  it("resets an ended room for a rematch with the original human members", () => {
+    const service = createGameLobbyService();
+    const owner = createPlayer(1, "player1");
+    const joiner = createPlayer(2, "player2");
+    const room = service.createRoom(owner);
+    service.joinRoom(joiner, room.roomId);
+    service.startRoom(owner);
+    service.finishRoom(room.roomId);
+
+    expect(service.resetRoomForRematch(joiner)).toEqual({
+      ok: false,
+      reason: "forbidden"
+    });
+    expect(service.resetRoomForRematch(owner)).toMatchObject({
+      ok: true,
+      room: {
+        roomId: room.roomId,
+        status: "waiting",
+        seats: [
+          expect.objectContaining({ isReady: true, userId: owner.id }),
+          expect.objectContaining({ isReady: false, userId: joiner.id }),
+          expect.objectContaining({ isBot: false, isReady: false }),
+          expect.objectContaining({ isBot: false, isReady: false })
+        ]
+      }
+    });
+  });
 });

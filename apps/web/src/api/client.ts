@@ -15,6 +15,7 @@ import type {
   LogoutResponse,
   PlayerListResponse,
   ResetPlayerPasswordRequest,
+  ResetGameRoomResponse,
   SetGameRoomReadyRequest,
   SetGameRoomReadyResponse,
   StartGameRoomResponse,
@@ -106,10 +107,7 @@ export async function createPlayer(
   return response.player;
 }
 
-export async function deletePlayer(
-  token: string,
-  playerId: number
-): Promise<void> {
+export async function deletePlayer(token: string, playerId: number): Promise<void> {
   await request<void>(`/admin/players/${playerId}`, {
     method: "DELETE",
     token
@@ -133,10 +131,7 @@ export async function listGameHistory(token: string): Promise<GameHistoryItem[]>
   return response.records;
 }
 
-export async function getGameHistory(
-  token: string,
-  roomId: string
-): Promise<GameHistoryDetail> {
+export async function getGameHistory(token: string, roomId: string): Promise<GameHistoryDetail> {
   const response = await request<GetGameHistoryResponse>(
     `/games/history/${encodeURIComponent(roomId)}`,
     { token }
@@ -190,6 +185,14 @@ export async function setGameRoomReady(
 
 export async function startGameRoom(token: string): Promise<GameLobbyRoom> {
   const response = await request<StartGameRoomResponse>("/rooms/current/start", {
+    method: "POST",
+    token
+  });
+  return response.room;
+}
+
+export async function resetGameRoomForRematch(token: string): Promise<GameLobbyRoom> {
+  const response = await request<ResetGameRoomResponse>("/rooms/current/rematch", {
     method: "POST",
     token
   });
