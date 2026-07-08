@@ -41,6 +41,7 @@ type LeaveActiveGameResult =
       room: GameRoom;
     }
   | { error: string };
+type LeaveActiveGameReason = "disconnect" | "leave";
 
 const maxRoomEvents = 20;
 let nextRoomNumber = 1;
@@ -85,7 +86,10 @@ function stripEventSnapshot(event: GameHistoryEvent): GameEventMessage {
   };
 }
 
-function haveSameTileIds(left: readonly string[] | undefined, right: readonly string[] | undefined): boolean {
+function haveSameTileIds(
+  left: readonly string[] | undefined,
+  right: readonly string[] | undefined
+): boolean {
   if (!left && !right) {
     return true;
   }
@@ -136,9 +140,11 @@ export function describeGameEnd(state: MahjongGameState): string {
   }
 
   if (state.endReason === "hu") {
-    const winner = state.winnerSeatIndex === undefined ? undefined : state.players[state.winnerSeatIndex];
+    const winner =
+      state.winnerSeatIndex === undefined ? undefined : state.players[state.winnerSeatIndex];
     const winnerName = winner?.username ?? "玩家";
-    const winTypeText = state.winType === "selfDraw" ? "自摸" : state.winType === "discard" ? "点炮" : "胡牌";
+    const winTypeText =
+      state.winType === "selfDraw" ? "自摸" : state.winType === "discard" ? "点炮" : "胡牌";
     const winningTileText = state.winningTile ? `，胡 ${state.winningTile.label}` : "";
     const scoreText = state.score ? `，${state.score.totalPoints} 分` : "";
 
@@ -151,8 +157,7 @@ export function describeGameEnd(state: MahjongGameState): string {
 export function createGameRoomService(options: CreateGameRoomServiceOptions = {}) {
   const roomsById = new Map<string, GameRoom>();
   const activeRoomIdByUserId = new Map<number, string>();
-  const gameRecordRepository =
-    options.gameRecordRepository ?? createNoopGameRecordRepository();
+  const gameRecordRepository = options.gameRecordRepository ?? createNoopGameRecordRepository();
   const persistentWriteQueueByRoomId = new Map<string, Promise<void>>();
 
   function enqueuePersistentWrite(roomId: string, write: () => Promise<void>): void {
@@ -247,10 +252,9 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
       return existingRoom;
     }
 
-    const humanSeats = lobbyRoom.seats.filter(
-      (seat) => seat.userId !== undefined && !seat.isBot
-    );
-    const primaryHumanSeat = humanSeats.find((seat) => seat.userId === lobbyRoom.ownerUserId) ?? humanSeats[0];
+    const humanSeats = lobbyRoom.seats.filter((seat) => seat.userId !== undefined && !seat.isBot);
+    const primaryHumanSeat =
+      humanSeats.find((seat) => seat.userId === lobbyRoom.ownerUserId) ?? humanSeats[0];
     if (!primaryHumanSeat?.userId) {
       throw new Error("Cannot create a game room without a human player");
     }
@@ -271,7 +275,8 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
       state: createInitialGame({
         players: lobbyRoom.seats.map((seat) => ({
           isBot: seat.isBot,
-          username: seat.username ?? (seat.isBot ? `玩家Bot${seat.seatIndex}` : `${seat.seatIndex + 1}号位`)
+          username:
+            seat.username ?? (seat.isBot ? `玩家Bot${seat.seatIndex}` : `${seat.seatIndex + 1}号位`)
         })),
         rules: simpleRuleConfig
       })
@@ -325,7 +330,10 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     });
   }
 
-  function applyHumanAction(user: AuthUser, action: Action): { error?: string; room: GameRoom } | null {
+  function applyHumanAction(
+    user: AuthUser,
+    action: Action
+  ): { error?: string; room: GameRoom } | null {
     const room = getRoomForUser(user);
     if (!room) {
       return null;
@@ -413,7 +421,10 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     return true;
   }
 
-  function leaveActiveGame(user: AuthUser): LeaveActiveGameResult {
+  function leaveActiveGame(
+    user: AuthUser,
+    reason: LeaveActiveGameReason = "leave"
+  ): LeaveActiveGameResult {
     const room = getRoomForUser(user);
     if (!room) {
       return { error: "No active game room" };
@@ -433,7 +444,11 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
 
     if (room.id.startsWith("quick-")) {
       room.humanSeatIndexByUserId.delete(user.id);
-      finishRoomAsDraw(room, `${user.username} 返回大厅，单人牌局结束`);
+      const eventText =
+        reason === "disconnect"
+          ? `${user.username} 断线超时，单人牌局结束`
+          : `${user.username} 返回大厅，单人牌局结束`;
+      finishRoomAsDraw(room, eventText);
       return { ended: true, mode: "quick-ended", room };
     }
 
@@ -445,7 +460,11 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
 
     player.isBot = true;
     player.username = `${user.username}托管Bot`;
-    recordRoomEvent(room, `${user.username} 返回大厅，${player.username} 接手牌局`);
+    const eventText =
+      reason === "disconnect"
+        ? `${user.username} 断线超时，${player.username} 接手牌局`
+        : `${user.username} 返回大厅，${player.username} 接手牌局`;
+    recordRoomEvent(room, eventText);
 
     if (room.humanSeatIndexByUserId.size === 0) {
       finishRoomAsDraw(room, "房间内没有真人玩家，牌局结束");

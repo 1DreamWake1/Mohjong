@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { AdminUsersPage } from "../pages/AdminUsersPage.js";
 import { GamePage } from "../pages/GamePage.js";
 import { HistoryPage } from "../pages/HistoryPage.js";
+import { LandingPage } from "../pages/LandingPage.js";
 import { LobbyPage } from "../pages/LobbyPage.js";
 import { LoginPage } from "../pages/LoginPage.js";
 import { useAuthStore } from "../stores/authStore.js";
@@ -25,9 +26,12 @@ export function App(): JSX.Element {
     const route =
       status === "authenticated" && user
         ? getRouteForAuth({ role: user.role, status: "authenticated" }, currentPath)
-        : getRouteForAuth({
-            status: status === "checking" ? "checking" : "anonymous"
-          });
+        : getRouteForAuth(
+            {
+              status: status === "checking" ? "checking" : "anonymous"
+            },
+            currentPath
+          );
 
     if (!route) {
       return;
@@ -45,7 +49,7 @@ export function App(): JSX.Element {
   }
 
   if (status === "anonymous" || !token || !user) {
-    return <LoginPage />;
+    return currentPath === APP_ROUTES.home ? <LandingPage /> : <LoginPage />;
   }
 
   if (user.role === "admin") {

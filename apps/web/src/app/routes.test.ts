@@ -26,7 +26,15 @@ describe("app routes", () => {
     expect(getRouteForAuth({ status: "checking" })).toBeNull();
   });
 
-  it("routes anonymous users to login", () => {
+  it("keeps anonymous users on the public home page", () => {
+    expect(getRouteForAuth({ status: "anonymous" }, APP_ROUTES.home)).toBeNull();
+  });
+
+  it("keeps anonymous users on login", () => {
+    expect(getRouteForAuth({ status: "anonymous" }, APP_ROUTES.login)).toBeNull();
+  });
+
+  it("routes anonymous users away from private pages", () => {
     expect(getRouteForAuth({ status: "anonymous" }, APP_ROUTES.lobby)).toBe(APP_ROUTES.login);
   });
 

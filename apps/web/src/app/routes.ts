@@ -4,6 +4,7 @@ export const APP_ROUTES = {
   adminUsers: "/admin/players",
   gameDemo: "/game/demo",
   gameHistory: "/game/history",
+  home: "/",
   lobby: "/lobby",
   login: "/login"
 } as const;
@@ -42,7 +43,9 @@ export function getRouteForAuth(state: RouteAuthState, requestedPath?: string): 
   }
 
   if (state.status === "anonymous") {
-    return APP_ROUTES.login;
+    return currentPath === APP_ROUTES.home || currentPath === APP_ROUTES.login
+      ? null
+      : APP_ROUTES.login;
   }
 
   const defaultRoute = getDefaultAuthenticatedRoute(state.role);

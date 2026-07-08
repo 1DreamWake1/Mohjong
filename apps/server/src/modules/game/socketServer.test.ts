@@ -1,10 +1,14 @@
 import type { AuthUser } from "@mahjong/shared";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  cancelDisconnectGrace,
+  getDisconnectGraceKey,
   getGameSocketAccessError,
   getGameStartMode,
   humanActionTimeoutMs,
+  playerDisconnectGraceMs,
+  scheduleDisconnectGrace,
   readSocketToken
 } from "./socketServer.js";
 
@@ -24,6 +28,10 @@ const admin: AuthUser = {
 };
 
 describe("socketServer", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("reads a non-empty socket auth token", () => {
     expect(readSocketToken("token-a")).toBe("token-a");
     expect(readSocketToken("")).toBeNull();
@@ -51,6 +59,39 @@ describe("socketServer", () => {
 
   it("uses a 30 second human action timeout", () => {
     expect(humanActionTimeoutMs).toBe(30_000);
+  });
+
+  it("uses a 20 second player disconnect grace period", () => {
+    expect(playerDisconnectGraceMs).toBe(20_000);
+    expect(getDisconnectGraceKey("room-1", player.id)).toBe("room-1:1");
+  });
+
+  it("runs disconnect takeover only after the grace period", () => {
+    vi.useFakeTimers();
+    const pendingTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+    const onExpire = vi.fn();
+
+    scheduleDisconnectGrace({ key: "room-1:1", onExpire, pendingTimeouts });
+    vi.advanceTimersByTime(playerDisconnectGraceMs - 1);
+    expect(onExpire).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(onExpire).toHaveBeenCalledTimes(1);
+    expect(pendingTimeouts.size).toBe(0);
+  });
+
+  it("cancels disconnect takeover when the player reconnects", () => {
+    vi.useFakeTimers();
+    const pendingTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+    const onExpire = vi.fn();
+    const key = "room-1:1";
+
+    scheduleDisconnectGrace({ key, onExpire, pendingTimeouts });
+    expect(cancelDisconnectGrace(pendingTimeouts, key)).toBe(true);
+    vi.advanceTimersByTime(playerDisconnectGraceMs);
+
+    expect(onExpire).not.toHaveBeenCalled();
+    expect(cancelDisconnectGrace(pendingTimeouts, key)).toBe(false);
   });
 
   it("starts a quick room when no active room exists and syncs otherwise", () => {

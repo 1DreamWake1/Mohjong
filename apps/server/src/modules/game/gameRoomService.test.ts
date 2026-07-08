@@ -50,8 +50,12 @@ describe("gameRoomService", () => {
       useDragons: false,
       useWinds: false
     });
-    expect(allVisibleTiles.every((tile) => tile.suit !== "winds" && tile.suit !== "dragons")).toBe(true);
-    expect(service.getPlayerView(room).availableActions.some((action) => action.type === "chi")).toBe(false);
+    expect(allVisibleTiles.every((tile) => tile.suit !== "winds" && tile.suit !== "dragons")).toBe(
+      true
+    );
+    expect(
+      service.getPlayerView(room).availableActions.some((action) => action.type === "chi")
+    ).toBe(false);
   });
 
   it("rejects illegal human actions without changing the active view", () => {
@@ -113,7 +117,9 @@ describe("gameRoomService", () => {
     const progressed = service.applyHumanTimeout(room);
 
     expect(progressed).toBe(true);
-    expect(service.getPlayerView(room).eventMessages.some((event) => event.text.includes("超时托管"))).toBe(true);
+    expect(
+      service.getPlayerView(room).eventMessages.some((event) => event.text.includes("超时托管"))
+    ).toBe(true);
   });
 
   it("does not auto-play a human timeout outside the human player's turn", () => {
@@ -277,7 +283,13 @@ describe("gameRoomService", () => {
       roomId: "room-0102",
       seats: [
         { isBot: false, isReady: true, seatIndex: 0, userId: player.id, username: player.username },
-        { isBot: false, isReady: true, seatIndex: 1, userId: secondPlayer.id, username: secondPlayer.username },
+        {
+          isBot: false,
+          isReady: true,
+          seatIndex: 1,
+          userId: secondPlayer.id,
+          username: secondPlayer.username
+        },
         { isBot: true, isReady: true, seatIndex: 2, username: "玩家Bot2" },
         { isBot: true, isReady: true, seatIndex: 3, username: "玩家Bot3" }
       ],
@@ -300,6 +312,35 @@ describe("gameRoomService", () => {
     });
     expect(service.getRoomForUser(player, room.id)).toBeNull();
     expect(service.getRoomForUser(secondPlayer, room.id)).toBe(room);
+  });
+
+  it("records disconnect timeout when a bot takes over a multiplayer seat", () => {
+    const service = createGameRoomService();
+    const room = service.createRoomFromLobby({
+      createdAt: "2026-06-11T10:00:00.000Z",
+      ownerUserId: player.id,
+      roomId: "room-0102-disconnect",
+      seats: [
+        { isBot: false, isReady: true, seatIndex: 0, userId: player.id, username: player.username },
+        {
+          isBot: false,
+          isReady: true,
+          seatIndex: 1,
+          userId: secondPlayer.id,
+          username: secondPlayer.username
+        },
+        { isBot: true, isReady: true, seatIndex: 2, username: "玩家Bot2" },
+        { isBot: true, isReady: true, seatIndex: 3, username: "玩家Bot3" }
+      ],
+      status: "playing",
+      updatedAt: "2026-06-11T10:00:00.000Z"
+    });
+
+    expect(service.leaveActiveGame(player, "disconnect")).toMatchObject({
+      ended: false,
+      mode: "bot-takeover"
+    });
+    expect(room.events.at(-1)?.text).toBe("player-a 断线超时，player-a托管Bot 接手牌局");
   });
 
   it("ends multiplayer games after the last human returns to lobby", () => {
@@ -523,7 +564,9 @@ describe("gameRoomService", () => {
       winType: "selfDraw"
     });
 
-    await expect(gameRecordRepository.getRecordForPlayer(player.id, room.id)).resolves.toMatchObject({
+    await expect(
+      gameRecordRepository.getRecordForPlayer(player.id, room.id)
+    ).resolves.toMatchObject({
       result: {
         fanTotal: 2,
         fans: expect.arrayContaining([expect.objectContaining({ name: "断幺九" })]),

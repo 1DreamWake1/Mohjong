@@ -28,17 +28,65 @@ export function readSocketToken(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-export function getGameSocketAccessError(user: AuthUser, operation: GameSocketOperation): string | null {
+export function getGameSocketAccessError(
+  user: AuthUser,
+  operation: GameSocketOperation
+): string | null {
   return user.role === "player" ? null : playerOnlyErrors[operation];
 }
 
 export const humanActionTimeoutMs = 30_000;
+export const playerDisconnectGraceMs = 20_000;
+
+export function getDisconnectGraceKey(roomId: string, userId: number): string {
+  return `${roomId}:${userId}`;
+}
+
+export function scheduleDisconnectGrace(input: {
+  key: string;
+  onExpire: () => void;
+  pendingTimeouts: Map<string, TimeoutHandle>;
+  timeoutMs?: number;
+}): void {
+  const existingTimeout = input.pendingTimeouts.get(input.key);
+  if (existingTimeout) {
+    clearTimeout(existingTimeout);
+  }
+
+  const timeout = setTimeout(() => {
+    if (input.pendingTimeouts.get(input.key) !== timeout) {
+      return;
+    }
+
+    input.pendingTimeouts.delete(input.key);
+    input.onExpire();
+  }, input.timeoutMs ?? playerDisconnectGraceMs);
+  input.pendingTimeouts.set(input.key, timeout);
+}
+
+export function cancelDisconnectGrace(
+  pendingTimeouts: Map<string, TimeoutHandle>,
+  key: string
+): boolean {
+  const timeout = pendingTimeouts.get(key);
+  if (!timeout) {
+    return false;
+  }
+
+  clearTimeout(timeout);
+  pendingTimeouts.delete(key);
+  return true;
+}
 
 export function getGameStartMode(hasActiveRoom: boolean): "create-quick-room" | "sync-active-room" {
   return hasActiveRoom ? "sync-active-room" : "create-quick-room";
 }
 
-function emitRoomState(socket: GameSocket, gameRoomService: GameRoomService, roomId?: string): void {
+function emitRoomState(
+  socket: GameSocket,
+  gameRoomService: GameRoomService,
+  roomId?: string
+): void {
   const user = (socket.data as SocketData).user;
   const room = gameRoomService.getRoomForUser(user, roomId);
   if (!room) {
@@ -69,13 +117,19 @@ function emitRoomStateToSockets(input: {
   }
 }
 
-function emitLatestRoomEventToSockets(room: { events: { text: string }[] }, sockets: Iterable<GameSocket>): void {
+function emitLatestRoomEventToSockets(
+  room: { events: { text: string }[] },
+  sockets: Iterable<GameSocket>
+): void {
   for (const socket of sockets) {
     emitLatestRoomEvent(socket, room);
   }
 }
 
-function syncLobbyRoomEnd(gameLobbyService: GameLobbyService, room: { id: string; state: { phase: string } }): void {
+function syncLobbyRoomEnd(
+  gameLobbyService: GameLobbyService,
+  room: { id: string; state: { phase: string } }
+): void {
   if (room.state.phase === "ended") {
     gameLobbyService.finishRoom(room.id);
   }
@@ -227,6 +281,7 @@ export function registerGameSocketServer(input: {
   const gameRoomService = input.gameRoomService ?? createGameRoomService();
   const activeSocketsByRoomId = new Map<string, Set<GameSocket>>();
   const scheduledBotRoomIds = new Set<string>();
+  const scheduledDisconnectsByRoomAndUser = new Map<string, TimeoutHandle>();
   const scheduledHumanTimeoutsByRoomId = new Map<string, TimeoutHandle>();
 
   gameLobbyService.subscribeRoomUpdates((room) => {
@@ -256,7 +311,17 @@ export function registerGameSocketServer(input: {
     const socketRoomIds = new Set<string>();
     const lobbyRoomIds = new Set<string>();
 
+    for (const key of scheduledDisconnectsByRoomAndUser.keys()) {
+      if (key.endsWith(`:${user.id}`)) {
+        cancelDisconnectGrace(scheduledDisconnectsByRoomAndUser, key);
+      }
+    }
+
     function trackRoomSocket(roomId: string): void {
+      cancelDisconnectGrace(
+        scheduledDisconnectsByRoomAndUser,
+        getDisconnectGraceKey(roomId, user.id)
+      );
       socketRoomIds.add(roomId);
       const roomSockets = activeSocketsByRoomId.get(roomId) ?? new Set<GameSocket>();
       roomSockets.add(gameSocket);
@@ -296,6 +361,49 @@ export function registerGameSocketServer(input: {
             activeSocketsByRoomId.delete(roomId);
           }
         }
+
+        const stillConnected = [...(activeSocketsByRoomId.get(roomId) ?? [])].some(
+          (candidate) => (candidate.data as SocketData).user.id === user.id
+        );
+        const room = gameRoomService.getRoomForUser(user, roomId);
+        if (stillConnected || !room || room.state.phase === "ended") {
+          continue;
+        }
+
+        const graceKey = getDisconnectGraceKey(roomId, user.id);
+        scheduleDisconnectGrace({
+          key: graceKey,
+          onExpire: () => {
+            const reconnected = [...(activeSocketsByRoomId.get(roomId) ?? [])].some(
+              (candidate) => (candidate.data as SocketData).user.id === user.id
+            );
+            if (reconnected) {
+              return;
+            }
+
+            const result = gameRoomService.leaveActiveGame(user, "disconnect");
+            if ("error" in result) {
+              return;
+            }
+
+            gameLobbyService.replacePlayerWithBot(user, result.room.id);
+            if (result.ended) {
+              syncLobbyRoomEnd(gameLobbyService, result.room);
+            }
+
+            const latestSockets = activeSocketsByRoomId.get(result.room.id);
+            if (latestSockets) {
+              emitLatestRoomEventToSockets(result.room, latestSockets);
+              emitRoomStateToSockets({
+                gameRoomService,
+                roomId: result.room.id,
+                sockets: latestSockets
+              });
+            }
+            scheduleRoomBots(result.room.id);
+          },
+          pendingTimeouts: scheduledDisconnectsByRoomAndUser
+        });
       }
     });
 
@@ -421,6 +529,11 @@ export function registerGameSocketServer(input: {
         gameSocket.emit("game:error", { message: result.error });
         return;
       }
+
+      cancelDisconnectGrace(
+        scheduledDisconnectsByRoomAndUser,
+        getDisconnectGraceKey(result.room.id, user.id)
+      );
 
       gameLobbyService.replacePlayerWithBot(user, result.room.id);
       if (result.ended) {
