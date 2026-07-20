@@ -166,6 +166,12 @@ export function createGameLobbyService() {
     return cloneRoom(room);
   }
 
+  function listRooms(): GameLobbyRoom[] {
+    return [...roomsById.values()]
+      .map(cloneRoom)
+      .sort((leftRoom, rightRoom) => rightRoom.updatedAt.localeCompare(leftRoom.updatedAt));
+  }
+
   function restorePlayingRoom(snapshot: GameRecoverySnapshot): GameLobbyRoom | null {
     if (!snapshot.lobbyRoomId || roomsById.has(snapshot.lobbyRoomId)) {
       return null;
@@ -448,6 +454,7 @@ export function createGameLobbyService() {
     getCurrentRoom,
     joinRoom,
     leaveRoom,
+    listRooms,
     replacePlayerWithBot,
     resetRoomForRematch,
     restorePlayingRoom,

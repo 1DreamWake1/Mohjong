@@ -2,6 +2,8 @@ import type {
   GameHistoryEvent,
   GameHistoryDetail,
   GameHistoryItem,
+  AdminGameHistoryDetail,
+  AdminGameHistoryItem,
   GameHistoryResultSnapshot,
   GameRecordEndReason,
   GameRecordStatus,
@@ -63,7 +65,9 @@ export type GameRecordRepository = {
   appendEvent(roomId: string, event: GameHistoryEvent): Promise<void>;
   createRecord(input: CreateGameRecordInput): Promise<void>;
   finishRecord(input: FinishGameRecordInput): Promise<void>;
+  getRecordForAdmin(roomId: string): Promise<AdminGameHistoryDetail | null>;
   getRecordForPlayer(playerUserId: number, roomId: string): Promise<GameHistoryDetail | null>;
+  listRecordsForAdmin(): Promise<AdminGameHistoryItem[]>;
   listRecordsForPlayer(playerUserId: number): Promise<GameHistoryItem[]>;
   listActiveRecoverySnapshots(): Promise<{
     invalidRoomIds: string[];
@@ -78,10 +82,16 @@ export function createNoopGameRecordRepository(): GameRecordRepository {
     async appendEvent() {},
     async createRecord() {},
     async finishRecord() {},
+    async getRecordForAdmin() {
+      return null;
+    },
     async getRecordForPlayer() {
       return null;
     },
     async listRecordsForPlayer() {
+      return [];
+    },
+    async listRecordsForAdmin() {
       return [];
     },
     async listActiveRecoverySnapshots() {
@@ -177,6 +187,20 @@ export function createMemoryGameRecordRepository(): GameRecordRepository & {
       };
     },
 
+    async getRecordForAdmin(roomId) {
+      const record = records.get(roomId);
+      if (!record) {
+        return null;
+      }
+
+      return {
+        ...toHistoryItem(record),
+        events: [...record.events],
+        playerUserId: record.playerUserId,
+        ...(record.result ? { result: record.result } : {})
+      };
+    },
+
     async listRecordsForPlayer(playerUserId) {
       return [...records.values()]
         .filter((record) => record.playerUserId === playerUserId)
@@ -184,6 +208,14 @@ export function createMemoryGameRecordRepository(): GameRecordRepository & {
           rightRecord.startedAt.localeCompare(leftRecord.startedAt)
         )
         .map(toHistoryItem);
+    },
+
+    async listRecordsForAdmin() {
+      return [...records.values()]
+        .sort((leftRecord, rightRecord) =>
+          rightRecord.startedAt.localeCompare(leftRecord.startedAt)
+        )
+        .map((record) => ({ ...toHistoryItem(record), playerUserId: record.playerUserId }));
     },
 
     async listActiveRecoverySnapshots() {
@@ -288,7 +320,8 @@ export function createPrismaGameRecordRepository(
         include: {
           events: {
             orderBy: { createdAt: "asc" }
-          }
+          },
+          player: { select: { username: true } }
         },
         where: {
           playerUserId,
@@ -300,22 +333,20 @@ export function createPrismaGameRecordRepository(
         return null;
       }
 
-      const result = parseResultSnapshot(record.resultSnapshot);
+      return toHistoryDetailFromPrisma(record);
+    },
 
-      return {
-        ...toHistoryItemFromPrisma(record),
-        events: record.events.map((event) => {
-          const viewSnapshot = parsePlayerViewSnapshot(event.stateSnapshot);
+    async getRecordForAdmin(roomId) {
+      const record = await client.gameRecord.findFirst({
+        include: {
+          events: {
+            orderBy: { createdAt: "asc" }
+          }
+        },
+        where: { roomId }
+      });
 
-          return {
-            createdAt: event.createdAt.toISOString(),
-            id: `event-${event.id}`,
-            text: event.message,
-            ...(viewSnapshot ? { viewSnapshot } : {})
-          };
-        }),
-        ...(result ? { result } : {})
-      };
+      return record ? toAdminHistoryDetailFromPrisma(record) : null;
     },
 
     async listRecordsForPlayer(playerUserId) {
@@ -325,6 +356,15 @@ export function createPrismaGameRecordRepository(
       });
 
       return records.map(toHistoryItemFromPrisma);
+    },
+
+    async listRecordsForAdmin() {
+      const records = await client.gameRecord.findMany({
+        include: { player: { select: { username: true } } },
+        orderBy: { startedAt: "desc" }
+      });
+
+      return records.map(toAdminHistoryItemFromPrisma);
     },
 
     async listActiveRecoverySnapshots() {
@@ -524,6 +564,10 @@ type PrismaGameRecordWithEvents = Awaited<ReturnType<PrismaClient["gameRecord"][
   }[];
 };
 
+type PrismaAdminGameRecord = PrismaGameRecordWithEvents & {
+  player?: { username: string } | null;
+};
+
 function toGameRecordStatus(value: string): GameRecordStatus {
   return value === "ended" ? "ended" : "playing";
 }
@@ -660,5 +704,46 @@ function toHistoryItemFromPrisma(record: NonNullable<PrismaGameRecordWithEvents>
     ...(record.winningTile ? { winningTile: record.winningTile } : {}),
     ...(record.fanTotal === null ? {} : { fanTotal: record.fanTotal }),
     ...(record.totalPoints === null ? {} : { totalPoints: record.totalPoints })
+  };
+}
+
+function toHistoryDetailFromPrisma(
+  record: NonNullable<PrismaGameRecordWithEvents>
+): GameHistoryDetail {
+  const result = parseResultSnapshot(record.resultSnapshot);
+
+  return {
+    ...toHistoryItemFromPrisma(record),
+    events: (record.events ?? []).map((event) => {
+      const viewSnapshot = parsePlayerViewSnapshot(event.stateSnapshot);
+
+      return {
+        createdAt: event.createdAt.toISOString(),
+        id: `event-${event.id}`,
+        text: event.message,
+        ...(viewSnapshot ? { viewSnapshot } : {})
+      };
+    }),
+    ...(result ? { result } : {})
+  };
+}
+
+function toAdminHistoryItemFromPrisma(
+  record: NonNullable<PrismaAdminGameRecord>
+): AdminGameHistoryItem {
+  return {
+    ...toHistoryItemFromPrisma(record),
+    ...(record.playerUserId === null ? {} : { playerUserId: record.playerUserId }),
+    ...(record.player ? { playerUsername: record.player.username } : {})
+  };
+}
+
+function toAdminHistoryDetailFromPrisma(
+  record: NonNullable<PrismaAdminGameRecord>
+): AdminGameHistoryDetail {
+  return {
+    ...toHistoryDetailFromPrisma(record),
+    ...(record.playerUserId === null ? {} : { playerUserId: record.playerUserId }),
+    ...(record.player ? { playerUsername: record.player.username } : {})
   };
 }

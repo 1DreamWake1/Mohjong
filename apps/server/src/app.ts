@@ -11,6 +11,14 @@ import {
 import { createGameRoomService, type GameRoomService } from "./modules/game/gameRoomService.js";
 import { createGameLobbyService, type GameLobbyService } from "./modules/game/gameLobbyService.js";
 import { registerGameSocketServer } from "./modules/game/socketServer.js";
+import {
+  createPlayerConnectionRegistry,
+  type PlayerConnectionRegistry
+} from "./modules/game/playerConnectionRegistry.js";
+import {
+  createPersistenceDiagnosticRegistry,
+  type PersistenceDiagnosticRegistry
+} from "./modules/game/persistenceDiagnosticRegistry.js";
 import { createPrismaUserRepository } from "./modules/users/userRepository.js";
 import type { UserRepository } from "./modules/users/userRepository.js";
 import { createUserService } from "./modules/users/userService.js";
@@ -20,6 +28,8 @@ export type CreateAppOptions = {
   gameLobbyService?: GameLobbyService;
   gameRecordRepository?: GameRecordRepository;
   gameRoomService?: GameRoomService;
+  playerConnectionRegistry?: PlayerConnectionRegistry;
+  persistenceDiagnosticRegistry?: PersistenceDiagnosticRegistry;
   userRepository?: UserRepository;
 };
 
@@ -40,17 +50,22 @@ export async function createApp(options: CreateAppOptions = {}) {
   const userService = createUserService(userRepository);
   const gameRecordRepository = options.gameRecordRepository ?? createPrismaGameRecordRepository();
   const gameLobbyService = options.gameLobbyService ?? createGameLobbyService();
+  const persistenceDiagnosticRegistry =
+    options.persistenceDiagnosticRegistry ?? createPersistenceDiagnosticRegistry();
   const gameRoomService =
     options.gameRoomService ??
     createGameRoomService({
       gameRecordRepository,
       onPersistenceError: ({ error, operation, roomId }) => {
+        persistenceDiagnosticRegistry.record({ error, operation, roomId });
         app.log.error(
           { err: error, operation, roomId },
           "Mahjong game persistence operation failed"
         );
       }
     });
+  const playerConnectionRegistry =
+    options.playerConnectionRegistry ?? createPlayerConnectionRegistry();
 
   const restoredGames = await gameRoomService.restoreActiveRooms();
   for (const snapshot of restoredGames) {
@@ -80,13 +95,16 @@ export async function createApp(options: CreateAppOptions = {}) {
     gameLobbyService,
     gameRecordRepository,
     gameRoomService,
+    playerConnectionRegistry,
+    persistenceDiagnosticRegistry,
     userService
   });
   registerGameSocketServer({
     app,
     authService,
     gameLobbyService,
-    gameRoomService
+    gameRoomService,
+    playerConnectionRegistry
   });
 
   return app;

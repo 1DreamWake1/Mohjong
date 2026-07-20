@@ -1,5 +1,9 @@
 import type {
   AuthUser,
+  AdminGameHistoryDetail,
+  AdminGameHistoryItem,
+  AdminActiveRoom,
+  AdminPersistenceDiagnostic,
   CreatePlayerRequest,
   CreateGameRoomResponse,
   CreateGameRoomRequest,
@@ -7,11 +11,15 @@ import type {
   GetCurrentGameRoomResponse,
   GameHistoryDetail,
   GameHistoryItem,
+  GetAdminGameRecordResponse,
   GameLobbyRoom,
   JoinGameRoomResponse,
   LeaveGameRoomResponse,
   LoginRequest,
   ListGameHistoryResponse,
+  ListAdminGameRecordsResponse,
+  ListAdminActiveRoomsResponse,
+  ListAdminPersistenceDiagnosticsResponse,
   LoginResponse,
   LogoutResponse,
   PlayerListResponse,
@@ -135,6 +143,37 @@ export async function listGameHistory(token: string): Promise<GameHistoryItem[]>
 export async function getGameHistory(token: string, roomId: string): Promise<GameHistoryDetail> {
   const response = await request<GetGameHistoryResponse>(
     `/games/history/${encodeURIComponent(roomId)}`,
+    { token }
+  );
+  return response.record;
+}
+
+export async function listAdminGameRecords(token: string): Promise<AdminGameHistoryItem[]> {
+  const response = await request<ListAdminGameRecordsResponse>("/admin/games", { token });
+  return response.records;
+}
+
+export async function listAdminActiveRooms(token: string): Promise<AdminActiveRoom[]> {
+  const response = await request<ListAdminActiveRoomsResponse>("/admin/active-rooms", { token });
+  return response.rooms;
+}
+
+export async function listAdminPersistenceDiagnostics(
+  token: string
+): Promise<AdminPersistenceDiagnostic[]> {
+  const response = await request<ListAdminPersistenceDiagnosticsResponse>(
+    "/admin/persistence-diagnostics",
+    { token }
+  );
+  return response.diagnostics;
+}
+
+export async function getAdminGameRecord(
+  token: string,
+  roomId: string
+): Promise<AdminGameHistoryDetail> {
+  const response = await request<GetAdminGameRecordResponse>(
+    `/admin/games/${encodeURIComponent(roomId)}`,
     { token }
   );
   return response.record;

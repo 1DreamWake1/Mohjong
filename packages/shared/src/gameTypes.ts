@@ -147,12 +147,60 @@ export type GameHistoryDetail = GameHistoryItem & {
   result?: GameHistoryResultSnapshot;
 };
 
+export type AdminGameHistoryItem = GameHistoryItem & {
+  playerUserId?: number;
+  playerUsername?: string;
+};
+
+export type AdminGameHistoryDetail = AdminGameHistoryItem & {
+  events: GameHistoryEvent[];
+  result?: GameHistoryResultSnapshot;
+};
+
 export type ListGameHistoryResponse = {
   records: GameHistoryItem[];
 };
 
 export type GetGameHistoryResponse = {
   record: GameHistoryDetail;
+};
+
+export type ListAdminGameRecordsResponse = {
+  records: AdminGameHistoryItem[];
+};
+
+export type GetAdminGameRecordResponse = {
+  record: AdminGameHistoryDetail;
+};
+
+export type AdminActiveRoomSeat = GameLobbySeat & {
+  connectionStatus: "bot" | "disconnected" | "empty" | "online";
+};
+
+export type AdminActiveRoom = Omit<GameLobbyRoom, "seats"> & {
+  seats: AdminActiveRoomSeat[];
+};
+
+export type ListAdminActiveRoomsResponse = {
+  rooms: AdminActiveRoom[];
+};
+
+export type PersistenceDiagnosticOperation =
+  | "append-event"
+  | "create-record"
+  | "finish-record"
+  | "save-recovery-snapshot";
+
+export type AdminPersistenceDiagnostic = {
+  createdAt: string;
+  id: string;
+  message: string;
+  operation: PersistenceDiagnosticOperation;
+  roomId: string;
+};
+
+export type ListAdminPersistenceDiagnosticsResponse = {
+  diagnostics: AdminPersistenceDiagnostic[];
 };
 
 export type OtherPlayerView = {

@@ -6,6 +6,8 @@ import { hashPassword, verifyPassword } from "../modules/auth/password.js";
 import { createMemoryGameRecordRepository } from "../modules/game/gameRecordRepository.js";
 import { createGameLobbyService } from "../modules/game/gameLobbyService.js";
 import { createGameRoomService } from "../modules/game/gameRoomService.js";
+import { createPlayerConnectionRegistry } from "../modules/game/playerConnectionRegistry.js";
+import { createPersistenceDiagnosticRegistry } from "../modules/game/persistenceDiagnosticRegistry.js";
 import type {
   CreateUserInput,
   StoredUser,
@@ -104,15 +106,27 @@ async function createTestApp() {
 
   const gameRoomService = createGameRoomService({ gameRecordRepository });
   const gameLobbyService = createGameLobbyService();
+  const playerConnectionRegistry = createPlayerConnectionRegistry();
+  const persistenceDiagnosticRegistry = createPersistenceDiagnosticRegistry();
   const app = await createApp({
     authTokenSecret: "test-secret",
     gameLobbyService,
     gameRecordRepository,
     gameRoomService,
+    playerConnectionRegistry,
+    persistenceDiagnosticRegistry,
     userRepository
   });
 
-  return { app, gameLobbyService, gameRecordRepository, gameRoomService, userRepository };
+  return {
+    app,
+    gameLobbyService,
+    gameRecordRepository,
+    gameRoomService,
+    playerConnectionRegistry,
+    persistenceDiagnosticRegistry,
+    userRepository
+  };
 }
 
 describe("routes", () => {
@@ -295,6 +309,147 @@ describe("routes", () => {
       url: "/games/history"
     });
     expect(adminResponse.statusCode).toBe(403);
+
+    await app.close();
+  });
+
+  it("allows admins to inspect all game records and details", async () => {
+    const {
+      app,
+      gameLobbyService,
+      gameRecordRepository,
+      persistenceDiagnosticRegistry,
+      playerConnectionRegistry
+    } = await createTestApp();
+    await gameRecordRepository.createRecord({
+      humanSeatIndex: 0,
+      playerUserId: 2,
+      roomId: "admin-game-player-1",
+      ruleName: "simple",
+      ruleVersion: 1
+    });
+    await gameRecordRepository.createRecord({
+      humanSeatIndex: 1,
+      playerUserId: 3,
+      roomId: "admin-game-player-2",
+      ruleName: "standard",
+      ruleVersion: 1
+    });
+    await gameRecordRepository.appendEvent("admin-game-player-2", {
+      createdAt: "2026-07-08T09:00:00.000Z",
+      id: "admin-event-1",
+      text: "player2 开始对局"
+    });
+
+    const adminLogin = await app.inject({
+      method: "POST",
+      payload: { password: "admin123", username: "admin" },
+      url: "/auth/login"
+    });
+    const adminToken = adminLogin.json<{ token: string }>().token;
+    const playerLogin = await app.inject({
+      method: "POST",
+      payload: { password: "player123", username: "player1" },
+      url: "/auth/login"
+    });
+    const playerToken = playerLogin.json<{ token: string }>().token;
+    gameLobbyService.createRoom({
+      createdAt: "2026-07-08T00:00:00.000Z",
+      id: 2,
+      role: "player",
+      updatedAt: "2026-07-08T00:00:00.000Z",
+      username: "player1"
+    });
+    playerConnectionRegistry.connect(2);
+    persistenceDiagnosticRegistry.record({
+      error: new Error("database locked"),
+      operation: "append-event",
+      roomId: "admin-game-player-2"
+    });
+
+    const listResponse = await app.inject({
+      headers: { authorization: `Bearer ${adminToken}` },
+      method: "GET",
+      url: "/admin/games"
+    });
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json()).toMatchObject({
+      records: expect.arrayContaining([
+        expect.objectContaining({ roomId: "admin-game-player-1" }),
+        expect.objectContaining({
+          playerUserId: 3,
+          roomId: "admin-game-player-2",
+          ruleName: "standard"
+        })
+      ])
+    });
+
+    const detailResponse = await app.inject({
+      headers: { authorization: `Bearer ${adminToken}` },
+      method: "GET",
+      url: "/admin/games/admin-game-player-2"
+    });
+    expect(detailResponse.statusCode).toBe(200);
+    expect(detailResponse.json()).toMatchObject({
+      record: {
+        events: [expect.objectContaining({ text: "player2 开始对局" })],
+        playerUserId: 3,
+        roomId: "admin-game-player-2"
+      }
+    });
+
+    const activeRoomsResponse = await app.inject({
+      headers: { authorization: `Bearer ${adminToken}` },
+      method: "GET",
+      url: "/admin/active-rooms"
+    });
+    expect(activeRoomsResponse.statusCode).toBe(200);
+    expect(activeRoomsResponse.json()).toMatchObject({
+      rooms: [
+        {
+          seats: expect.arrayContaining([
+            expect.objectContaining({ connectionStatus: "online", userId: 2 }),
+            expect.objectContaining({ connectionStatus: "empty" })
+          ]),
+          status: "waiting"
+        }
+      ]
+    });
+
+    const diagnosticsResponse = await app.inject({
+      headers: { authorization: `Bearer ${adminToken}` },
+      method: "GET",
+      url: "/admin/persistence-diagnostics"
+    });
+    expect(diagnosticsResponse.statusCode).toBe(200);
+    expect(diagnosticsResponse.json()).toMatchObject({
+      diagnostics: [
+        {
+          message: "database locked",
+          operation: "append-event",
+          roomId: "admin-game-player-2"
+        }
+      ]
+    });
+
+    const forbiddenResponse = await app.inject({
+      headers: { authorization: `Bearer ${playerToken}` },
+      method: "GET",
+      url: "/admin/games"
+    });
+    expect(forbiddenResponse.statusCode).toBe(403);
+    const forbiddenRoomsResponse = await app.inject({
+      headers: { authorization: `Bearer ${playerToken}` },
+      method: "GET",
+      url: "/admin/active-rooms"
+    });
+    expect(forbiddenRoomsResponse.statusCode).toBe(403);
+    const forbiddenDiagnosticsResponse = await app.inject({
+      headers: { authorization: `Bearer ${playerToken}` },
+      method: "GET",
+      url: "/admin/persistence-diagnostics"
+    });
+    expect(forbiddenDiagnosticsResponse.statusCode).toBe(403);
 
     await app.close();
   });

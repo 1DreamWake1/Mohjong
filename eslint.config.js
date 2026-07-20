@@ -4,7 +4,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**", "data/**"]
+    ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**", ".codex/**", "data/**"]
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -12,10 +12,7 @@ export default tseslint.config(
   {
     files: ["**/*.ts", "**/*.tsx"],
     rules: {
-      "@typescript-eslint/consistent-type-imports": [
-        "error",
-        { "prefer": "type-imports" }
-      ]
+      "@typescript-eslint/consistent-type-imports": ["error", { prefer: "type-imports" }]
     }
   }
 );

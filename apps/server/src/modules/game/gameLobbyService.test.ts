@@ -84,6 +84,19 @@ describe("gameLobbyService", () => {
     expect(service.getCurrentRoom(player)?.roomId).toBe(room.roomId);
   });
 
+  it("lists cloned room snapshots without exposing mutable seats", () => {
+    const service = createGameLobbyService();
+    const firstRoom = service.createRoom(createPlayer(1, "player1"));
+    const secondRoom = service.createRoom(createPlayer(2, "player2"));
+
+    const rooms = service.listRooms();
+    expect(rooms.map((room) => room.roomId)).toEqual(
+      expect.arrayContaining([secondRoom.roomId, firstRoom.roomId])
+    );
+    rooms[0]?.seats.splice(0);
+    expect(service.listRooms()[0]?.seats).toHaveLength(4);
+  });
+
   it("allows players to leave waiting rooms and clears their seat", () => {
     const service = createGameLobbyService();
     const owner = createPlayer(1, "player1");

@@ -2,9 +2,13 @@ import type { FastifyInstance } from "fastify";
 import type {
   CreatePlayerRequest,
   CreateGameRoomRequest,
+  GetAdminGameRecordResponse,
   GetGameHistoryResponse,
   CreateGameRoomResponse,
   ListGameHistoryResponse,
+  ListAdminGameRecordsResponse,
+  ListAdminActiveRoomsResponse,
+  ListAdminPersistenceDiagnosticsResponse,
   GetCurrentGameRoomResponse,
   JoinGameRoomResponse,
   LeaveGameRoomResponse,
@@ -21,6 +25,8 @@ import type { AuthService } from "../modules/auth/authService.js";
 import type { GameRecordRepository } from "../modules/game/gameRecordRepository.js";
 import type { GameLobbyService } from "../modules/game/gameLobbyService.js";
 import type { GameRoomService } from "../modules/game/gameRoomService.js";
+import type { PlayerConnectionRegistry } from "../modules/game/playerConnectionRegistry.js";
+import type { PersistenceDiagnosticRegistry } from "../modules/game/persistenceDiagnosticRegistry.js";
 import type { createUserService } from "../modules/users/userService.js";
 
 type RouteServices = {
@@ -28,6 +34,8 @@ type RouteServices = {
   gameLobbyService: GameLobbyService;
   gameRecordRepository: GameRecordRepository;
   gameRoomService: GameRoomService;
+  playerConnectionRegistry: PlayerConnectionRegistry;
+  persistenceDiagnosticRegistry: PersistenceDiagnosticRegistry;
   userService: ReturnType<typeof createUserService>;
 };
 
@@ -94,7 +102,11 @@ function parseCreateGameRoomRequest(value: unknown): CreateGameRoomRequest | nul
   if (!isRecord(value)) {
     return null;
   }
-  if (value.ruleName !== undefined && value.ruleName !== "simple" && value.ruleName !== "standard") {
+  if (
+    value.ruleName !== undefined &&
+    value.ruleName !== "simple" &&
+    value.ruleName !== "standard"
+  ) {
     return null;
   }
   return value.ruleName === undefined ? {} : { ruleName: value.ruleName };
@@ -407,6 +419,83 @@ export async function registerRoutes(app: FastifyInstance, services: RouteServic
 
     return { players: await services.userService.listPlayers() };
   });
+
+  app.get("/admin/games", async (request, reply): Promise<ListAdminGameRecordsResponse | void> => {
+    const user = await requireUser(app, services, request.headers.authorization);
+    if (!user) {
+      return reply.code(401).send({ message: "Unauthorized" });
+    }
+    if (user.role !== "admin") {
+      return reply.code(403).send({ message: "Forbidden" });
+    }
+
+    return { records: await services.gameRecordRepository.listRecordsForAdmin() };
+  });
+
+  app.get(
+    "/admin/active-rooms",
+    async (request, reply): Promise<ListAdminActiveRoomsResponse | void> => {
+      const user = await requireUser(app, services, request.headers.authorization);
+      if (!user) {
+        return reply.code(401).send({ message: "Unauthorized" });
+      }
+      if (user.role !== "admin") {
+        return reply.code(403).send({ message: "Forbidden" });
+      }
+
+      return {
+        rooms: services.gameLobbyService.listRooms().map((room) => ({
+          ...room,
+          seats: room.seats.map((seat) => ({
+            ...seat,
+            connectionStatus: seat.isBot
+              ? "bot"
+              : seat.userId === undefined
+                ? "empty"
+                : services.playerConnectionRegistry.isOnline(seat.userId)
+                  ? "online"
+                  : "disconnected"
+          }))
+        }))
+      };
+    }
+  );
+
+  app.get(
+    "/admin/persistence-diagnostics",
+    async (request, reply): Promise<ListAdminPersistenceDiagnosticsResponse | void> => {
+      const user = await requireUser(app, services, request.headers.authorization);
+      if (!user) {
+        return reply.code(401).send({ message: "Unauthorized" });
+      }
+      if (user.role !== "admin") {
+        return reply.code(403).send({ message: "Forbidden" });
+      }
+
+      return { diagnostics: services.persistenceDiagnosticRegistry.list() };
+    }
+  );
+
+  app.get(
+    "/admin/games/:roomId",
+    async (request, reply): Promise<GetAdminGameRecordResponse | void> => {
+      const user = await requireUser(app, services, request.headers.authorization);
+      if (!user) {
+        return reply.code(401).send({ message: "Unauthorized" });
+      }
+      if (user.role !== "admin") {
+        return reply.code(403).send({ message: "Forbidden" });
+      }
+
+      const roomId = parseRoomIdParam(request.params);
+      if (!roomId) {
+        return reply.code(400).send({ message: "Invalid room id" });
+      }
+
+      const record = await services.gameRecordRepository.getRecordForAdmin(roomId);
+      return record ? { record } : reply.code(404).send({ message: "Game record not found" });
+    }
+  );
 
   app.post("/admin/players", async (request, reply) => {
     const user = await requireUser(app, services, request.headers.authorization);

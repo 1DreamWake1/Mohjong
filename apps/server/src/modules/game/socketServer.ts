@@ -5,6 +5,10 @@ import { Server, type Socket } from "socket.io";
 import type { AuthService } from "../auth/authService.js";
 import { createGameLobbyService, type GameLobbyService } from "./gameLobbyService.js";
 import { createGameRoomService, type GameRoomService } from "./gameRoomService.js";
+import {
+  createPlayerConnectionRegistry,
+  type PlayerConnectionRegistry
+} from "./playerConnectionRegistry.js";
 
 type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
@@ -271,6 +275,7 @@ export function registerGameSocketServer(input: {
   authService: AuthService;
   gameLobbyService?: GameLobbyService;
   gameRoomService?: GameRoomService;
+  playerConnectionRegistry?: PlayerConnectionRegistry;
 }): Server<ClientToServerEvents, ServerToClientEvents> {
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(input.app.server, {
     cors: {
@@ -279,6 +284,8 @@ export function registerGameSocketServer(input: {
   });
   const gameLobbyService = input.gameLobbyService ?? createGameLobbyService();
   const gameRoomService = input.gameRoomService ?? createGameRoomService();
+  const playerConnectionRegistry =
+    input.playerConnectionRegistry ?? createPlayerConnectionRegistry();
   const activeSocketsByRoomId = new Map<string, Set<GameSocket>>();
   const scheduledBotRoomIds = new Set<string>();
   const scheduledDisconnectsByRoomAndUser = new Map<string, TimeoutHandle>();
@@ -308,6 +315,7 @@ export function registerGameSocketServer(input: {
   io.on("connection", (socket) => {
     const gameSocket = socket as GameSocket;
     const user = (gameSocket.data as SocketData).user;
+    playerConnectionRegistry.connect(user.id);
     const socketRoomIds = new Set<string>();
     const lobbyRoomIds = new Set<string>();
 
@@ -353,6 +361,7 @@ export function registerGameSocketServer(input: {
     }
 
     gameSocket.on("disconnect", () => {
+      playerConnectionRegistry.disconnect(user.id);
       for (const roomId of socketRoomIds) {
         const roomSockets = activeSocketsByRoomId.get(roomId);
         if (roomSockets) {
