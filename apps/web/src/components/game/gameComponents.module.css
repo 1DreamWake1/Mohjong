@@ -28,7 +28,6 @@
 }
 
 .statusItems,
-.playerTitle,
 .actionBar {
   align-items: center;
   display: flex;
@@ -37,12 +36,88 @@
 }
 
 .statusItems span,
-.playerTitle span {
+.seatBadge {
   background: rgb(255 255 255 / 14%);
   border-radius: 999px;
   font-size: 0.8125rem;
   font-weight: 700;
   padding: 6px 10px;
+}
+
+.playerTitle {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.playerTitle > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playerMeta {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 7px;
+}
+
+.handTileCount {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid rgb(255 255 255 / 56%);
+  border-radius: 6px;
+  color: #123c33;
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  min-width: 68px;
+  padding: 3px 7px;
+}
+
+.handTileCount strong {
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  margin-left: 6px;
+}
+
+.handTileCount small {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  margin-left: 2px;
+}
+
+.handTileCountIcon {
+  display: flex;
+  height: 18px;
+  position: relative;
+  width: 18px;
+}
+
+.handTileCountIcon i {
+  background: #176b58;
+  border: 1px solid #0d4c3f;
+  border-radius: 2px;
+  height: 17px;
+  position: absolute;
+  width: 12px;
+}
+
+.handTileCountIcon i:nth-child(1) {
+  left: 0;
+}
+
+.handTileCountIcon i:nth-child(2) {
+  left: 3px;
+}
+
+.handTileCountIcon i:nth-child(3) {
+  left: 6px;
 }
 
 .playersGrid {

@@ -24,6 +24,25 @@ export function getMeldTypeLabel(type: MeldType): string {
   return meldTypeLabels[type];
 }
 
+export function getHandTileCountLabel(count: number): string {
+  return `${count} 张`;
+}
+
+function HandTileCount(props: { count: number }): JSX.Element {
+  const label = `当前手牌 ${getHandTileCountLabel(props.count)}`;
+  return (
+    <span aria-label={label} className={styles.handTileCount} title={label}>
+      <span aria-hidden="true" className={styles.handTileCountIcon}>
+        <i />
+        <i />
+        <i />
+      </span>
+      <strong>{props.count}</strong>
+      <small>张</small>
+    </span>
+  );
+}
+
 export function getVisibleActions(actions: Action[], selectedTileId: string | null): Action[] {
   const discardActions = actions.filter((action) => action.type === "discard");
   const selectedDiscardAction = selectedTileId
@@ -36,14 +55,20 @@ export function getVisibleActions(actions: Action[], selectedTileId: string | nu
   ];
 }
 
-export function shouldPromptForDiscardSelection(actions: Action[], selectedTileId: string | null): boolean {
+export function shouldPromptForDiscardSelection(
+  actions: Action[],
+  selectedTileId: string | null
+): boolean {
   return (
     actions.some((action) => action.type === "discard") &&
     !getVisibleActions(actions, selectedTileId).some((action) => action.type === "discard")
   );
 }
 
-export function shouldRenderActionBar(visibleActions: Action[], promptForDiscardSelection: boolean): boolean {
+export function shouldRenderActionBar(
+  visibleActions: Action[],
+  promptForDiscardSelection: boolean
+): boolean {
   return visibleActions.length > 0 || !promptForDiscardSelection;
 }
 
@@ -83,9 +108,15 @@ export function MahjongTable(props: MahjongTableProps): JSX.Element {
           >
             <div className={styles.playerTitle}>
               <strong>{player.username}</strong>
-              <span>{seatNames[player.seatIndex]}</span>
+              <div className={styles.playerMeta}>
+                <span className={styles.seatBadge}>{seatNames[player.seatIndex]}</span>
+                <HandTileCount count={player.handTileCount} />
+              </div>
             </div>
-            <div className={styles.hiddenHand}>
+            <div
+              aria-label={`${player.username}${getHandTileCountLabel(player.handTileCount)}手牌`}
+              className={styles.hiddenHand}
+            >
               {Array.from({ length: player.handTileCount }).map((_, index) => (
                 <Tile hidden key={`${player.seatIndex}-${index}`} />
               ))}
@@ -129,7 +160,10 @@ export function MahjongTable(props: MahjongTableProps): JSX.Element {
       <footer className={styles.playerHandPanel}>
         <div className={styles.playerTitle}>
           <strong>{props.view.username}</strong>
-          <span>{seatNames[props.view.seatIndex]}位视角</span>
+          <div className={styles.playerMeta}>
+            <span className={styles.seatBadge}>{seatNames[props.view.seatIndex]}位视角</span>
+            <HandTileCount count={props.view.handTiles.length} />
+          </div>
         </div>
         <HandTiles
           onSelectTile={props.onSelectTile}

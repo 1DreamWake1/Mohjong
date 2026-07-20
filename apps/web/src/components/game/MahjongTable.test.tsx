@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   getMeldTypeLabel,
+  getHandTileCountLabel,
   getVisibleActions,
   shouldPromptForDiscardSelection,
   shouldRenderActionBar
@@ -14,6 +15,11 @@ const discardActions: Action[] = [
 ];
 
 describe("MahjongTable actions", () => {
+  it("formats hand counts as an explicit tile quantity", () => {
+    expect(getHandTileCountLabel(13)).toBe("13 张");
+    expect(getHandTileCountLabel(0)).toBe("0 张");
+  });
+
   it("renders meld type labels in Chinese", () => {
     expect(getMeldTypeLabel("chi")).toBe("吃");
     expect(getMeldTypeLabel("peng")).toBe("碰");

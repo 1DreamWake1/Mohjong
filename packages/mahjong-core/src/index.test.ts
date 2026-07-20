@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyAction,
+  calculateShanten,
   calculateScore,
   canHu,
   chooseDiscardTile,
+  chooseBasicBotAction,
   createEmptyPlayerView,
   createInitialGame,
   createPlayerView,
@@ -850,6 +852,64 @@ describe("mahjong-core game reducer", () => {
 });
 
 describe("mahjong-core basic bot", () => {
+  it("reports complete and ready hands with standard shanten values", () => {
+    const completeHand = handFromCodes([
+      "m1",
+      "m2",
+      "m3",
+      "m4",
+      "m5",
+      "m6",
+      "p2",
+      "p3",
+      "p4",
+      "s7",
+      "s8",
+      "s9",
+      "red",
+      "red"
+    ]);
+    const readyHand = completeHand.slice(0, -1);
+
+    expect(calculateShanten(completeHand, standardRuleConfig)).toBe(-1);
+    expect(calculateShanten(readyHand, standardRuleConfig)).toBe(0);
+  });
+
+  it("claims a useful peng instead of always passing", () => {
+    const state = createClaimScenario("red", {
+      2: ["red", "red", "m1", "m2", "m3", "m4", "m5", "p2", "p3", "s4", "s5", "s7", "s8"]
+    });
+    const discardedTileId = state.players[0].handTiles[0]?.id;
+    if (!discardedTileId) throw new Error("Expected a discard tile");
+    const result = applyAction(state, 0, { type: "discard", tileId: discardedTileId });
+    if (!result.ok) throw new Error(result.error);
+
+    expect(chooseBasicBotAction(result.state, 2).type).toBe("peng");
+  });
+
+  it("takes an available concealed gang when it preserves hand progress", () => {
+    const state = createInitialGame({ rules: standardRuleConfig, seed: 88 });
+    state.currentTurn = 0;
+    state.players[0].handTiles = handFromCodes([
+      "east",
+      "east",
+      "east",
+      "east",
+      "m1",
+      "m2",
+      "m3",
+      "m4",
+      "m5",
+      "m6",
+      "p2",
+      "p3",
+      "p4",
+      "red"
+    ]);
+
+    expect(chooseBasicBotAction(state, 0).type).toBe("gang");
+  });
+
   it("prefers isolated tiles as discards", () => {
     const hand = handFromCodes([
       "m1",
