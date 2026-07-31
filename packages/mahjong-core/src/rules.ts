@@ -39,7 +39,9 @@ export type RuleConfig = {
   drawCondition: "wallEmpty";
   scoring: {
     basePoints: number;
+    fanLimit: number | null;
     fanPointValue: number;
+    minimumFan: number;
     mode: "standard" | "sichuan";
   };
 };
@@ -78,7 +80,13 @@ export const standardRuleConfig: RuleConfig = Object.freeze({
   winningPatterns: Object.freeze({ sevenPairs: true }),
   tileSet: "standard",
   drawCondition: "wallEmpty",
-  scoring: Object.freeze({ basePoints: 20, fanPointValue: 10, mode: "standard" })
+  scoring: Object.freeze({
+    basePoints: 20,
+    fanLimit: null,
+    fanPointValue: 10,
+    minimumFan: 0,
+    mode: "standard"
+  })
 });
 
 export const simpleRuleConfig: RuleConfig = Object.freeze({
@@ -91,7 +99,13 @@ export const simpleRuleConfig: RuleConfig = Object.freeze({
   winningPatterns: Object.freeze({ sevenPairs: true }),
   tileSet: "suited",
   drawCondition: "wallEmpty",
-  scoring: Object.freeze({ basePoints: 20, fanPointValue: 10, mode: "standard" })
+  scoring: Object.freeze({
+    basePoints: 20,
+    fanLimit: null,
+    fanPointValue: 10,
+    minimumFan: 0,
+    mode: "standard"
+  })
 });
 
 const rulePresetByName: Readonly<Record<RulePresetName, RuleConfig>> = {
@@ -153,18 +167,65 @@ export function getFanValues(rules: RuleConfig): RuleConfig["fanValues"] {
 
 export function getScoringConfig(rules: RuleConfig): RuleConfig["scoring"] {
   if (rules.scoring) {
-    return rules.scoring;
+    return {
+      ...rules.scoring,
+      fanLimit: rules.scoring.fanLimit ?? null,
+      minimumFan: rules.scoring.minimumFan ?? 0
+    };
   }
 
   return {
     basePoints: 20,
+    fanLimit: null,
     fanPointValue: 10,
+    minimumFan: 0,
     mode: (rules as LegacyRuleConfig).scoringMode ?? "standard"
   };
 }
 
 export function shouldEndOnEmptyWall(rules: RuleConfig): boolean {
   return rules.drawCondition === undefined || rules.drawCondition === "wallEmpty";
+}
+
+export function getRuleConfigValidationErrors(rules: RuleConfig): string[] {
+  const errors: string[] = [];
+  const claimPriority = getClaimPriorityConfig(rules);
+  const fanValues = getFanValues(rules);
+  const scoring = getScoringConfig(rules);
+
+  if (!rules.name.trim()) {
+    errors.push("Rule name must not be empty");
+  }
+  if (!Number.isInteger(rules.version) || rules.version < 1) {
+    errors.push("Rule version must be a positive integer");
+  }
+
+  for (const [action, priority] of Object.entries(claimPriority)) {
+    if (!Number.isFinite(priority) || priority < 0) {
+      errors.push(`Claim priority for ${action} must be a non-negative number`);
+    }
+  }
+
+  for (const [fan, value] of Object.entries(fanValues)) {
+    if (!Number.isFinite(value) || value < 0) {
+      errors.push(`Fan value for ${fan} must be a non-negative number`);
+    }
+  }
+
+  if (!Number.isFinite(scoring.basePoints) || scoring.basePoints < 0) {
+    errors.push("Scoring base points must be a non-negative number");
+  }
+  if (!Number.isFinite(scoring.fanPointValue) || scoring.fanPointValue < 0) {
+    errors.push("Scoring fan point value must be a non-negative number");
+  }
+  if (scoring.fanLimit !== null && (!Number.isInteger(scoring.fanLimit) || scoring.fanLimit < 0)) {
+    errors.push("Scoring fan limit must be null or a non-negative integer");
+  }
+  if (!Number.isInteger(scoring.minimumFan) || scoring.minimumFan < 0) {
+    errors.push("Scoring minimum fan must be a non-negative integer");
+  }
+
+  return errors;
 }
 
 export function normalizeRuleConfig(rules: RuleConfig): RuleConfig {

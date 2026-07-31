@@ -12,7 +12,12 @@ import type {
   WinType
 } from "@mahjong/shared";
 import type { PrismaClient } from "@prisma/client";
-import { normalizeRuleConfig, type MahjongGameState, type RuleConfig } from "mahjong-core";
+import {
+  getRuleConfigValidationErrors,
+  normalizeRuleConfig,
+  type MahjongGameState,
+  type RuleConfig
+} from "mahjong-core";
 
 import { prisma as defaultPrisma } from "../../db/prisma.js";
 
@@ -465,6 +470,9 @@ export function parseGameRecoverySnapshot(value: string | null): GameRecoverySna
 
     const recoverySnapshot = snapshot as GameRecoverySnapshot;
     recoverySnapshot.state.rules = normalizeRuleConfig(snapshot.state.rules as RuleConfig);
+    if (getRuleConfigValidationErrors(recoverySnapshot.state.rules).length > 0) {
+      return undefined;
+    }
     return recoverySnapshot;
   } catch {
     return undefined;

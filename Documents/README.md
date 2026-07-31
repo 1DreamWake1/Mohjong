@@ -16,6 +16,7 @@
 
 - [requirements.md](./requirements.md)
 - [simple-rules.md](./simple-rules.md)
+- [sichuan-rules-design.md](./sichuan-rules-design.md)
 
 说明：
 
@@ -117,7 +118,7 @@ Linux 测试部署：Ubuntu 虚拟机 + Docker Compose + SQLite
 17. 增加管理员对局后台。
 18. 完善 Docker 部署和长期运行能力。
 
-当前状态：阶段 0-15 和阶段 17 已完成，阶段 16 规则配置化正在推进，阶段 18 Docker 部署待开发。管理员现可查询全量历史对局、筛选异常记录、查看结算与事件快照，并检查活跃房间、玩家连接状态及持久化失败诊断；后续重点推进地方规则和 Docker 长期运行能力。
+当前状态：阶段 0-17 已完成，阶段 18 Docker 部署待开发。规则预设、计分策略、配置校验和副露胡牌边界已经稳定，四川麻将完整玩法已拆分为独立后续阶段；当前重点转向 Docker 长期运行、数据备份和部署运维能力。
 
 ## 5. 环境准备
 

@@ -1,14 +1,14 @@
 import type { Action, MeldInfo, PlayerView, WinType } from "@mahjong/shared";
 
-import { canHu } from "./hand.js";
 import {
   getClaimPriorityConfig,
+  getRuleConfigValidationErrors,
   getRuleActions,
   shouldEndOnEmptyWall,
   standardRuleConfig,
   type RuleConfig
 } from "./rules.js";
-import { calculateScore, type ScoreResult } from "./scoring.js";
+import { calculateScore, meetsMinimumFan, type ScoreResult } from "./scoring.js";
 import { compareTiles, isSameTileType, isSuited, type Tile } from "./tiles.js";
 import { createSeededRandom, createShuffledWall, type RandomSource } from "./wall.js";
 
@@ -65,6 +65,10 @@ export function createInitialGame(options: CreateGameOptions = {}): MahjongGameS
   const random =
     options.random ?? (options.seed === undefined ? Math.random : createSeededRandom(options.seed));
   const rules = options.rules ?? standardRuleConfig;
+  const ruleErrors = getRuleConfigValidationErrors(rules);
+  if (ruleErrors.length > 0) {
+    throw new Error(`Invalid rule config: ${ruleErrors.join("; ")}`);
+  }
   const wall = createShuffledWall(random, rules);
   const players: [PlayerState, PlayerState, PlayerState, PlayerState] = [
     createPlayerState(0, options.players?.[0]),
@@ -111,9 +115,11 @@ export function getLegalActions(state: MahjongGameState, seatIndex: number): Act
     tileId: tile.id
   }));
   const actions: Action[] = [...getTurnGangActions(state, seatIndex), ...discardActions];
-  const huResult = canHu(player.handTiles, state.rules);
+  const score = calculateScore(player.handTiles, state.rules, {
+    publicMelds: player.publicMelds
+  });
 
-  if (huResult.canHu) {
+  if (meetsMinimumFan(score, state.rules)) {
     actions.unshift({ type: "hu" });
   }
 
@@ -139,18 +145,21 @@ export function applyAction(
 
   if (action.type === "hu") {
     const player = getPlayer(state, seatIndex);
-    const huResult = canHu(player.handTiles, state.rules);
+    const score = calculateScore(player.handTiles, state.rules, {
+      publicMelds: player.publicMelds
+    });
 
-    if (!huResult.canHu) {
+    if (!score.canHu) {
       return { ok: false, error: "Hand cannot win", state };
+    }
+    if (!meetsMinimumFan(score, state.rules)) {
+      return { ok: false, error: "Hand does not meet minimum fan", state };
     }
 
     const winningTile =
       player.lastDrawnTileId === undefined
         ? player.handTiles.at(-1)
         : player.handTiles.find((tile) => tile.id === player.lastDrawnTileId);
-    const score = calculateScore(player.handTiles, state.rules);
-
     return {
       ok: true,
       state: winningTile
@@ -347,7 +356,12 @@ function getAvailableClaimActionsForSeat(state: MahjongGameState, seatIndex: num
   const handWithDiscard = [...player.handTiles, pendingDiscard.tile];
   const sameTiles = player.handTiles.filter((tile) => isSameTileType(tile, pendingDiscard.tile));
 
-  if (canHu(handWithDiscard, state.rules).canHu) {
+  if (
+    meetsMinimumFan(
+      calculateScore(handWithDiscard, state.rules, { publicMelds: player.publicMelds }),
+      state.rules
+    )
+  ) {
     actions.push({ type: "hu", tileId: pendingDiscard.tile.id });
   }
 
@@ -418,13 +432,16 @@ function applyClaimAction(
 
   if (action.type === "hu") {
     const player = getPlayer(state, seatIndex);
-    const huResult = canHu([...player.handTiles, pendingDiscard.tile], state.rules);
+    const score = calculateScore([...player.handTiles, pendingDiscard.tile], state.rules, {
+      publicMelds: player.publicMelds
+    });
 
-    if (!huResult.canHu) {
+    if (!score.canHu) {
       return { ok: false, error: "Claimed discard cannot complete a winning hand", state };
     }
-
-    const score = calculateScore([...player.handTiles, pendingDiscard.tile], state.rules);
+    if (!meetsMinimumFan(score, state.rules)) {
+      return { ok: false, error: "Claimed discard does not meet minimum fan", state };
+    }
 
     return {
       ok: true,

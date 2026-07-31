@@ -92,7 +92,13 @@ describe("game recovery snapshots", () => {
         tanyao: 1,
         toitoi: 2
       },
-      scoring: { basePoints: 20, fanPointValue: 10, mode: "standard" },
+      scoring: {
+        basePoints: 20,
+        fanLimit: null,
+        fanPointValue: 10,
+        minimumFan: 0,
+        mode: "standard"
+      },
       tileSet: "suited",
       winningPatterns: { sevenPairs: true }
     });
@@ -100,6 +106,21 @@ describe("game recovery snapshots", () => {
     expect(rules).not.toHaveProperty("allowSevenPairs");
     expect(rules).not.toHaveProperty("scoringMode");
     expect(rules).not.toHaveProperty("useWinds");
+  });
+
+  it("rejects a recovery snapshot with invalid numeric rule configuration", () => {
+    const snapshot = JSON.parse(createSnapshotJson()) as {
+      state: {
+        rules: {
+          scoring: {
+            fanLimit: number;
+          };
+        };
+      };
+    };
+    snapshot.state.rules.scoring.fanLimit = -1;
+
+    expect(parseGameRecoverySnapshot(JSON.stringify(snapshot))).toBeUndefined();
   });
 
   it("marks active records without valid recovery data as abnormal", async () => {

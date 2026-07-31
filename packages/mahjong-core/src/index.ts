@@ -20,6 +20,7 @@ export {
   getClaimPriorityConfig,
   getEnabledFans,
   getFanValues,
+  getRuleConfigValidationErrors,
   getRuleTileSet,
   normalizeRuleConfig,
   shouldEndOnEmptyWall,
@@ -33,6 +34,7 @@ export {
   isChinitsu,
   isHonitsu,
   isHonroutou,
+  meetsMinimumFan,
   isPinfu,
   isTanyao,
   isToitoi

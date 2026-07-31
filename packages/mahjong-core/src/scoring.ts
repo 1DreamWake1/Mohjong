@@ -1,3 +1,5 @@
+import type { MeldInfo } from "@mahjong/shared";
+
 import { canHu, countTiles, isSevenPairs } from "./hand.js";
 import {
   allowsSevenPairs,
@@ -28,6 +30,7 @@ export type ScoreOptions = {
   isRiichi?: boolean;
   basePoints?: number;
   fanPointValue?: number;
+  publicMelds?: readonly MeldInfo[];
 };
 
 export type ScoreResult = {
@@ -55,7 +58,8 @@ export function calculateScore(
   options: ScoreOptions = {}
 ): ScoreResult {
   const scoring = getScoringConfig(rules);
-  if (!canHu(tiles, rules).canHu) {
+  const openMeldCount = options.publicMelds?.length ?? 0;
+  if (!canHu(tiles, rules, openMeldCount).canHu) {
     return {
       canHu: false,
       fans: [],
@@ -69,13 +73,19 @@ export function calculateScore(
   const fanTotal = fans.reduce((total, fan) => total + fan.value, 0);
   const basePoints = options.basePoints ?? scoring.basePoints;
   const fanPointValue = options.fanPointValue ?? scoring.fanPointValue;
+  const appliedFanTotal =
+    scoring.fanLimit === null ? fanTotal : Math.min(fanTotal, Math.max(0, scoring.fanLimit));
+  const totalPoints =
+    scoring.mode === "sichuan"
+      ? basePoints * 2 ** appliedFanTotal
+      : basePoints + appliedFanTotal * fanPointValue;
 
   return {
     canHu: true,
     fans,
     fanTotal,
     basePoints,
-    totalPoints: basePoints + fanTotal * fanPointValue
+    totalPoints
   };
 }
 
@@ -84,16 +94,18 @@ export function identifyFans(
   rules: RuleConfig,
   options: ScoreOptions = {}
 ): Fan[] {
-  if (!canHu(tiles, rules).canHu) {
+  const publicMelds = options.publicMelds ?? [];
+  if (!canHu(tiles, rules, publicMelds.length).canHu) {
     return [];
   }
 
   const fanTypes: FanType[] = [];
-  const counts = countTiles(tiles);
+  const completeTiles = [...tiles, ...publicMelds.flatMap((meld) => meld.tiles as Tile[])];
+  const counts = countTiles(completeTiles);
   const enabledFans = getEnabledFans(rules);
   const fanValues = getFanValues(rules);
 
-  if (enabledFans.pinfu && isPinfu(tiles)) {
+  if (enabledFans.pinfu && publicMelds.every((meld) => meld.type === "chi") && isPinfu(tiles)) {
     fanTypes.push("pinfu");
   }
 
@@ -101,13 +113,13 @@ export function identifyFans(
     fanTypes.push("riichi");
   }
 
-  if (enabledFans.tanyao && isTanyao(tiles)) {
+  if (enabledFans.tanyao && isTanyao(completeTiles)) {
     fanTypes.push("tanyao");
   }
 
-  if (enabledFans.chinitsu && isChinitsu(tiles)) {
+  if (enabledFans.chinitsu && isChinitsu(completeTiles)) {
     fanTypes.push("chinitsu");
-  } else if (enabledFans.honitsu && isHonitsu(tiles)) {
+  } else if (enabledFans.honitsu && isHonitsu(completeTiles)) {
     fanTypes.push("honitsu");
   }
 
@@ -115,15 +127,24 @@ export function identifyFans(
     fanTypes.push("toitoi");
   }
 
-  if (enabledFans.sevenPairs && allowsSevenPairs(rules) && isSevenPairs(counts)) {
+  if (
+    enabledFans.sevenPairs &&
+    publicMelds.length === 0 &&
+    allowsSevenPairs(rules) &&
+    isSevenPairs(counts)
+  ) {
     fanTypes.push("sevenPairs");
   }
 
-  if (enabledFans.honroutou && isHonroutou(tiles)) {
+  if (enabledFans.honroutou && isHonroutou(completeTiles)) {
     fanTypes.push("honroutou");
   }
 
   return fanTypes.map((type) => ({ ...fanDefinitions[type], value: fanValues[type] }));
+}
+
+export function meetsMinimumFan(score: ScoreResult, rules: RuleConfig): boolean {
+  return score.canHu && score.fanTotal >= getScoringConfig(rules).minimumFan;
 }
 
 export function isTanyao(tiles: readonly Tile[]): boolean {

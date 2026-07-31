@@ -13,6 +13,7 @@ import {
   createTile,
   createWall,
   getRulePreset,
+  getRuleConfigValidationErrors,
   getLegalActions,
   identifyFans,
   runBasicBotGame,
@@ -58,6 +59,25 @@ describe("mahjong-core tiles and wall", () => {
     expect(tileDefinitions).toHaveLength(34);
     expect(wall).toHaveLength(136);
     expect(uniqueIds.size).toBe(136);
+  });
+
+  it("rejects invalid numeric rule configuration before creating a game", () => {
+    const invalidRules = {
+      ...standardRuleConfig,
+      claimPriority: { ...standardRuleConfig.claimPriority, hu: -1 },
+      fanValues: { ...standardRuleConfig.fanValues, tanyao: -2 },
+      scoring: {
+        ...standardRuleConfig.scoring,
+        fanLimit: 1.5
+      }
+    };
+
+    expect(getRuleConfigValidationErrors(invalidRules)).toEqual([
+      "Claim priority for hu must be a non-negative number",
+      "Fan value for tanyao must be a non-negative number",
+      "Scoring fan limit must be null or a non-negative integer"
+    ]);
+    expect(() => createInitialGame({ rules: invalidRules })).toThrow("Invalid rule config");
   });
 
   it("builds a 108 tile wall for simple suited-only rules", () => {
@@ -117,6 +137,32 @@ describe("mahjong-core hand evaluation", () => {
     });
   });
 
+  it("validates concealed tile count against the number of public melds", () => {
+    const openHand = handFromCodes([
+      "m1",
+      "m1",
+      "m1",
+      "m9",
+      "m9",
+      "m9",
+      "p1",
+      "p1",
+      "p1",
+      "east",
+      "east"
+    ]);
+
+    expect(canHu(openHand, standardRuleConfig, 1)).toEqual({
+      canHu: true,
+      pattern: "standard"
+    });
+    expect(canHu(openHand, standardRuleConfig, 0)).toEqual({ canHu: false });
+    expect(canHu(handFromCodes(["east", "east"]), standardRuleConfig, 4)).toEqual({
+      canHu: true,
+      pattern: "standard"
+    });
+  });
+
   it("rejects incomplete hands", () => {
     const hand = handFromCodes([
       "m1",
@@ -159,11 +205,58 @@ describe("mahjong-core scoring", () => {
     ]);
     const score = calculateScore(hand, {
       ...standardRuleConfig,
-      scoring: { basePoints: 100, fanPointValue: 25, mode: "standard" }
+      scoring: {
+        basePoints: 100,
+        fanLimit: null,
+        fanPointValue: 25,
+        minimumFan: 0,
+        mode: "standard"
+      }
     });
 
     expect(score.basePoints).toBe(100);
     expect(score.totalPoints).toBe(100 + score.fanTotal * 25);
+  });
+
+  it("applies exponential scoring and a fan limit in Sichuan mode", () => {
+    const hand = handFromCodes([
+      "m2",
+      "m3",
+      "m4",
+      "m3",
+      "m4",
+      "m5",
+      "p4",
+      "p5",
+      "p6",
+      "s6",
+      "s7",
+      "s8",
+      "p8",
+      "p8"
+    ]);
+    const rules = {
+      ...standardRuleConfig,
+      enabledFans: {
+        ...standardRuleConfig.enabledFans,
+        pinfu: false
+      },
+      fanValues: {
+        ...standardRuleConfig.fanValues,
+        tanyao: 5
+      },
+      scoring: {
+        basePoints: 10,
+        fanLimit: 3,
+        fanPointValue: 10,
+        minimumFan: 0,
+        mode: "sichuan" as const
+      }
+    };
+    const score = calculateScore(hand, rules);
+
+    expect(score.fanTotal).toBe(5);
+    expect(score.totalPoints).toBe(80);
   });
 
   it("identifies pinfu, riichi and tanyao on a simple sequence hand", () => {
@@ -786,6 +879,78 @@ describe("mahjong-core game reducer", () => {
       winType: "selfDraw",
       winningTile: expect.objectContaining({ id: result.state.winningTile?.id })
     });
+  });
+
+  it("only exposes and accepts hu when the hand meets the configured minimum fan", () => {
+    const state = createInitialGame({
+      rules: {
+        ...standardRuleConfig,
+        scoring: {
+          ...standardRuleConfig.scoring,
+          minimumFan: 3
+        }
+      },
+      seed: 7
+    });
+    state.currentTurn = 0;
+    state.players[0].handTiles = handFromCodes([
+      "m2",
+      "m3",
+      "m4",
+      "m3",
+      "m4",
+      "m5",
+      "p4",
+      "p5",
+      "p6",
+      "s6",
+      "s7",
+      "s8",
+      "p8",
+      "p8"
+    ]);
+
+    expect(calculateScore(state.players[0].handTiles, state.rules).fanTotal).toBe(2);
+    expect(getLegalActions(state, 0).some((action) => action.type === "hu")).toBe(false);
+    expect(applyAction(state, 0, { type: "hu" })).toMatchObject({
+      error: "Hand does not meet minimum fan",
+      ok: false
+    });
+  });
+
+  it("includes public meld tiles when scoring an open winning hand", () => {
+    const state = createInitialGame({ rules: standardRuleConfig, seed: 9 });
+    const publicTiles = handFromCodes(["red", "red", "red"]);
+    state.currentTurn = 0;
+    state.players[0].handTiles = handFromCodes([
+      "m1",
+      "m1",
+      "m1",
+      "m9",
+      "m9",
+      "m9",
+      "p1",
+      "p1",
+      "p1",
+      "east",
+      "east"
+    ]);
+    state.players[0].publicMelds = [
+      {
+        type: "peng",
+        ownerSeatIndex: 0,
+        tiles: publicTiles
+      }
+    ];
+
+    expect(getLegalActions(state, 0).some((action) => action.type === "hu")).toBe(true);
+    const result = applyAction(state, 0, { type: "hu" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.state.score?.fans.map((fan) => fan.type)).toEqual(
+      expect.arrayContaining(["toitoi", "honroutou"])
+    );
   });
 
   it("ends on a claimed discard win and records the win source", () => {

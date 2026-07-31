@@ -18,14 +18,19 @@ export function countTiles(tiles: readonly Tile[]): Map<TileCode, number> {
   return counts;
 }
 
-export function canHu(tiles: readonly Tile[], rules: RuleConfig): HuResult {
-  if (tiles.length % 3 !== 2) {
+export function canHu(tiles: readonly Tile[], rules: RuleConfig, openMeldCount = 0): HuResult {
+  if (
+    !Number.isInteger(openMeldCount) ||
+    openMeldCount < 0 ||
+    openMeldCount > 4 ||
+    tiles.length !== 14 - openMeldCount * 3
+  ) {
     return { canHu: false };
   }
 
   const counts = countTiles(tiles);
 
-  if (allowsSevenPairs(rules) && isSevenPairs(counts)) {
+  if (openMeldCount === 0 && allowsSevenPairs(rules) && isSevenPairs(counts)) {
     return { canHu: true, pattern: "sevenPairs" };
   }
 
