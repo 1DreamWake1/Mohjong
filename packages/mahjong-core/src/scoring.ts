@@ -1,5 +1,11 @@
 import { canHu, countTiles, isSevenPairs } from "./hand.js";
-import { allowsSevenPairs, getScoringConfig, type RuleConfig } from "./rules.js";
+import {
+  allowsSevenPairs,
+  getEnabledFans,
+  getFanValues,
+  getScoringConfig,
+  type RuleConfig
+} from "./rules.js";
 import { getTileDefinition, isSuited, tileDefinitions, type Tile, type TileCode } from "./tiles.js";
 
 export type FanType =
@@ -32,15 +38,15 @@ export type ScoreResult = {
   totalPoints: number;
 };
 
-const fanDefinitions: Record<FanType, Fan> = {
-  pinfu: { type: "pinfu", name: "平和", value: 1 },
-  riichi: { type: "riichi", name: "立直", value: 1 },
-  tanyao: { type: "tanyao", name: "断幺九", value: 1 },
-  honitsu: { type: "honitsu", name: "混一色", value: 3 },
-  chinitsu: { type: "chinitsu", name: "清一色", value: 6 },
-  toitoi: { type: "toitoi", name: "对对胡", value: 2 },
-  sevenPairs: { type: "sevenPairs", name: "七对子", value: 2 },
-  honroutou: { type: "honroutou", name: "混老头", value: 2 }
+const fanDefinitions: Record<FanType, Omit<Fan, "value">> = {
+  pinfu: { type: "pinfu", name: "平和" },
+  riichi: { type: "riichi", name: "立直" },
+  tanyao: { type: "tanyao", name: "断幺九" },
+  honitsu: { type: "honitsu", name: "混一色" },
+  chinitsu: { type: "chinitsu", name: "清一色" },
+  toitoi: { type: "toitoi", name: "对对胡" },
+  sevenPairs: { type: "sevenPairs", name: "七对子" },
+  honroutou: { type: "honroutou", name: "混老头" }
 };
 
 export function calculateScore(
@@ -84,38 +90,40 @@ export function identifyFans(
 
   const fanTypes: FanType[] = [];
   const counts = countTiles(tiles);
+  const enabledFans = getEnabledFans(rules);
+  const fanValues = getFanValues(rules);
 
-  if (isPinfu(tiles)) {
+  if (enabledFans.pinfu && isPinfu(tiles)) {
     fanTypes.push("pinfu");
   }
 
-  if (options.isRiichi) {
+  if (enabledFans.riichi && options.isRiichi) {
     fanTypes.push("riichi");
   }
 
-  if (isTanyao(tiles)) {
+  if (enabledFans.tanyao && isTanyao(tiles)) {
     fanTypes.push("tanyao");
   }
 
-  if (isChinitsu(tiles)) {
+  if (enabledFans.chinitsu && isChinitsu(tiles)) {
     fanTypes.push("chinitsu");
-  } else if (isHonitsu(tiles)) {
+  } else if (enabledFans.honitsu && isHonitsu(tiles)) {
     fanTypes.push("honitsu");
   }
 
-  if (isToitoi(counts)) {
+  if (enabledFans.toitoi && isToitoi(counts)) {
     fanTypes.push("toitoi");
   }
 
-  if (allowsSevenPairs(rules) && isSevenPairs(counts)) {
+  if (enabledFans.sevenPairs && allowsSevenPairs(rules) && isSevenPairs(counts)) {
     fanTypes.push("sevenPairs");
   }
 
-  if (isHonroutou(tiles)) {
+  if (enabledFans.honroutou && isHonroutou(tiles)) {
     fanTypes.push("honroutou");
   }
 
-  return fanTypes.map((type) => fanDefinitions[type]);
+  return fanTypes.map((type) => ({ ...fanDefinitions[type], value: fanValues[type] }));
 }
 
 export function isTanyao(tiles: readonly Tile[]): boolean {

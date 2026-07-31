@@ -32,6 +32,14 @@ describe("mahjong-core tiles and wall", () => {
     expect(getRulePreset("unknown")).toBeUndefined();
     expect(simpleRuleConfig).toMatchObject({
       actions: { chi: false, gang: true, peng: true },
+      claimPriority: { chi: 1, gang: 2, hu: 3, peng: 2 },
+      enabledFans: expect.objectContaining({
+        pinfu: true,
+        riichi: true,
+        sevenPairs: true,
+        tanyao: true
+      }),
+      fanValues: expect.objectContaining({ chinitsu: 6, honitsu: 3, tanyao: 1 }),
       drawCondition: "wallEmpty",
       tileSet: "suited",
       winningPatterns: { sevenPairs: true }
@@ -181,6 +189,71 @@ describe("mahjong-core scoring", () => {
     expect(score.fans.map((fan) => fan.type)).toEqual(["pinfu", "riichi", "tanyao"]);
     expect(score.fanTotal).toBe(3);
     expect(score.totalPoints).toBe(50);
+  });
+
+  it("only scores fan types enabled by the active rules", () => {
+    const hand = handFromCodes([
+      "m2",
+      "m3",
+      "m4",
+      "m3",
+      "m4",
+      "m5",
+      "p4",
+      "p5",
+      "p6",
+      "s6",
+      "s7",
+      "s8",
+      "p8",
+      "p8"
+    ]);
+    const rules = {
+      ...standardRuleConfig,
+      enabledFans: {
+        ...standardRuleConfig.enabledFans,
+        pinfu: false,
+        riichi: false,
+        tanyao: true
+      }
+    };
+
+    expect(identifyFans(hand, rules, { isRiichi: true }).map((fan) => fan.type)).toEqual([
+      "tanyao"
+    ]);
+  });
+
+  it("reads individual fan values from the active rules", () => {
+    const hand = handFromCodes([
+      "m2",
+      "m3",
+      "m4",
+      "m3",
+      "m4",
+      "m5",
+      "p4",
+      "p5",
+      "p6",
+      "s6",
+      "s7",
+      "s8",
+      "p8",
+      "p8"
+    ]);
+    const rules = {
+      ...standardRuleConfig,
+      enabledFans: {
+        ...standardRuleConfig.enabledFans,
+        pinfu: false,
+        riichi: false
+      },
+      fanValues: { ...standardRuleConfig.fanValues, tanyao: 4 }
+    };
+    const score = calculateScore(hand, rules);
+
+    expect(score.fans).toEqual([{ name: "断幺九", type: "tanyao", value: 4 }]);
+    expect(score.fanTotal).toBe(4);
+    expect(score.totalPoints).toBe(60);
   });
 
   it("identifies chinitsu without also counting honitsu", () => {
@@ -645,6 +718,29 @@ describe("mahjong-core game reducer", () => {
     expect(getLegalActions(passResult.state, 2).some((action) => action.type === "peng")).toBe(
       true
     );
+  });
+
+  it("reads discard claim priority from the active rule config", () => {
+    const state = createClaimScenario(
+      "m3",
+      {
+        1: ["m1", "m2"],
+        3: ["m1", "m2", "m3", "m4", "m5", "m6", "p2", "p3", "p4", "s7", "s8", "s9", "m3"]
+      },
+      {
+        ...standardRuleConfig,
+        claimPriority: { chi: 4, gang: 2, hu: 3, peng: 2 }
+      }
+    );
+    const discardedTileId = state.players[0].handTiles[0]?.id;
+    if (!discardedTileId) throw new Error("Expected discarder to have a tile");
+
+    const result = applyAction(state, 0, { type: "discard", tileId: discardedTileId });
+    if (!result.ok) throw new Error(result.error);
+
+    expect(result.state.currentTurn).toBe(1);
+    expect(getLegalActions(result.state, 1).map((action) => action.type)).toContain("chi");
+    expect(getLegalActions(result.state, 3)).toEqual([]);
   });
 
   it("attaches score when a player wins", () => {

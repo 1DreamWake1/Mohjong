@@ -17,6 +17,9 @@ export { canHu, countTiles, isSevenPairs } from "./hand.js";
 export type { HuPattern, HuResult } from "./hand.js";
 export {
   getRulePreset,
+  getClaimPriorityConfig,
+  getEnabledFans,
+  getFanValues,
   getRuleTileSet,
   normalizeRuleConfig,
   shouldEndOnEmptyWall,

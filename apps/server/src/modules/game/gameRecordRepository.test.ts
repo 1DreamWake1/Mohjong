@@ -52,10 +52,13 @@ describe("game recovery snapshots", () => {
       };
     };
     delete legacySnapshot.state.rules.actions;
+    delete legacySnapshot.state.rules.claimPriority;
     delete legacySnapshot.state.rules.winningPatterns;
     delete legacySnapshot.state.rules.scoring;
     delete legacySnapshot.state.rules.tileSet;
     delete legacySnapshot.state.rules.drawCondition;
+    delete legacySnapshot.state.rules.enabledFans;
+    delete legacySnapshot.state.rules.fanValues;
     legacySnapshot.state.rules.allowChi = false;
     legacySnapshot.state.rules.allowPeng = true;
     legacySnapshot.state.rules.allowGang = true;
@@ -67,7 +70,28 @@ describe("game recovery snapshots", () => {
     const rules = parseGameRecoverySnapshot(JSON.stringify(legacySnapshot))?.state.rules;
     expect(rules).toMatchObject({
       actions: { chi: false, gang: true, peng: true },
+      claimPriority: { chi: 1, gang: 2, hu: 3, peng: 2 },
       drawCondition: "wallEmpty",
+      enabledFans: {
+        chinitsu: true,
+        honitsu: true,
+        honroutou: true,
+        pinfu: true,
+        riichi: true,
+        sevenPairs: true,
+        tanyao: true,
+        toitoi: true
+      },
+      fanValues: {
+        chinitsu: 6,
+        honitsu: 3,
+        honroutou: 2,
+        pinfu: 1,
+        riichi: 1,
+        sevenPairs: 2,
+        tanyao: 1,
+        toitoi: 2
+      },
       scoring: { basePoints: 20, fanPointValue: 10, mode: "standard" },
       tileSet: "suited",
       winningPatterns: { sevenPairs: true }

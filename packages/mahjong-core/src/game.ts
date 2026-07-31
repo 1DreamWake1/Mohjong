@@ -2,6 +2,7 @@ import type { Action, MeldInfo, PlayerView, WinType } from "@mahjong/shared";
 
 import { canHu } from "./hand.js";
 import {
+  getClaimPriorityConfig,
   getRuleActions,
   shouldEndOnEmptyWall,
   standardRuleConfig,
@@ -232,7 +233,7 @@ export function createPlayerView(state: MahjongGameState, seatIndex: number): Pl
         isBot: otherPlayer.isBot,
         seatIndex: otherPlayer.seatIndex,
         username: otherPlayer.username
-    })),
+      })),
     phase: state.phase,
     publicMelds: state.players.flatMap((meldPlayer) => meldPlayer.publicMelds),
     roomId: "core-game",
@@ -251,7 +252,9 @@ export function createPlayerView(state: MahjongGameState, seatIndex: number): Pl
           fans: state.score?.fans.map((fan) => ({ name: fan.name, value: fan.value })) ?? [],
           totalPoints: state.score?.totalPoints ?? 0,
           ...(state.endReason === "hu" && state.winType ? { winType: state.winType } : {}),
-          ...(state.endReason === "hu" && state.winningTile ? { winningTile: state.winningTile } : {})
+          ...(state.endReason === "hu" && state.winningTile
+            ? { winningTile: state.winningTile }
+            : {})
         }
       : undefined;
 
@@ -326,7 +329,7 @@ function getClaimActions(state: MahjongGameState, seatIndex: number): Action[] {
     return [];
   }
 
-  return filterHighestPriorityClaimActions([
+  return filterHighestPriorityClaimActions(state, [
     { type: "pass" },
     ...getAvailableClaimActionsForSeat(state, seatIndex)
   ]);
@@ -590,7 +593,9 @@ function findBestRespondentSeatIndex(state: MahjongGameState): number | undefine
   for (const seatIndex of pendingDiscard.respondentSeatIndexes) {
     const priority = Math.max(
       0,
-      ...getAvailableClaimActionsForSeat(state, seatIndex).map(getClaimPriority)
+      ...getAvailableClaimActionsForSeat(state, seatIndex).map((action) =>
+        getClaimPriority(state, action)
+      )
     );
 
     if (priority > bestPriority) {
@@ -602,28 +607,24 @@ function findBestRespondentSeatIndex(state: MahjongGameState): number | undefine
   return bestSeatIndex;
 }
 
-function filterHighestPriorityClaimActions(actions: Action[]): Action[] {
-  const maxPriority = Math.max(0, ...actions.map(getClaimPriority));
+function filterHighestPriorityClaimActions(state: MahjongGameState, actions: Action[]): Action[] {
+  const maxPriority = Math.max(0, ...actions.map((action) => getClaimPriority(state, action)));
 
   return actions.filter(
-    (action) => action.type === "pass" || getClaimPriority(action) === maxPriority
+    (action) => action.type === "pass" || getClaimPriority(state, action) === maxPriority
   );
 }
 
-function getClaimPriority(action: Action): number {
-  if (action.type === "hu") {
-    return 3;
+function getClaimPriority(state: MahjongGameState, action: Action): number {
+  if (
+    action.type !== "hu" &&
+    action.type !== "peng" &&
+    action.type !== "gang" &&
+    action.type !== "chi"
+  ) {
+    return 0;
   }
-
-  if (action.type === "peng" || action.type === "gang") {
-    return 2;
-  }
-
-  if (action.type === "chi") {
-    return 1;
-  }
-
-  return 0;
+  return getClaimPriorityConfig(state.rules)[action.type];
 }
 
 function getChiActions(handTiles: readonly Tile[], discardedTile: Tile): Action[] {
