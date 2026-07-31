@@ -386,12 +386,18 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     return activeRoom;
   }
 
-  function getPlayerView(room: GameRoom, user?: AuthUser): PlayerView {
+  function getPlayerView(
+    room: GameRoom,
+    user?: AuthUser,
+    timing?: { turnDeadlineAt?: string }
+  ): PlayerView {
     return createRoomPlayerView({
       events: room.events,
       roomId: room.id,
       seatIndex: getHumanSeatIndex(room, user),
-      state: room.state
+      state: room.state,
+      ...(timing?.turnDeadlineAt ? { turnDeadlineAt: timing.turnDeadlineAt } : {}),
+      unlimitedHumanTurn: !room.lobbyRoomId
     });
   }
 

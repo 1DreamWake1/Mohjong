@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   getMeldTypeLabel,
   getHandTileCountLabel,
+  getRemainingTurnSeconds,
   getVisibleActions,
   shouldPromptForDiscardSelection,
   shouldRenderActionBar
@@ -18,6 +19,12 @@ describe("MahjongTable actions", () => {
   it("formats hand counts as an explicit tile quantity", () => {
     expect(getHandTileCountLabel(13)).toBe("13 张");
     expect(getHandTileCountLabel(0)).toBe("0 张");
+  });
+
+  it("calculates a non-negative turn countdown rounded up to seconds", () => {
+    expect(getRemainingTurnSeconds("2026-07-31T10:00:30.000Z", 1_785_492_000_000)).toBe(30);
+    expect(getRemainingTurnSeconds("2026-07-31T10:00:30.001Z", 1_785_492_000_000)).toBe(31);
+    expect(getRemainingTurnSeconds("2026-07-31T09:59:59.000Z", 1_785_492_000_000)).toBe(0);
   });
 
   it("renders meld type labels in Chinese", () => {

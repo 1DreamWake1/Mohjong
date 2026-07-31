@@ -42,6 +42,17 @@ export function getGameSocketAccessError(
 export const humanActionTimeoutMs = 30_000;
 export const playerDisconnectGraceMs = 20_000;
 
+export function shouldScheduleHumanActionTimeout(room: {
+  lobbyRoomId?: string;
+  state: { currentTurn: number; phase: string; players: { isBot: boolean }[] };
+}): boolean {
+  return (
+    room.state.phase === "playing" &&
+    Boolean(room.lobbyRoomId) &&
+    room.state.players[room.state.currentTurn]?.isBot === false
+  );
+}
+
 export function getDisconnectGraceKey(roomId: string, userId: number): string {
   return `${roomId}:${userId}`;
 }
@@ -89,6 +100,7 @@ export function getGameStartMode(hasActiveRoom: boolean): "create-quick-room" | 
 function emitRoomState(
   socket: GameSocket,
   gameRoomService: GameRoomService,
+  humanTurnDeadlinesByRoomId: Map<string, string>,
   roomId?: string
 ): void {
   const user = (socket.data as SocketData).user;
@@ -98,7 +110,10 @@ function emitRoomState(
     return;
   }
 
-  socket.emit("game:state", { view: gameRoomService.getPlayerView(room, user) });
+  const turnDeadlineAt = humanTurnDeadlinesByRoomId.get(room.id);
+  socket.emit("game:state", {
+    view: gameRoomService.getPlayerView(room, user, turnDeadlineAt ? { turnDeadlineAt } : undefined)
+  });
   if (room.state.phase === "ended") {
     socket.emit("game:ended", { reason: room.state.endReason ?? "ended" });
   }
@@ -113,11 +128,12 @@ function emitLatestRoomEvent(socket: GameSocket, room: { events: { text: string 
 
 function emitRoomStateToSockets(input: {
   gameRoomService: GameRoomService;
+  humanTurnDeadlinesByRoomId: Map<string, string>;
   roomId: string;
   sockets: Iterable<GameSocket>;
 }): void {
   for (const socket of input.sockets) {
-    emitRoomState(socket, input.gameRoomService, input.roomId);
+    emitRoomState(socket, input.gameRoomService, input.humanTurnDeadlinesByRoomId, input.roomId);
   }
 }
 
@@ -143,6 +159,7 @@ function scheduleBots(input: {
   activeSocketsByRoomId: Map<string, Set<GameSocket>>;
   gameLobbyService: GameLobbyService;
   gameRoomService: GameRoomService;
+  humanTurnDeadlinesByRoomId: Map<string, string>;
   roomId: string;
   scheduledBotRoomIds: Set<string>;
   scheduledHumanTimeoutsByRoomId: Map<string, TimeoutHandle>;
@@ -154,15 +171,16 @@ function scheduleBots(input: {
 
   const player = room.state.players[room.state.currentTurn];
   if (!player?.isBot) {
+    scheduleHumanTimeout(input);
     const latestSockets = input.activeSocketsByRoomId.get(input.roomId);
     if (latestSockets) {
       emitRoomStateToSockets({
         gameRoomService: input.gameRoomService,
+        humanTurnDeadlinesByRoomId: input.humanTurnDeadlinesByRoomId,
         roomId: input.roomId,
         sockets: latestSockets
       });
     }
-    scheduleHumanTimeout(input);
     return;
   }
 
@@ -184,6 +202,7 @@ function scheduleBots(input: {
       if (latestSockets) {
         emitRoomStateToSockets({
           gameRoomService: input.gameRoomService,
+          humanTurnDeadlinesByRoomId: input.humanTurnDeadlinesByRoomId,
           roomId: input.roomId,
           sockets: latestSockets
         });
@@ -196,6 +215,7 @@ function scheduleBots(input: {
       if (latestSockets) {
         emitRoomStateToSockets({
           gameRoomService: input.gameRoomService,
+          humanTurnDeadlinesByRoomId: input.humanTurnDeadlinesByRoomId,
           roomId: input.roomId,
           sockets: latestSockets
         });
@@ -209,6 +229,7 @@ function scheduleBots(input: {
       emitLatestRoomEventToSockets(latestRoom, latestSockets);
       emitRoomStateToSockets({
         gameRoomService: input.gameRoomService,
+        humanTurnDeadlinesByRoomId: input.humanTurnDeadlinesByRoomId,
         roomId: input.roomId,
         sockets: latestSockets
       });
@@ -221,6 +242,7 @@ function scheduleHumanTimeout(input: {
   activeSocketsByRoomId: Map<string, Set<GameSocket>>;
   gameLobbyService: GameLobbyService;
   gameRoomService: GameRoomService;
+  humanTurnDeadlinesByRoomId: Map<string, string>;
   roomId: string;
   scheduledBotRoomIds: Set<string>;
   scheduledHumanTimeoutsByRoomId: Map<string, TimeoutHandle>;
@@ -230,8 +252,8 @@ function scheduleHumanTimeout(input: {
     return;
   }
 
-  const player = room.state.players[room.state.currentTurn];
-  if (player?.isBot) {
+  if (!shouldScheduleHumanActionTimeout(room)) {
+    input.humanTurnDeadlinesByRoomId.delete(room.id);
     return;
   }
 
@@ -240,8 +262,13 @@ function scheduleHumanTimeout(input: {
   }
 
   const scheduledState = room.state;
+  input.humanTurnDeadlinesByRoomId.set(
+    room.id,
+    new Date(Date.now() + humanActionTimeoutMs).toISOString()
+  );
   const timeout = setTimeout(() => {
     input.scheduledHumanTimeoutsByRoomId.delete(input.roomId);
+    input.humanTurnDeadlinesByRoomId.delete(input.roomId);
     const latestRoom = input.gameRoomService.getRoom(input.roomId);
     if (!latestRoom || latestRoom.state !== scheduledState) {
       return;
@@ -260,6 +287,7 @@ function scheduleHumanTimeout(input: {
       emitLatestRoomEventToSockets(latestRoom, latestSockets);
       emitRoomStateToSockets({
         gameRoomService: input.gameRoomService,
+        humanTurnDeadlinesByRoomId: input.humanTurnDeadlinesByRoomId,
         roomId: input.roomId,
         sockets: latestSockets
       });
@@ -290,6 +318,7 @@ export function registerGameSocketServer(input: {
   const scheduledBotRoomIds = new Set<string>();
   const scheduledDisconnectsByRoomAndUser = new Map<string, TimeoutHandle>();
   const scheduledHumanTimeoutsByRoomId = new Map<string, TimeoutHandle>();
+  const humanTurnDeadlinesByRoomId = new Map<string, string>();
 
   gameLobbyService.subscribeRoomUpdates((room) => {
     io.to(`lobby:${room.roomId}`).emit("lobby:room", { room });
@@ -341,6 +370,7 @@ export function registerGameSocketServer(input: {
         activeSocketsByRoomId,
         gameLobbyService,
         gameRoomService,
+        humanTurnDeadlinesByRoomId,
         roomId,
         scheduledBotRoomIds,
         scheduledHumanTimeoutsByRoomId
@@ -405,6 +435,7 @@ export function registerGameSocketServer(input: {
               emitLatestRoomEventToSockets(result.room, latestSockets);
               emitRoomStateToSockets({
                 gameRoomService,
+                humanTurnDeadlinesByRoomId,
                 roomId: result.room.id,
                 sockets: latestSockets
               });
@@ -458,9 +489,9 @@ export function registerGameSocketServer(input: {
       }
 
       trackRoomSocket(room.id);
-      gameSocket.emit("game:state", { view: gameRoomService.getPlayerView(room, user) });
-      emitLatestRoomEvent(gameSocket, room);
       scheduleRoomBots(room.id);
+      emitRoomState(gameSocket, gameRoomService, humanTurnDeadlinesByRoomId, room.id);
+      emitLatestRoomEvent(gameSocket, room);
     });
 
     gameSocket.on("game:start", () => {
@@ -483,9 +514,9 @@ export function registerGameSocketServer(input: {
       }
 
       trackRoomSocket(room.id);
-      gameSocket.emit("game:state", { view: gameRoomService.getPlayerView(room, user) });
-      emitLatestRoomEvent(gameSocket, room);
       scheduleRoomBots(room.id);
+      emitRoomState(gameSocket, gameRoomService, humanTurnDeadlinesByRoomId, room.id);
+      emitLatestRoomEvent(gameSocket, room);
     });
 
     gameSocket.on("game:action", (payload) => {
@@ -503,7 +534,7 @@ export function registerGameSocketServer(input: {
 
       if (result.error) {
         gameSocket.emit("game:error", { message: result.error });
-        gameSocket.emit("game:state", { view: gameRoomService.getPlayerView(result.room, user) });
+        emitRoomState(gameSocket, gameRoomService, humanTurnDeadlinesByRoomId, result.room.id);
         return;
       }
       syncLobbyRoomEnd(gameLobbyService, result.room);
@@ -513,18 +544,20 @@ export function registerGameSocketServer(input: {
         clearTimeout(timeout);
         scheduledHumanTimeoutsByRoomId.delete(result.room.id);
       }
+      humanTurnDeadlinesByRoomId.delete(result.room.id);
 
       trackRoomSocket(result.room.id);
+      scheduleRoomBots(result.room.id);
       const roomSockets = activeSocketsByRoomId.get(result.room.id);
       if (roomSockets) {
         emitRoomStateToSockets({
           gameRoomService,
+          humanTurnDeadlinesByRoomId,
           roomId: result.room.id,
           sockets: roomSockets
         });
         emitLatestRoomEventToSockets(result.room, roomSockets);
       }
-      scheduleRoomBots(result.room.id);
     });
 
     gameSocket.on("game:leave", () => {
@@ -561,6 +594,7 @@ export function registerGameSocketServer(input: {
         emitLatestRoomEventToSockets(result.room, roomSockets);
         emitRoomStateToSockets({
           gameRoomService,
+          humanTurnDeadlinesByRoomId,
           roomId: result.room.id,
           sockets: roomSockets
         });
@@ -582,9 +616,9 @@ export function registerGameSocketServer(input: {
       }
 
       trackRoomSocket(room.id);
-      gameSocket.emit("game:state", { view: gameRoomService.getPlayerView(room, user) });
-      emitLatestRoomEvent(gameSocket, room);
       scheduleRoomBots(room.id);
+      emitRoomState(gameSocket, gameRoomService, humanTurnDeadlinesByRoomId, room.id);
+      emitLatestRoomEvent(gameSocket, room);
     });
   });
 

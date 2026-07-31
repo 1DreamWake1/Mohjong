@@ -38,6 +38,7 @@ describe("gameRoomService", () => {
       "玩家Bot2",
       "玩家Bot3"
     ]);
+    expect(view.turnTimer).toEqual({ mode: "unlimited" });
   });
 
   it("persists a complete recovery snapshot after each game event", async () => {
@@ -329,9 +330,17 @@ describe("gameRoomService", () => {
 
     expect(service.getRoomForUser(player, lobbyRoom.roomId)).toBe(room);
     expect(service.getRoomForUser(secondPlayer, lobbyRoom.roomId)).toBe(room);
-    expect(service.getPlayerView(room, player)).toMatchObject({
+    expect(
+      service.getPlayerView(room, player, {
+        turnDeadlineAt: "2026-06-11T10:00:30.000Z"
+      })
+    ).toMatchObject({
       roomId: room.id,
       seatIndex: 0,
+      turnTimer: {
+        deadlineAt: "2026-06-11T10:00:30.000Z",
+        mode: "countdown"
+      },
       username: player.username
     });
     expect(service.getPlayerView(room, secondPlayer)).toMatchObject({

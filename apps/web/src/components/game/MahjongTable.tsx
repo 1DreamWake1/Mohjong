@@ -1,4 +1,5 @@
 import type { Action, MeldType, PlayerView } from "@mahjong/shared";
+import { useEffect, useState } from "react";
 
 import styles from "./gameComponents.module.css";
 import { ActionBar } from "./ActionBar.js";
@@ -26,6 +27,52 @@ export function getMeldTypeLabel(type: MeldType): string {
 
 export function getHandTileCountLabel(count: number): string {
   return `${count} 张`;
+}
+
+export function getRemainingTurnSeconds(deadlineAt: string, nowMs = Date.now()): number {
+  return Math.max(0, Math.ceil((Date.parse(deadlineAt) - nowMs) / 1000));
+}
+
+function PlayerTurnTimer(props: {
+  active: boolean;
+  isBot: boolean;
+  timer: PlayerView["turnTimer"];
+}): JSX.Element {
+  const [nowMs, setNowMs] = useState(Date.now());
+
+  useEffect(() => {
+    if (!props.active || props.timer?.mode !== "countdown") {
+      return;
+    }
+
+    setNowMs(Date.now());
+    const interval = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 250);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [props.active, props.timer]);
+
+  let text = "等待";
+  if (props.active && props.isBot) {
+    text = "思考中";
+  } else if (props.active && props.timer?.mode === "unlimited") {
+    text = "不限时";
+  } else if (props.active && props.timer?.mode === "countdown") {
+    text = `${getRemainingTurnSeconds(props.timer.deadlineAt, nowMs)} 秒`;
+  }
+
+  return (
+    <span
+      aria-label={`操作时间 ${text}`}
+      className={props.active ? styles.turnTimerActive : styles.turnTimer}
+    >
+      <small>计时</small>
+      <span>{text}</span>
+    </span>
+  );
 }
 
 function HandTileCount(props: { count: number }): JSX.Element {
@@ -111,6 +158,11 @@ export function MahjongTable(props: MahjongTableProps): JSX.Element {
               <div className={styles.playerMeta}>
                 <span className={styles.seatBadge}>{seatNames[player.seatIndex]}</span>
                 <HandTileCount count={player.handTileCount} />
+                <PlayerTurnTimer
+                  active={player.seatIndex === props.view.currentTurn}
+                  isBot={player.isBot}
+                  timer={props.view.turnTimer}
+                />
               </div>
             </div>
             <div
@@ -163,6 +215,11 @@ export function MahjongTable(props: MahjongTableProps): JSX.Element {
           <div className={styles.playerMeta}>
             <span className={styles.seatBadge}>{seatNames[props.view.seatIndex]}位视角</span>
             <HandTileCount count={props.view.handTiles.length} />
+            <PlayerTurnTimer
+              active={props.view.seatIndex === props.view.currentTurn}
+              isBot={false}
+              timer={props.view.turnTimer}
+            />
           </div>
         </div>
         <HandTiles

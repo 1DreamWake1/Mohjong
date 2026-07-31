@@ -9,6 +9,7 @@ import {
   humanActionTimeoutMs,
   playerDisconnectGraceMs,
   scheduleDisconnectGrace,
+  shouldScheduleHumanActionTimeout,
   readSocketToken
 } from "./socketServer.js";
 
@@ -59,6 +60,23 @@ describe("socketServer", () => {
 
   it("uses a 30 second human action timeout", () => {
     expect(humanActionTimeoutMs).toBe(30_000);
+  });
+
+  it("only schedules human action timeouts for multiplayer rooms", () => {
+    const state = {
+      currentTurn: 0,
+      phase: "playing",
+      players: [{ isBot: false }, { isBot: true }]
+    };
+
+    expect(shouldScheduleHumanActionTimeout({ state })).toBe(false);
+    expect(shouldScheduleHumanActionTimeout({ lobbyRoomId: "room-1", state })).toBe(true);
+    expect(
+      shouldScheduleHumanActionTimeout({
+        lobbyRoomId: "room-1",
+        state: { ...state, currentTurn: 1 }
+      })
+    ).toBe(false);
   });
 
   it("uses a 20 second player disconnect grace period", () => {

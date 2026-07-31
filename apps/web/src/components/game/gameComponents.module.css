@@ -79,6 +79,40 @@
   padding: 3px 7px;
 }
 
+.turnTimer,
+.turnTimerActive {
+  align-items: center;
+  background: rgb(255 255 255 / 10%);
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: 6px;
+  color: #d7f3eb;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  gap: 4px;
+  height: 30px;
+  justify-content: center;
+  min-width: 64px;
+  padding: 3px 7px;
+}
+
+.turnTimerActive {
+  background: #facc15;
+  border-color: #fde68a;
+  color: #3f2f00;
+}
+
+.turnTimer small {
+  color: #acd9cd;
+  font-size: 0.625rem;
+}
+
+.turnTimerActive small {
+  color: #725800;
+  font-size: 0.625rem;
+}
+
 .handTileCount strong {
   font-size: 1rem;
   font-variant-numeric: tabular-nums;

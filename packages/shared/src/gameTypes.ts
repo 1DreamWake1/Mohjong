@@ -210,6 +210,8 @@ export type OtherPlayerView = {
   isBot: boolean;
 };
 
+export type TurnTimerInfo = { mode: "countdown"; deadlineAt: string } | { mode: "unlimited" };
+
 export type PlayerView = {
   roomId: string;
   seatIndex: number;
@@ -225,6 +227,7 @@ export type PlayerView = {
   phase: GamePhase;
   wallTileCount: number;
   eventMessages: GameEventMessage[];
+  turnTimer?: TurnTimerInfo;
   result?: GameResultInfo;
   winnerSeatIndex?: number;
 };

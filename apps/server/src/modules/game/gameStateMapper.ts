@@ -6,6 +6,8 @@ export function createRoomPlayerView(input: {
   roomId: string;
   seatIndex: number;
   state: MahjongGameState;
+  turnDeadlineAt?: string;
+  unlimitedHumanTurn?: boolean;
 }): PlayerView {
   const player = input.state.players[input.seatIndex];
   if (!player) {
@@ -35,6 +37,15 @@ export function createRoomPlayerView(input: {
     seatIndex: input.seatIndex,
     username: player.username,
     wallTileCount: input.state.wall.length,
+    ...(input.state.phase === "playing" &&
+    !input.state.players[input.state.currentTurn]?.isBot &&
+    input.unlimitedHumanTurn
+      ? { turnTimer: { mode: "unlimited" as const } }
+      : input.state.phase === "playing" &&
+          !input.state.players[input.state.currentTurn]?.isBot &&
+          input.turnDeadlineAt
+        ? { turnTimer: { deadlineAt: input.turnDeadlineAt, mode: "countdown" as const } }
+        : {}),
     ...(input.state.lastDiscardedTileId
       ? { lastDiscardedTileId: input.state.lastDiscardedTileId }
       : {}),
