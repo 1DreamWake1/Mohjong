@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "pnpm --filter mahjong-core... build",
     "dev": "tsx watch src/main.ts",
     "build": "tsc -b",
     "start": "node dist/main.js",

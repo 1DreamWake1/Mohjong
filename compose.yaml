@@ -1,0 +1,27 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    environment:
+      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:?Set AUTH_TOKEN_SECRET in .env}
+      DATABASE_URL: file:/app/data/mahjong.db
+      HOST: 0.0.0.0
+      NODE_ENV: production
+      PORT: 3000
+    restart: unless-stopped
+    volumes:
+      - mahjong-data:/app/data
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    depends_on:
+      - server
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    restart: unless-stopped
+
+volumes:
+  mahjong-data:

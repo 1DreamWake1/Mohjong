@@ -4,11 +4,31 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./authTypes": "./src/authTypes.ts",
-    "./gameTypes": "./src/gameTypes.ts",
-    "./socketEvents": "./src/socketEvents.ts",
-    "./userTypes": "./src/userTypes.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./authTypes": {
+      "types": "./src/authTypes.ts",
+      "development": "./src/authTypes.ts",
+      "default": "./dist/authTypes.js"
+    },
+    "./gameTypes": {
+      "types": "./src/gameTypes.ts",
+      "development": "./src/gameTypes.ts",
+      "default": "./dist/gameTypes.js"
+    },
+    "./socketEvents": {
+      "types": "./src/socketEvents.ts",
+      "development": "./src/socketEvents.ts",
+      "default": "./dist/socketEvents.js"
+    },
+    "./userTypes": {
+      "types": "./src/userTypes.ts",
+      "development": "./src/userTypes.ts",
+      "default": "./dist/userTypes.js"
+    }
   },
   "scripts": {
     "build": "tsc -b",

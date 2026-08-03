@@ -8,6 +8,6 @@
     "rootDir": "src",
     "types": ["node"]
   },
-  "references": [{ "path": "../../packages/shared" }],
+  "references": [{ "path": "../../packages/shared" }, { "path": "../../packages/mahjong-core" }],
   "include": ["src"]
 }

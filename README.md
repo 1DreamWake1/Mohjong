@@ -4,9 +4,7 @@
 
 ## 当前状态
 
-已完成项目初始化、麻将核心规则验证、账号管理闭环、登录和管理员页面、玩家大厅、前端路由保护、登录态恢复、麻将游戏前端牌桌，以及基于 Socket.IO 的快速对局闭环。
-
-当前开发重点：阶段 5 已完成，下一步进入地方规则、长期运行能力和体验细节增强。
+阶段 0-17 已完成，覆盖麻将核心规则、账号管理、真实多人房间、断线恢复、历史回放、规则配置和管理员对局后台。阶段 18A 容器化和统一入口已完成，当前进入健康检查和进程生命周期开发。
 
 ## 技术栈
 
@@ -73,6 +71,24 @@ pnpm dev
 ```
 
 部署或共享环境中应通过 `.env` 修改管理员密码和 `AUTH_TOKEN_SECRET`。
+
+## Docker Compose 启动
+
+准备部署配置并将 `AUTH_TOKEN_SECRET` 修改为足够长的随机值：
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+默认统一入口为 `http://localhost:8080/`，Web、HTTP API 和 Socket.IO 均使用该地址。SQLite 数据保存在 `mahjong-data` 命名卷中，Server 启动时会先执行待应用的 Prisma 迁移。
+
+查看状态和日志：
+
+```bash
+docker compose ps
+docker compose logs -f
+```
 
 ## 常用命令
 
