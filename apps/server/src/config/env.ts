@@ -5,6 +5,7 @@ export type ServerEnv = {
   authTokenSecret: string;
   host: string;
   port: number;
+  shutdownTimeoutMs: number;
 };
 
 let envLoaded = false;
@@ -49,6 +50,7 @@ export function readEnv(): ServerEnv {
   return {
     authTokenSecret: process.env.AUTH_TOKEN_SECRET ?? "local-development-secret",
     host: process.env.HOST ?? "0.0.0.0",
-    port: Number(process.env.PORT ?? 3000)
+    port: Number(process.env.PORT ?? 3000),
+    shutdownTimeoutMs: Number(process.env.SHUTDOWN_TIMEOUT_MS ?? 10_000)
   };
 }

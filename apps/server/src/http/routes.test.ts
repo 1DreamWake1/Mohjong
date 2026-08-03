@@ -1,5 +1,5 @@
 import type { UserSummary } from "@mahjong/shared";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createApp } from "../app.js";
 import { hashPassword, verifyPassword } from "../modules/auth/password.js";
@@ -85,7 +85,7 @@ class MemoryUserRepository implements UserRepository {
   }
 }
 
-async function createTestApp() {
+async function createTestApp(options: { databaseReadinessCheck?: () => Promise<void> } = {}) {
   const userRepository = new MemoryUserRepository();
   const gameRecordRepository = createMemoryGameRecordRepository();
   await userRepository.create({
@@ -110,6 +110,8 @@ async function createTestApp() {
   const persistenceDiagnosticRegistry = createPersistenceDiagnosticRegistry();
   const app = await createApp({
     authTokenSecret: "test-secret",
+    closeDatabase: async () => undefined,
+    databaseReadinessCheck: options.databaseReadinessCheck ?? (async () => undefined),
     gameLobbyService,
     gameRecordRepository,
     gameRoomService,
@@ -141,6 +143,59 @@ describe("routes", () => {
     expect(response.json()).toEqual({ status: "ok" });
 
     await app.close();
+  });
+
+  it("reports readiness only while restoration and database access are healthy", async () => {
+    const { app } = await createTestApp();
+    const readyResponse = await app.inject({ method: "GET", url: "/ready" });
+
+    expect(readyResponse.statusCode).toBe(200);
+    expect(readyResponse.json()).toEqual({ status: "ready" });
+
+    app.lifecycle.beginShutdown();
+    const stoppingResponse = await app.inject({ method: "GET", url: "/ready" });
+    expect(stoppingResponse.statusCode).toBe(503);
+    expect(stoppingResponse.json()).toEqual({ reason: "stopping", status: "not_ready" });
+
+    await app.close();
+  });
+
+  it("reports a database readiness failure without affecting liveness", async () => {
+    const { app } = await createTestApp({
+      databaseReadinessCheck: async () => {
+        throw new Error("database unavailable");
+      }
+    });
+
+    const readyResponse = await app.inject({ method: "GET", url: "/ready" });
+    const healthResponse = await app.inject({ method: "GET", url: "/health" });
+
+    expect(readyResponse.statusCode).toBe(503);
+    expect(readyResponse.json()).toEqual({ reason: "database", status: "not_ready" });
+    expect(healthResponse.statusCode).toBe(200);
+
+    await app.close();
+  });
+
+  it("waits for queued persistence writes before closing", async () => {
+    const { app, gameRoomService } = await createTestApp();
+    let releaseWrites: (() => void) | undefined;
+    const pendingWrites = new Promise<void>((resolve) => {
+      releaseWrites = resolve;
+    });
+    vi.spyOn(gameRoomService, "waitForPersistentWrites").mockReturnValue(pendingWrites);
+    let closeCompleted = false;
+
+    const closePromise = app.close().then(() => {
+      closeCompleted = true;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(gameRoomService.waitForPersistentWrites).toHaveBeenCalledOnce();
+    expect(closeCompleted).toBe(false);
+    releaseWrites?.();
+    await closePromise;
+    expect(closeCompleted).toBe(true);
   });
 
   it("logs in and returns the current user", async () => {

@@ -161,9 +161,14 @@ function scheduleBots(input: {
   gameRoomService: GameRoomService;
   humanTurnDeadlinesByRoomId: Map<string, string>;
   roomId: string;
-  scheduledBotRoomIds: Set<string>;
+  isStopping: () => boolean;
+  scheduledBotTimeoutsByRoomId: Map<string, TimeoutHandle>;
   scheduledHumanTimeoutsByRoomId: Map<string, TimeoutHandle>;
 }): void {
+  if (input.isStopping()) {
+    return;
+  }
+
   const room = input.gameRoomService.getRoom(input.roomId);
   if (!room || room.state.phase !== "playing") {
     return;
@@ -184,14 +189,16 @@ function scheduleBots(input: {
     return;
   }
 
-  if (input.scheduledBotRoomIds.has(room.id)) {
+  if (input.scheduledBotTimeoutsByRoomId.has(room.id)) {
     return;
   }
 
-  input.scheduledBotRoomIds.add(room.id);
   const delayMs = 500 + Math.floor(Math.random() * 1500);
-  setTimeout(() => {
-    input.scheduledBotRoomIds.delete(input.roomId);
+  const timeout = setTimeout(() => {
+    input.scheduledBotTimeoutsByRoomId.delete(input.roomId);
+    if (input.isStopping()) {
+      return;
+    }
     const latestRoom = input.gameRoomService.getRoom(input.roomId);
     if (!latestRoom) {
       return;
@@ -236,6 +243,7 @@ function scheduleBots(input: {
     }
     scheduleBots(input);
   }, delayMs);
+  input.scheduledBotTimeoutsByRoomId.set(room.id, timeout);
 }
 
 function scheduleHumanTimeout(input: {
@@ -244,9 +252,14 @@ function scheduleHumanTimeout(input: {
   gameRoomService: GameRoomService;
   humanTurnDeadlinesByRoomId: Map<string, string>;
   roomId: string;
-  scheduledBotRoomIds: Set<string>;
+  isStopping: () => boolean;
+  scheduledBotTimeoutsByRoomId: Map<string, TimeoutHandle>;
   scheduledHumanTimeoutsByRoomId: Map<string, TimeoutHandle>;
 }): void {
+  if (input.isStopping()) {
+    return;
+  }
+
   const room = input.gameRoomService.getRoom(input.roomId);
   if (!room || room.state.phase !== "playing") {
     return;
@@ -269,6 +282,9 @@ function scheduleHumanTimeout(input: {
   const timeout = setTimeout(() => {
     input.scheduledHumanTimeoutsByRoomId.delete(input.roomId);
     input.humanTurnDeadlinesByRoomId.delete(input.roomId);
+    if (input.isStopping()) {
+      return;
+    }
     const latestRoom = input.gameRoomService.getRoom(input.roomId);
     if (!latestRoom || latestRoom.state !== scheduledState) {
       return;
@@ -304,7 +320,10 @@ export function registerGameSocketServer(input: {
   gameLobbyService?: GameLobbyService;
   gameRoomService?: GameRoomService;
   playerConnectionRegistry?: PlayerConnectionRegistry;
-}): Server<ClientToServerEvents, ServerToClientEvents> {
+}): {
+  io: Server<ClientToServerEvents, ServerToClientEvents>;
+  stop: () => Promise<void>;
+} {
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(input.app.server, {
     cors: {
       origin: true
@@ -315,16 +334,21 @@ export function registerGameSocketServer(input: {
   const playerConnectionRegistry =
     input.playerConnectionRegistry ?? createPlayerConnectionRegistry();
   const activeSocketsByRoomId = new Map<string, Set<GameSocket>>();
-  const scheduledBotRoomIds = new Set<string>();
+  const scheduledBotTimeoutsByRoomId = new Map<string, TimeoutHandle>();
   const scheduledDisconnectsByRoomAndUser = new Map<string, TimeoutHandle>();
   const scheduledHumanTimeoutsByRoomId = new Map<string, TimeoutHandle>();
   const humanTurnDeadlinesByRoomId = new Map<string, string>();
+  let stopping = false;
 
-  gameLobbyService.subscribeRoomUpdates((room) => {
+  const unsubscribeRoomUpdates = gameLobbyService.subscribeRoomUpdates((room) => {
     io.to(`lobby:${room.roomId}`).emit("lobby:room", { room });
   });
 
   io.use(async (socket, next) => {
+    if (stopping) {
+      next(new Error("Server is shutting down"));
+      return;
+    }
     const token = readSocketToken(socket.handshake.auth.token);
     if (!token) {
       next(new Error("Unauthorized"));
@@ -371,8 +395,9 @@ export function registerGameSocketServer(input: {
         gameLobbyService,
         gameRoomService,
         humanTurnDeadlinesByRoomId,
+        isStopping: () => stopping,
         roomId,
-        scheduledBotRoomIds,
+        scheduledBotTimeoutsByRoomId,
         scheduledHumanTimeoutsByRoomId
       });
     }
@@ -392,6 +417,9 @@ export function registerGameSocketServer(input: {
 
     gameSocket.on("disconnect", () => {
       playerConnectionRegistry.disconnect(user.id);
+      if (stopping) {
+        return;
+      }
       for (const roomId of socketRoomIds) {
         const roomSockets = activeSocketsByRoomId.get(roomId);
         if (roomSockets) {
@@ -622,5 +650,31 @@ export function registerGameSocketServer(input: {
     });
   });
 
-  return io;
+  async function stop(): Promise<void> {
+    if (stopping) {
+      return;
+    }
+    stopping = true;
+    unsubscribeRoomUpdates();
+
+    for (const timeout of scheduledBotTimeoutsByRoomId.values()) {
+      clearTimeout(timeout);
+    }
+    for (const timeout of scheduledHumanTimeoutsByRoomId.values()) {
+      clearTimeout(timeout);
+    }
+    for (const timeout of scheduledDisconnectsByRoomAndUser.values()) {
+      clearTimeout(timeout);
+    }
+    scheduledBotTimeoutsByRoomId.clear();
+    scheduledHumanTimeoutsByRoomId.clear();
+    scheduledDisconnectsByRoomAndUser.clear();
+    humanTurnDeadlinesByRoomId.clear();
+
+    await new Promise<void>((resolve) => {
+      io.close(() => resolve());
+    });
+  }
+
+  return { io, stop };
 }

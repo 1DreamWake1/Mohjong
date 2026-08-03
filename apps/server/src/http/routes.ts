@@ -22,6 +22,7 @@ import type {
 } from "@mahjong/shared";
 
 import type { AuthService } from "../modules/auth/authService.js";
+import type { ServerLifecycle } from "../lifecycle/serverLifecycle.js";
 import type { GameRecordRepository } from "../modules/game/gameRecordRepository.js";
 import type { GameLobbyService } from "../modules/game/gameLobbyService.js";
 import type { GameRoomService } from "../modules/game/gameRoomService.js";
@@ -31,12 +32,14 @@ import type { createUserService } from "../modules/users/userService.js";
 
 type RouteServices = {
   authService: AuthService;
+  databaseReadinessCheck: () => Promise<void>;
   gameLobbyService: GameLobbyService;
   gameRecordRepository: GameRecordRepository;
   gameRoomService: GameRoomService;
   playerConnectionRegistry: PlayerConnectionRegistry;
   persistenceDiagnosticRegistry: PersistenceDiagnosticRegistry;
   userService: ReturnType<typeof createUserService>;
+  lifecycle: ServerLifecycle;
 };
 
 type AuthenticatedUser =
@@ -165,6 +168,21 @@ export async function registerRoutes(app: FastifyInstance, services: RouteServic
   app.get("/health", async () => ({
     status: "ok"
   }));
+
+  app.get("/ready", async (_request, reply) => {
+    const lifecycleState = services.lifecycle.getReadinessState();
+    if (lifecycleState !== "ready") {
+      return reply.code(503).send({ reason: lifecycleState, status: "not_ready" });
+    }
+
+    try {
+      await services.databaseReadinessCheck();
+      return { status: "ready" };
+    } catch (error) {
+      app.log.error({ err: error }, "Database readiness check failed");
+      return reply.code(503).send({ reason: "database", status: "not_ready" });
+    }
+  });
 
   app.post("/auth/login", async (request, reply) => {
     const input = parseLoginRequest(request.body);

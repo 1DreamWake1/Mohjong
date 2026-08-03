@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-阶段 0-17 已完成，覆盖麻将核心规则、账号管理、真实多人房间、断线恢复、历史回放、规则配置和管理员对局后台。阶段 18A 容器化和统一入口已完成，当前进入健康检查和进程生命周期开发。
+阶段 0-17 已完成，覆盖麻将核心规则、账号管理、真实多人房间、断线恢复、历史回放、规则配置和管理员对局后台。阶段 18A 容器化与统一入口、18B 健康检查与进程生命周期均已完成，当前进入 SQLite 备份、恢复和升级回滚开发。
 
 ## 技术栈
 
@@ -61,6 +61,7 @@ pnpm dev
 前端：http://localhost:5173/
 后端：http://localhost:3000/
 健康检查：http://localhost:3000/health
+就绪检查：http://localhost:3000/ready
 ```
 
 默认本地管理员账号：
@@ -81,7 +82,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-默认统一入口为 `http://localhost:8080/`，Web、HTTP API 和 Socket.IO 均使用该地址。SQLite 数据保存在 `mahjong-data` 命名卷中，Server 启动时会先执行待应用的 Prisma 迁移。
+默认统一入口为 `http://localhost:8080/`，Web、HTTP API 和 Socket.IO 均使用该地址。SQLite 数据保存在 `mahjong-data` 命名卷中，Server 启动时会先执行待应用的 Prisma 迁移。Compose 使用真实 HTTP 探针判断服务状态，Server 完成牌局恢复且数据库可访问后才会就绪；收到 `SIGTERM` 或 `SIGINT` 时会停止新任务、等待持久化队列并释放数据库连接。
 
 查看状态和日志：
 
