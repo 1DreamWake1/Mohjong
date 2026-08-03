@@ -1,342 +1,126 @@
-# 在线麻将架构设计文档
+# 在线麻将架构设计
 
-## 1. 架构目标
+## 1. 架构结论
 
-本系统初期目标是支持小规模在线麻将测试，最多 4 个在线人类玩家，并支持电脑玩家补位。架构设计需要保证当前实现简单可落地，同时为后续扩展地方麻将规则、Linux 部署、数据库升级和公网访问保留空间。
-
-核心目标：
-
-- 本地开发简单。
-- Ubuntu 虚拟机可部署测试。
-- 规则算法可独立验证。
-- 前端和服务端职责清晰。
-- 玩家视角数据不泄漏。
-- 后续可扩展四川麻将、禁用“吃”等地方规则。
-
-## 2. 总体架构
-
-初期采用单体应用架构：
+系统采用 TypeScript monorepo 和单体部署：React Web 通过 HTTP 与 Socket.IO 连接 Fastify Server，Server 调用独立麻将核心包并使用 Prisma 写入 SQLite。生产式运行由 Docker Compose 编排，Nginx 提供统一入口。
 
 ```text
-浏览器客户端
+Browser
   |
-  | HTTP API + Socket.IO
-  |
-Node.js 服务端
-  |
-  | 调用
-  |
-麻将核心算法包 mahjong-core
-  |
-  | 读写
-  |
-SQLite 数据库
+  | HTTP / Socket.IO
+  v
+Nginx (web:8080)
+  |-- static assets
+  `-- API + /socket.io -> Fastify server:3000
+                           |-- room and lifecycle services
+                           |-- mahjong-core
+                           `-- Prisma -> SQLite volume
 ```
 
-本阶段不采用微服务、消息队列、Redis、Kubernetes 或复杂网关。
+当前只支持一个 Server 实例。房间、连接、Bot 和计时器均包含进程内状态，不能通过复制 Server 容器水平扩容。
 
-## 3. 模块划分
+## 2. 技术栈
+
+| 层       | 技术                              |
+| -------- | --------------------------------- |
+| Web      | React、Vite、Zustand、CSS Modules |
+| Server   | Node.js、Fastify、Socket.IO、pino |
+| 核心规则 | 独立 TypeScript 包 `mahjong-core` |
+| 共享契约 | TypeScript 包 `shared`            |
+| 数据     | SQLite、Prisma                    |
+| 测试     | Vitest                            |
+| 部署     | Docker Compose、Nginx             |
+
+## 3. 仓库结构
 
 ```text
-Mohjong/
-  apps/
-    web/                 # 前端浏览器应用
-    server/              # 服务端应用
-  packages/
-    mahjong-core/        # 麻将规则与电脑玩家算法
-    shared/              # 前后端共享类型
-  prisma/
-    schema.prisma        # 数据库模型
-  Documents/
+apps/web/                 React 页面、状态、HTTP 和 Socket 客户端
+apps/server/              HTTP、Socket、账号、房间、恢复和持久化
+packages/mahjong-core/    牌、规则、reducer、胡牌、计分和 Bot
+packages/shared/          前后端共享 DTO 与事件类型
+prisma/                   schema 和迁移
+Documents/                当前有效文档
 ```
 
-## 4. 前端架构
-
-前端负责：
-
-- 登录页面展示。
-- 管理员账号管理页面展示。
-- 麻将桌面展示。
-- 当前玩家手牌展示。
-- 操作按钮展示。
-- 向服务端提交玩家操作。
-- 接收服务端推送的牌局状态。
-
-前端不负责：
-
-- 最终判断动作是否合法。
-- 判断是否胡牌。
-- 计算最终结算。
-- 保存完整牌局真实状态。
-- 获取其他真实玩家手牌。
-
-前端主要页面：
-
-- 登录页。
-- 管理员玩家账号管理页。
-- 玩家游戏入口页。
-- 麻将游戏页。
-
-前端麻将页面主要组件：
-
-- 牌桌组件。
-- 当前玩家手牌组件。
-- 其他玩家区域组件。
-- 弃牌区组件。
-- 操作按钮组件。
-- 对局提示组件。
-
-## 5. 服务端架构
-
-服务端负责：
-
-- 用户登录认证。
-- 管理员账号管理。
-- 玩家账号数据库读写。
-- 当前游戏实例管理。
-- 接收玩家操作。
-- 调用麻将核心算法校验操作。
-- 调度电脑玩家动作。
-- 生成每个玩家对应的视角状态。
-- 通过 Socket.IO 推送状态。
-
-服务端主要模块：
+依赖方向必须保持：
 
 ```text
-auth       # 登录、鉴权、密码哈希
-users      # 玩家账号管理
-game       # 游戏实例、座位、状态同步
-bots       # 电脑玩家调度
-socket     # 实时通信事件
-db         # 数据库访问
+web -> shared
+server -> shared + mahjong-core
+mahjong-core -> 不依赖 Web、Server、Prisma 或 Socket.IO
 ```
 
-## 6. 麻将核心算法架构
+## 4. 服务端边界
 
-麻将核心算法独立为 `packages/mahjong-core`。
+### HTTP
 
-该模块负责：
+- 账号登录和当前用户。
+- 玩家房间大厅与历史记录。
+- 管理员账号、对局和运行诊断。
+- `/health` 只判断进程存活。
+- `/ready` 判断恢复初始化完成且数据库可访问。
 
-- 牌定义。
-- 洗牌。
-- 发牌。
-- 摸牌。
-- 打牌。
-- 吃、碰、杠、胡、过。
-- 回合推进。
-- 胜负判断。
-- 基础结算。
-- 电脑玩家基础策略。
+### Socket.IO
 
-该模块不依赖：
+- 鉴权、加入房间和连接状态维护。
+- 玩家动作提交与服务端合法性校验。
+- 按玩家生成脱敏视角并广播。
+- 断线宽限、Bot 接管和倒计时调度。
 
-- React。
-- Fastify。
-- Socket.IO。
-- Prisma。
-- SQLite。
+### 房间与恢复
 
-推荐设计方式：
+- 内存房间是实时对局的工作状态。
+- 每次关键事件串行写入对局事件和恢复快照。
+- 启动时恢复未结束房间，完成后才进入 ready。
+- 定时清理过期等待房间和已结束房间，不按时间清理进行中牌局。
 
-```text
-输入：当前牌局状态 + 玩家动作 + 规则配置
-输出：新牌局状态 + 产生的游戏事件
-```
+## 5. 核心规则边界
 
-这样可以在第一阶段通过单元测试和命令行模拟独立验证算法。
+`mahjong-core` 负责牌墙、发牌、摸打、合法动作、弃牌响应、胡牌、番型、计分和 Bot 决策。它通过显式类型接收状态与规则配置，不访问数据库、网络或系统时钟。
 
-## 7. 规则扩展架构
+规则配置分为稳定预设和版本号。历史记录及恢复快照保存规则标识与版本，旧数据通过兼容逻辑补齐默认配置。
 
-为支持后续地方规则，规则不应写死。
+## 6. 玩家视角与安全
 
-建议定义规则配置：
+服务端内部状态不能直接发送给客户端。视角映射遵循以下规则：
 
-```text
-RuleConfig
-  name
-  allowChi
-  allowPeng
-  allowGang
-  useWinds
-  useDragons
-  scoringMode
-```
+- 当前玩家获得自己的完整手牌和合法动作。
+- 其他玩家只暴露手牌数量、公开副露、弃牌和连接状态。
+- Bot 决策不得借用其他玩家隐藏手牌。
+- 历史事件保存面向参与玩家的脱敏快照。
+- HTTP、Socket.IO 和历史查询分别执行身份与资源权限校验。
 
-标准麻将：
+## 7. 数据模型
 
-- 允许吃。
-- 允许碰。
-- 允许杠。
-- 使用风牌。
-- 使用箭牌。
-- 使用标准计分。
+主要持久化实体：
 
-禁用“吃”：
+- `User`：账号、角色和密码哈希。
+- `GameRecord`：房间轮次、参与者、规则、状态和结算。
+- `GameEvent`：有序事件、事件文本和脱敏快照。
+- `ActiveGameSnapshot`：进行中房间的完整恢复状态。
 
-- 在标准规则基础上设置 `allowChi = false`。
+SQLite 文件必须位于持久化目录。迁移通过 Prisma migration 管理，禁止手工修改数据库或生成文件。
 
-四川麻将：
+## 8. 生命周期
 
-- 后续增加独立规则配置。
-- 后续增加独立胡牌限制和计分模块。
+启动顺序：
 
-## 8. 数据架构
+1. Docker entrypoint 执行 `prisma migrate deploy`。
+2. Server 创建服务并恢复进行中房间。
+3. 数据库检查成功后 `/ready` 返回 200。
+4. Compose 判定 Server healthy 后启动 Web。
 
-初期使用 SQLite。
+停机顺序：
 
-第一阶段账号相关至少需要：
+1. 收到 `SIGTERM` 或 `SIGINT` 后进入 stopping。
+2. 停止新 Bot 动作、托管任务和房间清理任务。
+3. 关闭 Socket.IO 和 HTTP。
+4. 等待已排队持久化写入完成。
+5. 断开 Prisma；超过最大等待时间则记录错误并非零退出。
 
-```text
-User
-  id
-  username
-  passwordHash
-  role
-  createdAt
-  updatedAt
-```
+## 9. 扩展约束
 
-后续接入完整游戏后可增加：
-
-```text
-GameRecord
-  id
-  startedAt
-  endedAt
-  status
-  resultJson
-
-GameEvent
-  id
-  gameId
-  sequence
-  eventType
-  payloadJson
-  createdAt
-```
-
-当前牌局运行状态初期可以保存在服务端内存中。需要调试和回放时，再通过 `GameEvent` 记录关键事件。
-
-## 9. 实时通信架构
-
-HTTP API 用于：
-
-- 登录。
-- 登出。
-- 获取当前用户。
-- 管理员创建玩家。
-- 管理员删除玩家。
-- 获取玩家列表。
-
-Socket.IO 用于：
-
-- 进入游戏。
-- 开始游戏。
-- 提交玩家动作。
-- 同步牌局状态。
-- 推送错误提示。
-- 推送游戏结束。
-
-事件初稿：
-
-```text
-客户端发送：
-  game:join
-  game:start
-  game:action
-  game:sync
-
-服务端发送：
-  game:state
-  game:event
-  game:error
-  game:ended
-```
-
-### 9.1 断线重连
-
-服务端维护 `socketId → { userId, seatIndex, gameId }` 映射。玩家断线后保留座位和牌局状态。轮到断线玩家操作时等待超时（30s），超时后电脑玩家托管。客户端重连后通过 `game:sync`（携带 gameId）恢复当前视角。托管期间产生的牌局变更通过 `game:state` 同步。
-
-## 10. 玩家视角隔离
-
-服务端必须按玩家生成视角状态。
-
-玩家 A 可以看到：
-
-- A 的完整手牌。
-- 其他玩家手牌数量。
-- 所有公开弃牌。
-- 所有公开吃、碰、杠组合。
-- 当前轮到谁操作。
-- A 当前可执行动作。
-
-玩家 A 不能看到：
-
-- 其他真实玩家的完整手牌。
-- 其他玩家未公开的决策信息。
-
-前端不能接收完整牌局状态后自行过滤。过滤必须在服务端完成。
-
-## 11. 本地开发架构
-
-```text
-开发电脑
-  |
-  | pnpm dev
-  |
-  |-- web     http://localhost:5173
-  |-- server  http://localhost:3000
-  |-- db      ./data/dev.db
-```
-
-前端开发服务器可以代理 API 和 Socket.IO 请求到后端。
-
-## 12. Ubuntu 虚拟机测试架构
-
-第二阶段只验证基础服务器：
-
-```text
-宿主机浏览器
-  |
-  | http://Ubuntu虚拟机IP:3000
-  |
-Ubuntu 虚拟机 Node.js 服务
-```
-
-后续业务合并后：
-
-```text
-宿主机或手机浏览器
-  |
-  | http://Ubuntu虚拟机IP:3000
-  |
-Ubuntu 虚拟机
-  |
-  | Node.js + Fastify + Socket.IO
-  |
-SQLite 数据库文件
-```
-
-## 13. 后续扩展架构
-
-当本地测试稳定后，可以逐步扩展：
-
-- Docker Compose 作为主要部署方式，统一 web、server、SQLite 数据卷和可选反向代理。
-- SQLite 继续通过 Docker volume 或宿主机目录持久化；长期运行压力增加后再迁移到 PostgreSQL。
-- 按公网访问需要在 Compose 中增加 Nginx 或 Caddy。
-- 增加 HTTPS。
-- 增加域名。
-- 增加对局记录和回放。
-- 增加更多地方规则。
-- 增加简单监控和日志。
-
-## 14. 架构约束
-
-关键约束：
-
-- 规则算法必须独立。
-- 服务端必须裁决所有游戏动作。
-- 前端不能保存或推导完整真实牌局。
-- 玩家账号只能由管理员创建。
-- 初期不做高并发架构。
-- 初期不做公网正式部署架构。
+- 新规则通过规则配置和独立规则模块扩展，不在 UI 或 Socket handler 中写规则分支。
+- 新共享字段先定义在 `packages/shared`，服务端映射后再由前端使用。
+- SQLite 适合当前单实例；持续高写入、多实例或更强在线备份要求出现时迁移 PostgreSQL。
+- 多实例需要外置房间状态、Redis Adapter、分布式锁和跨节点计时调度，不属于当前架构。

@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-阶段 0-17 已完成，覆盖麻将核心规则、账号管理、真实多人房间、断线恢复、历史回放、规则配置和管理员对局后台。阶段 18A 容器化与统一入口、18B 健康检查与进程生命周期均已完成，当前进入 SQLite 备份、恢复和升级回滚开发。
+阶段 0-17、18A 容器化与统一入口、18B 健康检查与进程生命周期已完成。当前开发阶段 18C：SQLite 备份、恢复和升级回滚。
 
 ## 技术栈
 
@@ -84,6 +84,8 @@ docker compose up -d --build
 
 默认统一入口为 `http://localhost:8080/`，Web、HTTP API 和 Socket.IO 均使用该地址。SQLite 数据保存在 `mahjong-data` 命名卷中，Server 启动时会先执行待应用的 Prisma 迁移。Compose 使用真实 HTTP 探针判断服务状态，Server 完成牌局恢复且数据库可访问后才会就绪；收到 `SIGTERM` 或 `SIGINT` 时会停止新任务、等待持久化队列并释放数据库连接。
 
+完整的配置、管理员初始化、升级、数据卷和故障排查说明见 [Docker Compose 部署手册](./Documents/deployment.md)。
+
 查看状态和日志：
 
 ```bash
@@ -111,7 +113,6 @@ pnpm -F web build
 
 - [需求文档](./Documents/requirements.md)
 - [架构设计](./Documents/architecture-design.md)
-- [技术架构](./Documents/technical-architecture.md)
 - [开发计划](./Documents/development-plan.md)
-- [环境依赖](./Documents/environment-setup.md)
-- [第二阶段运行手册](./Documents/phase-2-runbook.md)
+- [环境准备](./Documents/environment-setup.md)
+- [部署手册](./Documents/deployment.md)
