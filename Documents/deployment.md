@@ -344,7 +344,47 @@ GitHub Actions 工作流位于 `.github/workflows/ci.yml`，在 push 到 `main` 
 
 CI 失败时可在 Actions 页面查看日志；e2e 失败会附加 `test-results/` 报告，smoke 失败会输出 Server/Web 容器日志。
 
-## 11. 公网部署注意事项
+## 11. Render Free 演示版
+
+Render 免费版使用单个 Docker Web Service。仓库根目录的 `render.yaml` 已声明服务配置，`Dockerfile.render` 会同时构建 React 前端和 Fastify 服务端，因此浏览器、HTTP API 与 Socket.IO 使用同一个 `onrender.com` 地址。
+
+### 从 GitHub 创建服务
+
+1. 将仓库推送到 GitHub，并确认 `render.yaml`、`Dockerfile.render` 已提交。
+2. 在 Render 控制台选择 **New > Blueprint**，连接 GitHub 仓库并选择默认分支。
+3. 确认 Blueprint 创建 `online-mahjong-demo` Web Service，点击部署并等待 `/ready` 变为 healthy。
+4. Render 会分配类似 `https://online-mahjong-demo.onrender.com` 的地址；实际地址以控制台显示为准。
+
+也可以手动创建 **Web Service**，运行时选择 Docker，Dockerfile 填 `./Dockerfile.render`，健康检查路径填 `/ready`，计划选择 `Free`。
+
+### 演示账号
+
+服务启动时会自动执行 migration，并由 `DEMO_SEED=1` 创建或更新以下账号：
+
+| 用户名  | 密码                   |
+| ------- | ---------------------- |
+| player1 | `mahjong-demo-player1` |
+| player2 | `mahjong-demo-player2` |
+| player3 | `mahjong-demo-player3` |
+| player4 | `mahjong-demo-player4` |
+
+这些密码写在演示 Blueprint 中，只能用于公开演示，不要在真实环境复用。若改为手动创建服务，请在 Environment 中设置四个 `DEMO_PLAYER*_PASSWORD`，每个至少 12 个字符，并保留 `DEMO_SEED=1`。
+
+### 免费版限制
+
+- SQLite 文件写入 `/tmp/mahjong-demo.db`，没有持久磁盘；重启、重新部署、迁移主机或休眠唤醒后，账号以外的运行数据可能丢失。
+- Render Free 服务会在一段时间无请求后休眠，首次访问需要等待冷启动。
+- 不要在此服务中保存真实用户、正式管理员账号或重要对局记录；需要持久化时应迁移到 Render PostgreSQL/磁盘或其他托管数据库，并关闭演示 seed。
+- `AUTH_TOKEN_SECRET` 由 Blueprint 自动生成；不要把它复制到公开仓库。
+
+部署后可用以下命令验证：
+
+```bash
+curl --fail https://<你的服务名>.onrender.com/health
+curl --fail https://<你的服务名>.onrender.com/ready
+```
+
+## 12. 公网部署注意事项
 
 当前 Compose 适合内网和测试环境。公网使用前至少需要：
 

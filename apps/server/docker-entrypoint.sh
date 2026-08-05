@@ -7,4 +7,7 @@ if [ "${BACKUP_ON_BOOT:-1}" = "1" ]; then
 fi
 
 ./node_modules/.bin/prisma migrate deploy --schema ./prisma/schema.prisma
+if [ "${DEMO_SEED:-0}" = "1" ]; then
+  node ./apps/server/dist/scripts/seedDemoPlayers.js
+fi
 exec node ./apps/server/dist/main.js

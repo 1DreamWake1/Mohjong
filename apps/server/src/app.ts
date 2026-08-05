@@ -1,5 +1,7 @@
 import cors from "@fastify/cors";
+import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
+import { resolve } from "node:path";
 
 import { readEnv } from "./config/env.js";
 import { checkPrismaConnection, closePrisma } from "./db/prisma.js";
@@ -146,6 +148,19 @@ export async function createApp(
     persistenceDiagnosticRegistry,
     userService
   });
+  if (env.webDistDir) {
+    await app.register(fastifyStatic, {
+      index: false,
+      root: resolve(env.webDistDir)
+    });
+    app.setNotFoundHandler((request, reply) => {
+      if (request.method === "GET" && request.headers.accept?.includes("text/html")) {
+        return reply.type("text/html").sendFile("index.html");
+      }
+
+      return reply.code(404).send({ message: "Route not found" });
+    });
+  }
   const gameSocketServer = registerGameSocketServer({
     app,
     authService,

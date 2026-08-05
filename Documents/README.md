@@ -4,13 +4,13 @@
 
 ## 主文档
 
-| 文档                                               | 内容                                      |
-| -------------------------------------------------- | ----------------------------------------- |
-| [requirements.md](./requirements.md)               | 产品范围、角色、功能和验收标准            |
-| [architecture-design.md](./architecture-design.md) | 当前架构、模块边界、数据流和技术约束      |
-| [development-plan.md](./development-plan.md)       | 已完成能力、当前阶段和后续路线            |
-| [environment-setup.md](./environment-setup.md)     | 本地开发与 Docker 主机环境准备            |
-| [deployment.md](./deployment.md)                   | Docker Compose 部署、验证、运维和故障排查 |
+| 文档                                               | 内容                                          |
+| -------------------------------------------------- | --------------------------------------------- |
+| [requirements.md](./requirements.md)               | 产品范围、角色、功能和验收标准                |
+| [architecture-design.md](./architecture-design.md) | 当前架构、模块边界、数据流和技术约束          |
+| [development-plan.md](./development-plan.md)       | 已完成能力、当前阶段和后续路线                |
+| [environment-setup.md](./environment-setup.md)     | 本地开发与 Docker 主机环境准备                |
+| [deployment.md](./deployment.md)                   | Docker Compose、Render 演示版部署、验证和运维 |
 
 ## 规则与界面参考
 
@@ -29,5 +29,6 @@
 - 阶段 18E 自动化验收与运行手册已完成，阶段 18 全部完成。
 - 后续评估完整四川麻将玩法、多实例与公网部署。
 - 当前部署边界是 Docker Compose、单 Server 实例和 SQLite 持久化卷。
+- 已提供 Render Free 单 Web Service 演示配置；该环境使用临时 SQLite，不适合保存真实数据。
 
 新增或重命名文档时必须同步更新本索引。

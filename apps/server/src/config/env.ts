@@ -14,6 +14,7 @@ export type ServerEnv = {
   socketActionRateLimitWindowMs: number;
   socketConnectionRateLimitMax: number;
   socketConnectionRateLimitWindowMs: number;
+  webDistDir: string | undefined;
 };
 
 let envLoaded = false;
@@ -108,6 +109,7 @@ export function readEnv(): ServerEnv {
     socketActionRateLimitMax: readNumber("SOCKET_ACTION_RATE_LIMIT_MAX", 30),
     socketActionRateLimitWindowMs: readNumber("SOCKET_ACTION_RATE_LIMIT_WINDOW_MS", 10_000),
     socketConnectionRateLimitMax: readNumber("SOCKET_CONNECTION_RATE_LIMIT_MAX", 20),
-    socketConnectionRateLimitWindowMs: readNumber("SOCKET_CONNECTION_RATE_LIMIT_WINDOW_MS", 60_000)
+    socketConnectionRateLimitWindowMs: readNumber("SOCKET_CONNECTION_RATE_LIMIT_WINDOW_MS", 60_000),
+    webDistDir: process.env.WEB_DIST_DIR?.trim() || undefined
   };
 }

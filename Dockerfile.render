@@ -1,0 +1,69 @@
+# Render Free 单服务镜像：Server 提供 API、Socket.IO 和 React 静态资源。
+FROM node:22.22.0-bookworm-slim AS web-build
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN corepack enable && corepack prepare pnpm@10.18.3 --activate
+WORKDIR /app
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.json tsconfig.base.json ./
+COPY apps/web/package.json apps/web/tsconfig.json apps/web/vite.config.ts apps/web/index.html ./apps/web/
+COPY packages/shared/package.json packages/shared/tsconfig.json ./packages/shared/
+RUN pnpm install --frozen-lockfile
+COPY apps/web/src ./apps/web/src
+COPY packages/shared/src ./packages/shared/src
+RUN pnpm --filter web build
+
+FROM node:22.22.0-bookworm-slim AS server-base
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN corepack enable && corepack prepare pnpm@10.18.3 --activate
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends g++ make python3 \
+  && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+
+FROM server-base AS server-build
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.json tsconfig.base.json ./
+COPY apps/server/package.json apps/server/tsconfig.json ./apps/server/
+COPY packages/shared/package.json packages/shared/tsconfig.json ./packages/shared/
+COPY packages/mahjong-core/package.json packages/mahjong-core/tsconfig.json ./packages/mahjong-core/
+COPY prisma ./prisma
+RUN pnpm install --frozen-lockfile
+COPY apps/server/src ./apps/server/src
+COPY packages/shared/src ./packages/shared/src
+COPY packages/mahjong-core/src ./packages/mahjong-core/src
+RUN pnpm prisma:generate && pnpm --filter server... build
+
+FROM server-base AS production-dependencies
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY apps/server/package.json ./apps/server/package.json
+COPY packages/shared/package.json ./packages/shared/package.json
+COPY packages/mahjong-core/package.json ./packages/mahjong-core/package.json
+COPY prisma ./prisma
+RUN pnpm install --prod --frozen-lockfile \
+  && pnpm prisma generate --schema ./prisma/schema.prisma
+
+FROM node:22.22.0-bookworm-slim AS runtime
+ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV PORT=10000
+ENV WEB_DIST_DIR=/app/web-dist
+WORKDIR /app
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
+COPY --from=production-dependencies /app/node_modules ./node_modules
+COPY --from=production-dependencies /app/apps/server/node_modules ./apps/server/node_modules
+COPY --from=production-dependencies /app/packages ./packages
+COPY --from=server-build /app/apps/server/dist ./apps/server/dist
+COPY --from=server-build /app/packages/shared/dist ./packages/shared/dist
+COPY --from=server-build /app/packages/mahjong-core/dist ./packages/mahjong-core/dist
+COPY --from=server-build /app/apps/server/package.json ./apps/server/package.json
+COPY --from=server-build /app/packages/shared/package.json ./packages/shared/package.json
+COPY --from=server-build /app/packages/mahjong-core/package.json ./packages/mahjong-core/package.json
+COPY --from=server-build /app/prisma ./prisma
+COPY --from=web-build /app/apps/web/dist ./web-dist
+COPY --chmod=755 apps/server/docker-entrypoint.sh ./apps/server/docker-entrypoint.sh
+RUN mkdir -p /app/data /app/backups && chown -R node:node /app/data /app/backups
+USER node
+EXPOSE 10000
+ENTRYPOINT ["./apps/server/docker-entrypoint.sh"]

@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: online-mahjong-demo
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /ready
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        value: file:/tmp/mahjong-demo.db
+      - key: BACKUP_DIR
+        value: /tmp/mahjong-backups
+      - key: BACKUP_ON_BOOT
+        value: "0"
+      - key: DEMO_SEED
+        value: "1"
+      - key: AUTH_TOKEN_SECRET
+        generateValue: true
+      - key: DEMO_PLAYER1_PASSWORD
+        value: mahjong-demo-player1
+      - key: DEMO_PLAYER2_PASSWORD
+        value: mahjong-demo-player2
+      - key: DEMO_PLAYER3_PASSWORD
+        value: mahjong-demo-player3
+      - key: DEMO_PLAYER4_PASSWORD
+        value: mahjong-demo-player4

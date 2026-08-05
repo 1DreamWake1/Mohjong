@@ -2,7 +2,7 @@
 
 ## 1. 当前进度
 
-阶段 0-17 和阶段 18 的全部批次均已完成。下一步评估四川麻将完整玩法、多实例与公网部署。
+阶段 0-17 和阶段 18 的全部批次均已完成。Render Free 演示版已具备部署条件；下一步评估四川麻将完整玩法、多实例与公网持久化部署。
 
 ## 2. 已完成阶段
 
@@ -86,6 +86,17 @@
 - 部署手册补充 CI 自动化说明；环境准备文档补充 e2e 验证命令。
 
 验收：全新 Linux 环境能够只依据文档完成部署和关键流程验证。
+
+### Render Free 演示版
+
+状态：已完成基础适配。
+
+- `Dockerfile.render` 将 React 静态资源和 Fastify、Socket.IO 合并到一个 Web Service。
+- `render.yaml` 可作为 Render Blueprint，自动设置端口、健康检查和临时 SQLite。
+- 启动时执行 Prisma migration，并在 `DEMO_SEED=1` 时预置四个演示玩家账号。
+- Render 免费实例的本地文件系统会在重启、重新部署或休眠后丢失，且实例会自动休眠；仅用于功能演示。
+
+详细步骤和账号见 [deployment.md](./deployment.md) 的 Render Free 演示版章节。
 
 ## 4. 后续阶段
 

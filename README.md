@@ -86,6 +86,10 @@ docker compose up -d --build
 
 完整的配置、管理员初始化、升级、数据卷和故障排查说明见 [Docker Compose 部署手册](./Documents/deployment.md)。
 
+### Render Free 演示版
+
+仓库已提供 `render.yaml` 和 `Dockerfile.render`，可从 GitHub 导入 Render Blueprint，使用单个免费 Web Service 运行前端、HTTP API 和 Socket.IO。该版本使用临时 SQLite，仅用于演示；四个演示玩家账号会在启动时自动创建。部署步骤和登录密码见 [Render Free 演示版](./Documents/deployment.md#render-free-演示版)。
+
 查看状态和日志：
 
 ```bash
