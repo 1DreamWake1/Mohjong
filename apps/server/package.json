@@ -11,7 +11,8 @@
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint .",
     "test": "vitest run",
-    "seed:admin": "tsx src/scripts/seedAdmin.ts"
+    "seed:admin": "tsx src/scripts/seedAdmin.ts",
+    "db:backup": "tsx src/scripts/dbbackup.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",

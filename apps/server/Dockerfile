@@ -47,7 +47,7 @@ COPY --from=build /app/packages/shared/package.json ./packages/shared/package.js
 COPY --from=build /app/packages/mahjong-core/package.json ./packages/mahjong-core/package.json
 COPY --from=build /app/prisma ./prisma
 COPY --chmod=755 apps/server/docker-entrypoint.sh ./apps/server/docker-entrypoint.sh
-RUN mkdir -p /app/data && chown -R node:node /app/data
+RUN mkdir -p /app/data /app/backups && chown -R node:node /app/data /app/backups
 USER node
 EXPOSE 3000
 ENTRYPOINT ["./apps/server/docker-entrypoint.sh"]

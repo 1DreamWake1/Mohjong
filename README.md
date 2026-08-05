@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-阶段 0-17、18A 容器化与统一入口、18B 健康检查与进程生命周期已完成。当前开发阶段 18C：SQLite 备份、恢复和升级回滚。
+阶段 0-17、18A 容器化与统一入口、18B 健康检查与进程生命周期、18C SQLite 备份与恢复回滚已完成。当前开发阶段 18D：生产配置与安全基线。
 
 ## 技术栈
 
@@ -82,7 +82,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-默认统一入口为 `http://localhost:8080/`，Web、HTTP API 和 Socket.IO 均使用该地址。SQLite 数据保存在 `mahjong-data` 命名卷中，Server 启动时会先执行待应用的 Prisma 迁移。Compose 使用真实 HTTP 探针判断服务状态，Server 完成牌局恢复且数据库可访问后才会就绪；收到 `SIGTERM` 或 `SIGINT` 时会停止新任务、等待持久化队列并释放数据库连接。
+默认统一入口为 `http://localhost:8080/`，Web、HTTP API 和 Socket.IO 均使用该地址。SQLite 数据保存在 `mahjong-data` 命名卷中，备份保存在 `mahjong-backups` 命名卷中，Server 启动时会先执行待应用的 Prisma 迁移（迁移前自动创建一致性备份）。Compose 使用真实 HTTP 探针判断服务状态，Server 完成牌局恢复且数据库可访问后才会就绪；收到 `SIGTERM` 或 `SIGINT` 时会停止新任务、等待持久化队列并释放数据库连接。
 
 完整的配置、管理员初始化、升级、数据卷和故障排查说明见 [Docker Compose 部署手册](./Documents/deployment.md)。
 
@@ -103,6 +103,7 @@ pnpm build
 pnpm -F mahjong-core test
 pnpm -F server test
 pnpm -F web build
+pnpm -F server db:backup create   # 手动创建 SQLite 一致性备份
 ```
 
 ## 文档入口

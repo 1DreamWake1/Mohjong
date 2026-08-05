@@ -5,6 +5,9 @@ services:
       dockerfile: apps/server/Dockerfile
     environment:
       AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:?Set AUTH_TOKEN_SECRET in .env}
+      BACKUP_DIR: /app/backups
+      BACKUP_KEEP: ${BACKUP_KEEP:-5}
+      BACKUP_ON_BOOT: ${BACKUP_ON_BOOT:-1}
       DATABASE_URL: file:/app/data/mahjong.db
       HOST: 0.0.0.0
       NODE_ENV: production
@@ -26,6 +29,7 @@ services:
     stop_grace_period: 15s
     volumes:
       - mahjong-data:/app/data
+      - mahjong-backups:/app/backups
 
   web:
     build:
@@ -47,3 +51,4 @@ services:
 
 volumes:
   mahjong-data:
+  mahjong-backups:
