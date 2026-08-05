@@ -55,10 +55,7 @@ function isPayload(value: unknown): value is AuthTokenPayload {
   );
 }
 
-export function createAuthToken(
-  input: Omit<AuthTokenPayload, "exp">,
-  secret: string
-): string {
+export function createAuthToken(input: Omit<AuthTokenPayload, "exp">, secret: string): string {
   const payload: AuthTokenPayload = {
     ...input,
     exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS
@@ -71,10 +68,7 @@ export function createAuthToken(
   return `${signingInput}.${signature}`;
 }
 
-export function verifyAuthToken(
-  token: string,
-  secret: string
-): AuthTokenPayload | null {
+export function verifyAuthToken(token: string, secret: string): AuthTokenPayload | null {
   const [encodedHeader, encodedPayload, signature, extra] = token.split(".");
   if (!encodedHeader || !encodedPayload || !signature || extra !== undefined) {
     return null;
@@ -85,10 +79,7 @@ export function verifyAuthToken(
   const received = Buffer.from(signature);
   const expected = Buffer.from(expectedSignature);
 
-  if (
-    received.length !== expected.length ||
-    !timingSafeEqual(received, expected)
-  ) {
+  if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
     return null;
   }
 

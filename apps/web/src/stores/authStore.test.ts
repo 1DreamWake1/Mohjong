@@ -103,9 +103,7 @@ describe("authStore", () => {
       status: "ready"
     });
 
-    await useAuthStore
-      .getState()
-      .signIn({ password: "admin123", username: "admin" });
+    await useAuthStore.getState().signIn({ password: "admin123", username: "admin" });
 
     expect(disconnectSocket).toHaveBeenCalledTimes(1);
     expect(localStorage.getItem("mahjong.authToken")).toBe("next-token");

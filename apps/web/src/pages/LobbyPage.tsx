@@ -338,7 +338,9 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
               </button>
               <button
                 className={
-                  selectedRuleName === "standard" ? styles.segmentButtonActive : styles.segmentButton
+                  selectedRuleName === "standard"
+                    ? styles.segmentButtonActive
+                    : styles.segmentButton
                 }
                 disabled={isRoomBusy || !canCreateOrJoinRoom}
                 onClick={() => setSelectedRuleName("standard")}

@@ -13,6 +13,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "pnpm -r --if-present test",
+    "test:e2e": "playwright test",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "mkdir -p data && DATABASE_URL=file:../data/dev.db prisma migrate dev",
     "prisma:migrate:deploy": "mkdir -p data && DATABASE_URL=file:../data/dev.db prisma migrate deploy"
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
+    "@playwright/test": "^1.62.1",
     "@types/node": "^22.9.0",
     "eslint": "^9.13.0",
     "eslint-config-prettier": "^9.1.0",

@@ -103,11 +103,7 @@ function buildViews(options: {
   wallTileCount: number;
   winnerSeatIndex?: number;
 }): PlayerView[] {
-  const eventTexts = [
-    "快速对局已自动开始。",
-    "南山 完成起手。",
-    options.eventText
-  ];
+  const eventTexts = ["快速对局已自动开始。", "南山 完成起手。", options.eventText];
 
   return playerNames.map((username, seatIndex) => {
     const handTiles = hands[seatIndex] ?? [];
@@ -168,7 +164,10 @@ function buildViews(options: {
           result: {
             endReason: "hu",
             fanTotal: 2,
-            fans: [{ name: "断幺九", value: 1 }, { name: "平和", value: 1 }],
+            fans: [
+              { name: "断幺九", value: 1 },
+              { name: "平和", value: 1 }
+            ],
             totalPoints: 40,
             winningTile: tile("mock-winning-tile", "8筒", "dots", 8)
           },

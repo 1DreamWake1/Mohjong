@@ -84,4 +84,15 @@ pnpm build
 pnpm format:check
 ```
 
+端到端测试（首次先安装 Playwright 浏览器）：
+
+```bash
+pnpm exec playwright install chromium
+pnpm test:e2e
+```
+
+`pnpm test:e2e` 会使用独立的 `data/e2e.db` 数据库，自动执行 Prisma 迁移、seed 测试账号和一条已结束对局，并启动 Server 与 Web 后运行浏览器测试。测试覆盖登录、多人建房/加入/准备/开局、历史查询和结算明细。
+
+CI（GitHub Actions）在 push 和 pull request 时自动执行：安装与 Prisma 生成、格式、类型、Lint、测试、构建、Docker 镜像冒烟（迁移/探针/登录/Socket.IO）以及 Playwright 端到端测试。工作流定义见 `.github/workflows/ci.yml`。
+
 数据库、journal、日志、备份、`.env`、`node_modules` 和 `dist` 不应提交 Git，也不应手工编辑 Prisma 生成文件。

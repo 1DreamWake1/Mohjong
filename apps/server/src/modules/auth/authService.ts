@@ -16,10 +16,7 @@ function toAuthUser(user: AuthUser): AuthUser {
   };
 }
 
-export function createAuthService(
-  userRepository: UserRepository,
-  tokenSecret: string
-) {
+export function createAuthService(userRepository: UserRepository, tokenSecret: string) {
   return {
     async getCurrentUser(token: string): Promise<AuthUser | null> {
       const payload = verifyAuthToken(token, tokenSecret);
@@ -37,10 +34,7 @@ export function createAuthService(
         return null;
       }
 
-      const passwordMatches = await verifyPassword(
-        input.password,
-        user.passwordHash
-      );
+      const passwordMatches = await verifyPassword(input.password, user.passwordHash);
       if (!passwordMatches) {
         return null;
       }

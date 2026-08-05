@@ -14,15 +14,17 @@ export function createSeededRandom(seed: number): RandomSource {
 
 export function createWall(rules: RuleConfig = standardRuleConfig): Tile[] {
   const tileSet = getRuleTileSet(rules);
-  return tileDefinitions.filter((definition) => {
-    if (definition.suit === "winds" || definition.suit === "dragons") {
-      return tileSet === "standard";
-    }
+  return tileDefinitions
+    .filter((definition) => {
+      if (definition.suit === "winds" || definition.suit === "dragons") {
+        return tileSet === "standard";
+      }
 
-    return true;
-  }).flatMap((definition) =>
-    Array.from({ length: 4 }, (_, index) => createTile(definition.code, index))
-  );
+      return true;
+    })
+    .flatMap((definition) =>
+      Array.from({ length: 4 }, (_, index) => createTile(definition.code, index))
+    );
 }
 
 export function shuffleWall(wall: readonly Tile[], random: RandomSource = Math.random): Tile[] {

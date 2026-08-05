@@ -53,9 +53,7 @@ function toUserSummary(user: StoredUser): UserSummary {
   };
 }
 
-export function createPrismaUserRepository(
-  client: PrismaClient = defaultPrisma
-): UserRepository {
+export function createPrismaUserRepository(client: PrismaClient = defaultPrisma): UserRepository {
   return {
     async create(input) {
       const user = await client.user.create({

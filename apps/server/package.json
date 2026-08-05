@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "seed:admin": "tsx src/scripts/seedAdmin.ts",
-    "db:backup": "tsx src/scripts/dbbackup.ts"
+    "db:backup": "tsx src/scripts/dbbackup.ts",
+    "smoke": "tsx src/scripts/smoke.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
+    "socket.io-client": "^4.8.3",
     "supertest": "^7.0.0",
     "tsx": "^4.19.2",
     "vitest": "^2.1.4"

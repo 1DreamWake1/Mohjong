@@ -1,8 +1,4 @@
-import type {
-  CreatePlayerRequest,
-  ResetPlayerPasswordRequest,
-  UserSummary
-} from "@mahjong/shared";
+import type { CreatePlayerRequest, ResetPlayerPasswordRequest, UserSummary } from "@mahjong/shared";
 
 import { hashPassword } from "../auth/password.js";
 import type { UserRepository } from "./userRepository.js";

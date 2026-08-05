@@ -330,7 +330,21 @@ nginx 已配置：
 - 开发环境管理员密码至少 6 位，生产环境至少 12 位，并拒绝 `admin123`、`password` 等弱密码。
 - 认证 Token 目前存储于浏览器（localStorage），存在 XSS 泄露风险；公网部署前建议迁移到 HttpOnly Cookie 并配置 HTTPS。
 
-## 10. 公网部署注意事项
+## 10. CI 自动化
+
+GitHub Actions 工作流位于 `.github/workflows/ci.yml`，在 push 到 `main` 和 pull request 时运行三个 job：
+
+| Job   | 内容                                                                                        |
+| ----- | ------------------------------------------------------------------------------------------- |
+| check | 安装、Prisma 生成、格式检查、类型检查、Lint、全量测试和生产构建                             |
+| smoke | 构建 Docker 镜像，启动 Compose 后执行迁移、`/health`、`/ready`、登录和 Socket.IO 冒烟脚本   |
+| e2e   | 安装 Playwright Chromium，运行登录、多人建房/加入/准备/开局、历史查询和结算明细的浏览器测试 |
+
+冒烟脚本位于 `apps/server/src/scripts/smoke.ts`（`pnpm -F server smoke`），覆盖存活/就绪探针、管理员登录、`/auth/me` 和带 Token 的 Socket.IO 连接。e2e 测试位于 `e2e/` 目录，使用独立 `data/e2e.db`，不污染开发数据库。
+
+CI 失败时可在 Actions 页面查看日志；e2e 失败会附加 `test-results/` 报告，smoke 失败会输出 Server/Web 容器日志。
+
+## 11. 公网部署注意事项
 
 当前 Compose 适合内网和测试环境。公网使用前至少需要：
 
@@ -340,4 +354,4 @@ nginx 已配置：
 - 定期执行 SQLite 一致性备份并演练恢复流程，配置监控告警。
 - 使用高强度管理员密码并妥善管理 `.env`。
 
-这些工作对应阶段 18E 及后续公网项，在完成前不应将当前配置视为完整生产安全基线。
+这些工作对应后续公网项，在完成前不应将当前配置视为完整生产安全基线。
