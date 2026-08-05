@@ -3,10 +3,19 @@ import { closePrisma, prisma } from "../db/prisma.js";
 import { hashPassword } from "../modules/auth/password.js";
 
 const username = process.env.ADMIN_USERNAME?.trim() ?? "admin";
-const password = process.env.ADMIN_PASSWORD ?? "admin123";
+const password = process.env.ADMIN_PASSWORD?.trim() ?? "admin123";
+const isProduction = process.env.NODE_ENV === "production";
+const minLength = isProduction ? 12 : 6;
+const weakPasswords = new Set(["admin123", "password", "123456", "admin", "password123"]);
 
-if (password.length < 6) {
-  throw new Error("ADMIN_PASSWORD must be at least 6 characters long");
+if (password.length < minLength) {
+  throw new Error(
+    `ADMIN_PASSWORD must be at least ${minLength} characters long in ${isProduction ? "production" : "development"}`
+  );
+}
+
+if (weakPasswords.has(password.toLowerCase())) {
+  throw new Error("ADMIN_PASSWORD is too weak, choose a different password");
 }
 
 readEnv();

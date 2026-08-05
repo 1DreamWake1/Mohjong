@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { Server, type Socket } from "socket.io";
 
 import type { AuthService } from "../auth/authService.js";
+import { createUnlimitedRateLimiter, type RateLimiter } from "../../security/rateLimiter.js";
 import { createGameLobbyService, type GameLobbyService } from "./gameLobbyService.js";
 import { createGameRoomService, type GameRoomService } from "./gameRoomService.js";
 import {
@@ -317,18 +318,24 @@ function scheduleHumanTimeout(input: {
 export function registerGameSocketServer(input: {
   app: FastifyInstance;
   authService: AuthService;
+  corsOrigins?: string[];
   gameLobbyService?: GameLobbyService;
   gameRoomService?: GameRoomService;
   playerConnectionRegistry?: PlayerConnectionRegistry;
+  socketActionRateLimiter?: RateLimiter;
+  socketConnectionRateLimiter?: RateLimiter;
 }): {
   io: Server<ClientToServerEvents, ServerToClientEvents>;
   stop: () => Promise<void>;
 } {
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(input.app.server, {
     cors: {
-      origin: true
+      origin: input.corsOrigins && input.corsOrigins.length > 0 ? input.corsOrigins : false
     }
   });
+  const socketConnectionRateLimiter =
+    input.socketConnectionRateLimiter ?? createUnlimitedRateLimiter();
+  const socketActionRateLimiter = input.socketActionRateLimiter ?? createUnlimitedRateLimiter();
   const gameLobbyService = input.gameLobbyService ?? createGameLobbyService();
   const gameRoomService = input.gameRoomService ?? createGameRoomService();
   const playerConnectionRegistry =
@@ -358,6 +365,12 @@ export function registerGameSocketServer(input: {
     const user = await input.authService.getCurrentUser(token);
     if (!user) {
       next(new Error("Unauthorized"));
+      return;
+    }
+
+    // 按用户限制连接建立频率，缓解连接风暴。
+    if (!socketConnectionRateLimiter.isAllowed(`connection:${user.id}`)) {
+      next(new Error("Too many connections, try again later"));
       return;
     }
 
@@ -551,6 +564,12 @@ export function registerGameSocketServer(input: {
       const accessError = getGameSocketAccessError(user, "action");
       if (accessError) {
         gameSocket.emit("game:error", { message: accessError });
+        return;
+      }
+
+      // 按用户限制游戏动作频率，缓解刷屏式操作。
+      if (!socketActionRateLimiter.isAllowed(`action:${user.id}`)) {
+        gameSocket.emit("game:error", { message: "Too many actions, slow down" });
         return;
       }
 

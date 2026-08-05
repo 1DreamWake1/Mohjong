@@ -24,6 +24,11 @@ import {
 import { createPrismaUserRepository } from "./modules/users/userRepository.js";
 import type { UserRepository } from "./modules/users/userRepository.js";
 import { createUserService } from "./modules/users/userService.js";
+import {
+  createSlidingWindowRateLimiter,
+  createUnlimitedRateLimiter,
+  type RateLimiter
+} from "./security/rateLimiter.js";
 
 export type CreateAppOptions = {
   authTokenSecret?: string;
@@ -32,8 +37,11 @@ export type CreateAppOptions = {
   gameLobbyService?: GameLobbyService;
   gameRecordRepository?: GameRecordRepository;
   gameRoomService?: GameRoomService;
+  loginRateLimiter?: RateLimiter;
   playerConnectionRegistry?: PlayerConnectionRegistry;
   persistenceDiagnosticRegistry?: PersistenceDiagnosticRegistry;
+  socketActionRateLimiter?: RateLimiter;
+  socketConnectionRateLimiter?: RateLimiter;
   userRepository?: UserRepository;
 };
 
@@ -46,12 +54,37 @@ export async function createApp(
 ): Promise<FastifyInstance & { lifecycle: ServerLifecycle }> {
   const env = readEnv();
   const app = Fastify({
+    bodyLimit: env.bodyLimitBytes,
     logger: true
   });
   const lifecycle = createServerLifecycle();
   const closeDatabase = options.closeDatabase ?? closePrisma;
   const databaseReadinessCheck = options.databaseReadinessCheck ?? checkPrismaConnection;
   const userRepository = options.userRepository ?? createPrismaUserRepository();
+  const loginRateLimiter =
+    options.loginRateLimiter ??
+    (env.loginRateLimitMax > 0
+      ? createSlidingWindowRateLimiter({
+          maxRequests: env.loginRateLimitMax,
+          windowMs: env.loginRateLimitWindowMs
+        })
+      : createUnlimitedRateLimiter());
+  const socketConnectionRateLimiter =
+    options.socketConnectionRateLimiter ??
+    (env.socketConnectionRateLimitMax > 0
+      ? createSlidingWindowRateLimiter({
+          maxRequests: env.socketConnectionRateLimitMax,
+          windowMs: env.socketConnectionRateLimitWindowMs
+        })
+      : createUnlimitedRateLimiter());
+  const socketActionRateLimiter =
+    options.socketActionRateLimiter ??
+    (env.socketActionRateLimitMax > 0
+      ? createSlidingWindowRateLimiter({
+          maxRequests: env.socketActionRateLimitMax,
+          windowMs: env.socketActionRateLimitWindowMs
+        })
+      : createUnlimitedRateLimiter());
   const authService = createAuthService(
     userRepository,
     options.authTokenSecret ?? env.authTokenSecret
@@ -97,8 +130,9 @@ export async function createApp(
     }
   }, roomCleanupIntervalMs);
   cleanupTimer.unref();
+  // 同源部署（vite proxy / nginx）默认不需要 CORS；配置 CORS_ORIGIN 时启用白名单。
   await app.register(cors, {
-    origin: true
+    origin: env.corsOrigins.length > 0 ? env.corsOrigins : false
   });
   await registerRoutes(app, {
     authService,
@@ -106,17 +140,21 @@ export async function createApp(
     gameLobbyService,
     gameRecordRepository,
     gameRoomService,
+    lifecycle,
+    loginRateLimiter,
     playerConnectionRegistry,
     persistenceDiagnosticRegistry,
-    userService,
-    lifecycle
+    userService
   });
   const gameSocketServer = registerGameSocketServer({
     app,
     authService,
+    corsOrigins: env.corsOrigins,
     gameLobbyService,
     gameRoomService,
-    playerConnectionRegistry
+    playerConnectionRegistry,
+    socketActionRateLimiter,
+    socketConnectionRateLimiter
   });
 
   app.addHook("onClose", async () => {

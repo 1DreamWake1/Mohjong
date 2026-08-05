@@ -28,6 +28,7 @@ import type { GameLobbyService } from "../modules/game/gameLobbyService.js";
 import type { GameRoomService } from "../modules/game/gameRoomService.js";
 import type { PlayerConnectionRegistry } from "../modules/game/playerConnectionRegistry.js";
 import type { PersistenceDiagnosticRegistry } from "../modules/game/persistenceDiagnosticRegistry.js";
+import type { RateLimiter } from "../security/rateLimiter.js";
 import type { createUserService } from "../modules/users/userService.js";
 
 type RouteServices = {
@@ -36,10 +37,11 @@ type RouteServices = {
   gameLobbyService: GameLobbyService;
   gameRecordRepository: GameRecordRepository;
   gameRoomService: GameRoomService;
+  lifecycle: ServerLifecycle;
+  loginRateLimiter: RateLimiter;
   playerConnectionRegistry: PlayerConnectionRegistry;
   persistenceDiagnosticRegistry: PersistenceDiagnosticRegistry;
   userService: ReturnType<typeof createUserService>;
-  lifecycle: ServerLifecycle;
 };
 
 type AuthenticatedUser =
@@ -185,6 +187,12 @@ export async function registerRoutes(app: FastifyInstance, services: RouteServic
   });
 
   app.post("/auth/login", async (request, reply) => {
+    // 按客户端 IP 限制登录尝试频率，缓解暴力破解。
+    const clientIp = request.ip ?? "unknown";
+    if (!services.loginRateLimiter.isAllowed(`login:${clientIp}`)) {
+      return reply.code(429).send({ message: "Too many login attempts, try again later" });
+    }
+
     const input = parseLoginRequest(request.body);
     if (!input) {
       return reply.code(400).send({ message: "Invalid login request" });

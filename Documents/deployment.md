@@ -1,6 +1,6 @@
 # Docker Compose 部署手册
 
-本文适用于当前单 Server、SQLite 和 Docker Compose 架构。公网域名、HTTPS 和生产安全强化仍需按阶段 18D-18E 补齐。
+本文适用于当前单 Server、SQLite 和 Docker Compose 架构。公网域名、HTTPS 和生产安全强化仍需按阶段 18E 补齐。
 
 ## 1. 部署边界
 
@@ -9,6 +9,7 @@
 - SQLite 位于 Docker 命名卷 `mahjong-data`，备份位于 `mahjong-backups`，均不随容器删除。
 - Server 不发布宿主机端口，只能由 Web 容器访问。
 - 当前不能启动多个 Server 副本。
+- `NODE_ENV=production` 时 Server 强制校验 `AUTH_TOKEN_SECRET`（≥32 字符）和 `DATABASE_URL`，不合规直接拒绝启动。
 
 ## 2. 准备配置
 
@@ -289,6 +290,46 @@ docker compose config
 
 输出可能包含环境变量值，不要将完整结果粘贴到公开日志。
 
+## 9. 安全基线
+
+### 生产配置校验
+
+`NODE_ENV=production` 时 Server 启动前强制校验：
+
+- `AUTH_TOKEN_SECRET` 至少 32 字符，缺失或过短直接拒绝启动。
+- `DATABASE_URL` 必须存在且为 `file:` 开头。
+
+Compose 中 `AUTH_TOKEN_SECRET` 未设置时 `docker compose config` 直接报错，防止无密钥部署。
+
+### 请求与频率限制
+
+- 请求体上限默认 64KB（`BODY_LIMIT_BYTES`）。
+- 登录接口按客户端 IP 限流：默认 10 次/分钟（`LOGIN_RATE_LIMIT_MAX` / `LOGIN_RATE_LIMIT_WINDOW_MS`），超限返回 429。
+- Socket 连接按用户限流：默认 20 次/分钟（`SOCKET_CONNECTION_RATE_LIMIT_*`）。
+- Socket 游戏动作按用户限流：默认 30 次/10 秒（`SOCKET_ACTION_RATE_LIMIT_*`），超限返回错误事件。
+
+### CORS
+
+同源部署（nginx 统一入口）默认关闭 CORS。需要跨域时配置 `CORS_ORIGIN` 为逗号分隔的来源白名单，例如：
+
+```dotenv
+CORS_ORIGIN="https://mahjong.example.com"
+```
+
+### 安全响应头
+
+nginx 已配置：
+
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Referrer-Policy: no-referrer`
+- `Content-Security-Policy`: 同源脚本与样式、WebSocket 连接、`object-src 'none'`
+
+### 管理员密码与 Token 存储
+
+- 开发环境管理员密码至少 6 位，生产环境至少 12 位，并拒绝 `admin123`、`password` 等弱密码。
+- 认证 Token 目前存储于浏览器（localStorage），存在 XSS 泄露风险；公网部署前建议迁移到 HttpOnly Cookie 并配置 HTTPS。
+
 ## 10. 公网部署注意事项
 
 当前 Compose 适合内网和测试环境。公网使用前至少需要：
@@ -299,4 +340,4 @@ docker compose config
 - 定期执行 SQLite 一致性备份并演练恢复流程，配置监控告警。
 - 使用高强度管理员密码并妥善管理 `.env`。
 
-这些工作对应阶段 18D-18E，在完成前不应将当前配置视为完整生产安全基线。
+这些工作对应阶段 18E 及后续公网项，在完成前不应将当前配置视为完整生产安全基线。
