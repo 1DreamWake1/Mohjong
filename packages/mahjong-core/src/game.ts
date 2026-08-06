@@ -1,4 +1,4 @@
-import type { Action, MeldInfo, PlayerView, WinType } from "@mahjong/shared";
+import type { Action, MeldInfo, PlayerView, TileSuit, WinType } from "@mahjong/shared";
 
 import {
   getClaimPriorityConfig,
@@ -36,8 +36,10 @@ export type MahjongGameState = {
   wall: Tile[];
   currentTurn: number;
   dealerSeatIndex: number;
-  phase: "playing" | "ended";
+  phase: "choose-missing-suit" | "ended" | "exchange-three" | "playing";
   rules: RuleConfig;
+  exchangeThreeSelections?: Partial<Record<number, string[]>>;
+  missingSuits?: Partial<Record<number, Extract<TileSuit, "bamboo" | "characters" | "dots">>>;
   winnerSeatIndex?: number;
   winningTile?: Tile;
   winType?: WinType;
@@ -83,7 +85,9 @@ export function createInitialGame(options: CreateGameOptions = {}): MahjongGameS
     }
   }
 
-  drawTileIntoHand(players[0], wall);
+  if (rules.name !== "sichuan") {
+    drawTileIntoHand(players[0], wall);
+  }
 
   for (const player of players) {
     player.handTiles.sort(compareTiles);
@@ -95,12 +99,21 @@ export function createInitialGame(options: CreateGameOptions = {}): MahjongGameS
     wall,
     currentTurn: 0,
     dealerSeatIndex: 0,
-    phase: "playing",
-    rules
+    phase: rules.name === "sichuan" ? "exchange-three" : "playing",
+    rules,
+    ...(rules.name === "sichuan" ? { exchangeThreeSelections: {}, missingSuits: {} } : {})
   };
 }
 
 export function getLegalActions(state: MahjongGameState, seatIndex: number): Action[] {
+  if (state.phase === "exchange-three") {
+    return getExchangeThreeActions(state, seatIndex);
+  }
+
+  if (state.phase === "choose-missing-suit") {
+    return getMissingSuitActions(state, seatIndex);
+  }
+
   if (state.phase !== "playing" || state.currentTurn !== seatIndex) {
     return [];
   }
@@ -110,7 +123,8 @@ export function getLegalActions(state: MahjongGameState, seatIndex: number): Act
   }
 
   const player = getPlayer(state, seatIndex);
-  const discardActions: Action[] = player.handTiles.map((tile) => ({
+  const discardTiles = getDiscardableTiles(state, seatIndex);
+  const discardActions: Action[] = discardTiles.map((tile) => ({
     type: "discard",
     tileId: tile.id
   }));
@@ -119,7 +133,7 @@ export function getLegalActions(state: MahjongGameState, seatIndex: number): Act
     publicMelds: player.publicMelds
   });
 
-  if (meetsMinimumFan(score, state.rules)) {
+  if (meetsMinimumFan(score, state.rules) && !hasMissingSuitTiles(state, seatIndex)) {
     actions.unshift({ type: "hu" });
   }
 
@@ -131,6 +145,10 @@ export function applyAction(
   seatIndex: number,
   action: Action
 ): ApplyActionResult {
+  if (state.phase === "exchange-three" || state.phase === "choose-missing-suit") {
+    return applySichuanOpeningAction(state, seatIndex, action);
+  }
+
   if (state.phase !== "playing") {
     return { ok: false, error: "Game has ended", state };
   }
@@ -151,6 +169,9 @@ export function applyAction(
 
     if (!score.canHu) {
       return { ok: false, error: "Hand cannot win", state };
+    }
+    if (hasMissingSuitTiles(state, seatIndex)) {
+      return { ok: false, error: "Must discard all missing-suit tiles before winning", state };
     }
     if (!meetsMinimumFan(score, state.rules)) {
       return { ok: false, error: "Hand does not meet minimum fan", state };
@@ -203,6 +224,10 @@ export function applyAction(
     return { ok: false, error: "Cannot discard a tile outside player's hand", state };
   }
 
+  if (!getDiscardableTiles(state, seatIndex).some((tile) => tile.id === action.tileId)) {
+    return { ok: false, error: "Must discard the selected missing-suit tiles first", state };
+  }
+
   const [discardedTile] = player.handTiles.splice(tileIndex, 1);
 
   if (!discardedTile) {
@@ -250,7 +275,8 @@ export function createPlayerView(state: MahjongGameState, seatIndex: number): Pl
     username: player.username,
     wallTileCount: state.wall.length,
     ...(state.lastDiscardedTileId ? { lastDiscardedTileId: state.lastDiscardedTileId } : {}),
-    ...(player.lastDrawnTileId ? { lastDrawnTileId: player.lastDrawnTileId } : {})
+    ...(player.lastDrawnTileId ? { lastDrawnTileId: player.lastDrawnTileId } : {}),
+    ...(state.missingSuits?.[seatIndex] ? { missingSuit: state.missingSuits[seatIndex] } : {})
   };
 
   const result =
@@ -289,6 +315,151 @@ export function createEmptyPlayerView(seatIndex: number): PlayerView {
     username: "",
     wallTileCount: 0
   };
+}
+
+type SichuanSuit = Extract<TileSuit, "bamboo" | "characters" | "dots">;
+
+const sichuanSuits: readonly SichuanSuit[] = ["characters", "dots", "bamboo"];
+
+function getExchangeThreeActions(state: MahjongGameState, seatIndex: number): Action[] {
+  if (state.exchangeThreeSelections?.[seatIndex]) {
+    return [];
+  }
+
+  const player = getPlayer(state, seatIndex);
+  const actions: Action[] = [];
+
+  for (let firstIndex = 0; firstIndex < player.handTiles.length - 2; firstIndex += 1) {
+    for (
+      let secondIndex = firstIndex + 1;
+      secondIndex < player.handTiles.length - 1;
+      secondIndex += 1
+    ) {
+      for (
+        let thirdIndex = secondIndex + 1;
+        thirdIndex < player.handTiles.length;
+        thirdIndex += 1
+      ) {
+        const tiles = [
+          player.handTiles[firstIndex],
+          player.handTiles[secondIndex],
+          player.handTiles[thirdIndex]
+        ] as [Tile, Tile, Tile];
+        if (tiles.every((tile) => tile && tile.suit === tiles[0]?.suit && isSuited(tile))) {
+          actions.push({ type: "exchangeThree", tileIds: tiles.map((tile) => tile.id) });
+        }
+      }
+    }
+  }
+
+  return actions;
+}
+
+function getMissingSuitActions(state: MahjongGameState, seatIndex: number): Action[] {
+  if (state.missingSuits?.[seatIndex]) {
+    return [];
+  }
+
+  return sichuanSuits.map((suit) => ({ type: "chooseMissingSuit" as const, suit }));
+}
+
+function getDiscardableTiles(state: MahjongGameState, seatIndex: number): Tile[] {
+  const player = getPlayer(state, seatIndex);
+  const missingSuit = state.missingSuits?.[seatIndex];
+  if (!missingSuit) return player.handTiles;
+
+  const missingSuitTiles = player.handTiles.filter((tile) => tile.suit === missingSuit);
+  return missingSuitTiles.length > 0 ? missingSuitTiles : player.handTiles;
+}
+
+function hasMissingSuitTiles(
+  state: MahjongGameState,
+  seatIndex: number,
+  handTiles = getPlayer(state, seatIndex).handTiles
+): boolean {
+  const missingSuit = state.missingSuits?.[seatIndex];
+  return missingSuit !== undefined && handTiles.some((tile) => tile.suit === missingSuit);
+}
+
+function applySichuanOpeningAction(
+  state: MahjongGameState,
+  seatIndex: number,
+  action: Action
+): ApplyActionResult {
+  if (state.phase === "exchange-three") {
+    if (action.type !== "exchangeThree" || !action.tileIds) {
+      return { ok: false, error: "Exchange-three phase requires three tiles", state };
+    }
+
+    const legalAction = getExchangeThreeActions(state, seatIndex).find((candidate) =>
+      haveSameTileIds(candidate.tileIds, action.tileIds ?? [])
+    );
+    if (!legalAction || action.tileIds.length !== 3) {
+      return {
+        ok: false,
+        error: "Exchange-three action must select three tiles of one suit",
+        state
+      };
+    }
+
+    const nextState = cloneState(state);
+    nextState.exchangeThreeSelections = {
+      ...nextState.exchangeThreeSelections,
+      [seatIndex]: [...action.tileIds]
+    };
+
+    if (!allSeatsHaveSelection(nextState.exchangeThreeSelections)) {
+      return { ok: true, state: nextState };
+    }
+
+    const selectedTiles = nextState.players.map((player, currentSeatIndex) => {
+      const selectedIds = nextState.exchangeThreeSelections?.[currentSeatIndex] ?? [];
+      const tiles = removeTilesFromHand(player, selectedIds);
+      if (!tiles || tiles.length !== 3) {
+        throw new Error("Exchange-three selection references missing tiles");
+      }
+      return tiles;
+    });
+
+    nextState.players.forEach((player, currentSeatIndex) => {
+      const incomingSeatIndex = (currentSeatIndex + 3) % 4;
+      player.handTiles.push(...(selectedTiles[incomingSeatIndex] ?? []));
+      player.handTiles.sort(compareTiles);
+    });
+    nextState.phase = "choose-missing-suit";
+    nextState.currentTurn = 0;
+    return { ok: true, state: nextState };
+  }
+
+  if (state.phase !== "choose-missing-suit") {
+    return { ok: false, error: "Sichuan opening phase is not active", state };
+  }
+  if (action.type !== "chooseMissingSuit" || !isSichuanSuit(action.suit)) {
+    return { ok: false, error: "Choose a missing suit before playing", state };
+  }
+
+  const nextState = cloneState(state);
+  nextState.missingSuits = {
+    ...nextState.missingSuits,
+    [seatIndex]: action.suit
+  };
+  if (allSeatsHaveSelection(nextState.missingSuits)) {
+    nextState.phase = "playing";
+    nextState.currentTurn = nextState.dealerSeatIndex;
+    drawOrEnd(nextState, nextState.dealerSeatIndex);
+  }
+  return { ok: true, state: nextState };
+}
+
+function allSeatsHaveSelection<T>(selections: Partial<Record<number, T>> | undefined): boolean {
+  return (
+    selections !== undefined &&
+    [0, 1, 2, 3].every((seatIndex) => selections[seatIndex] !== undefined)
+  );
+}
+
+function isSichuanSuit(suit: TileSuit | undefined): suit is SichuanSuit {
+  return suit === "characters" || suit === "dots" || suit === "bamboo";
 }
 
 function createPlayerState(
@@ -360,7 +531,8 @@ function getAvailableClaimActionsForSeat(state: MahjongGameState, seatIndex: num
     meetsMinimumFan(
       calculateScore(handWithDiscard, state.rules, { publicMelds: player.publicMelds }),
       state.rules
-    )
+    ) &&
+    !hasMissingSuitTiles(state, seatIndex, handWithDiscard)
   ) {
     actions.push({ type: "hu", tileId: pendingDiscard.tile.id });
   }
@@ -441,6 +613,9 @@ function applyClaimAction(
     }
     if (!meetsMinimumFan(score, state.rules)) {
       return { ok: false, error: "Claimed discard does not meet minimum fan", state };
+    }
+    if (hasMissingSuitTiles(state, seatIndex, [...player.handTiles, pendingDiscard.tile])) {
+      return { ok: false, error: "Must discard all missing-suit tiles before winning", state };
     }
 
     return {
@@ -767,6 +942,17 @@ function cloneState(state: MahjongGameState): MahjongGameState {
       }))
     })) as [PlayerState, PlayerState, PlayerState, PlayerState],
     wall: [...state.wall],
+    ...(state.exchangeThreeSelections
+      ? {
+          exchangeThreeSelections: Object.fromEntries(
+            Object.entries(state.exchangeThreeSelections).map(([seatIndex, tileIds]) => [
+              seatIndex,
+              [...(tileIds ?? [])]
+            ])
+          )
+        }
+      : {}),
+    ...(state.missingSuits ? { missingSuits: { ...state.missingSuits } } : {}),
     ...(state.pendingDiscard
       ? {
           pendingDiscard: {

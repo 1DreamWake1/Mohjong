@@ -8,7 +8,9 @@ const actionLabels: Record<Action["type"], string> = {
   gang: "杠",
   hu: "胡",
   pass: "过",
-  peng: "碰"
+  peng: "碰",
+  exchangeThree: "换三张",
+  chooseMissingSuit: "定缺"
 };
 
 type ActionBarProps = {

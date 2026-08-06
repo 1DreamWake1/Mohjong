@@ -7,6 +7,11 @@ import { calculateShanten } from "./handPotential.js";
 
 export function chooseBasicBotAction(state: MahjongGameState, seatIndex: number): Action {
   const legalActions = getLegalActions(state, seatIndex);
+  const openingAction = chooseSichuanOpeningAction(state, seatIndex, legalActions);
+  if (openingAction) {
+    return openingAction;
+  }
+
   const huAction = legalActions.find((action) => action.type === "hu");
 
   if (huAction) {
@@ -35,6 +40,48 @@ export function chooseBasicBotAction(state: MahjongGameState, seatIndex: number)
     discardActions.find((action) => action.tileId === discardTile.id) ??
     discardActions[0] ?? { type: "pass" }
   );
+}
+
+function chooseSichuanOpeningAction(
+  state: MahjongGameState,
+  seatIndex: number,
+  legalActions: readonly Action[]
+): Action | undefined {
+  const player = state.players[seatIndex];
+  if (!player) return undefined;
+
+  if (state.phase === "choose-missing-suit") {
+    const suitCounts = new Map<string, number>();
+    for (const tile of player.handTiles) {
+      suitCounts.set(tile.suit, (suitCounts.get(tile.suit) ?? 0) + 1);
+    }
+    return [...legalActions].sort(
+      (left, right) =>
+        (suitCounts.get(left.suit ?? "") ?? 0) - (suitCounts.get(right.suit ?? "") ?? 0)
+    )[0];
+  }
+
+  if (state.phase !== "exchange-three") return undefined;
+
+  const counts = countTiles(player.handTiles);
+  const exchangeActions = legalActions.filter((action) => action.type === "exchangeThree");
+  const candidates = exchangeActions.map((action) => {
+    const tiles = player.handTiles.filter((tile) => action.tileIds?.includes(tile.id));
+    const suit = tiles[0]?.suit ?? "";
+    return {
+      action,
+      keepScore: tiles.reduce(
+        (total, tile) => total + getTileKeepScore(tile, player.handTiles, counts),
+        0
+      ),
+      suitCount: player.handTiles.filter((tile) => tile.suit === suit).length
+    };
+  });
+
+  candidates.sort(
+    (left, right) => left.suitCount - right.suitCount || left.keepScore - right.keepScore
+  );
+  return candidates[0]?.action;
 }
 
 function chooseStrategicMeldAction(
@@ -99,7 +146,12 @@ function chooseDiscardTileForState(state: MahjongGameState, seatIndex: number): 
   const player = state.players[seatIndex];
   if (!player) throw new Error("Cannot choose discard for a missing player");
 
-  const candidates = player.handTiles.map((tile) => {
+  const missingSuit = state.missingSuits?.[seatIndex];
+  const missingSuitTiles = missingSuit
+    ? player.handTiles.filter((tile) => tile.suit === missingSuit)
+    : [];
+  const discardPool = missingSuitTiles.length > 0 ? missingSuitTiles : player.handTiles;
+  const candidates = discardPool.map((tile) => {
     const remainingTiles = player.handTiles.filter((candidate) => candidate.id !== tile.id);
     const shanten = calculateShanten(remainingTiles, state.rules, player.publicMelds.length);
     return {

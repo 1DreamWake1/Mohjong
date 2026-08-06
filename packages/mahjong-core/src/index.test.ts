@@ -17,6 +17,7 @@ import {
   getLegalActions,
   identifyFans,
   runBasicBotGame,
+  sichuanRuleConfig,
   shouldEndOnEmptyWall,
   simpleRuleConfig,
   standardRuleConfig,
@@ -28,8 +29,10 @@ describe("mahjong-core tiles and wall", () => {
   it("exposes stable versioned rule presets", () => {
     expect(simpleRuleConfig).toMatchObject({ name: "simple", version: 1 });
     expect(standardRuleConfig).toMatchObject({ name: "standard", version: 1 });
+    expect(sichuanRuleConfig).toMatchObject({ name: "sichuan", version: 1 });
     expect(getRulePreset("simple")).toBe(simpleRuleConfig);
     expect(getRulePreset("standard")).toBe(standardRuleConfig);
+    expect(getRulePreset("sichuan")).toBe(sichuanRuleConfig);
     expect(getRulePreset("unknown")).toBeUndefined();
     expect(simpleRuleConfig).toMatchObject({
       actions: { chi: false, gang: true, peng: true },
@@ -46,10 +49,16 @@ describe("mahjong-core tiles and wall", () => {
       winningPatterns: { sevenPairs: true }
     });
     expect(standardRuleConfig.tileSet).toBe("standard");
+    expect(sichuanRuleConfig).toMatchObject({
+      actions: { chi: false, gang: true, peng: true },
+      scoring: { fanLimit: 5, minimumFan: 1, mode: "sichuan" },
+      tileSet: "suited"
+    });
     expect(shouldEndOnEmptyWall(simpleRuleConfig)).toBe(true);
     expect(Object.isFrozen(simpleRuleConfig)).toBe(true);
     expect(Object.isFrozen(simpleRuleConfig.actions)).toBe(true);
     expect(Object.isFrozen(standardRuleConfig)).toBe(true);
+    expect(Object.isFrozen(sichuanRuleConfig)).toBe(true);
   });
 
   it("defines 34 tile types and builds a 136 tile wall", () => {
@@ -59,6 +68,85 @@ describe("mahjong-core tiles and wall", () => {
     expect(tileDefinitions).toHaveLength(34);
     expect(wall).toHaveLength(136);
     expect(uniqueIds.size).toBe(136);
+  });
+
+  it("builds a 108 tile suited wall for the Sichuan preset", () => {
+    const wall = createWall(sichuanRuleConfig);
+    expect(wall).toHaveLength(108);
+    expect(wall.every((tile) => tile.suit !== "winds" && tile.suit !== "dragons")).toBe(true);
+  });
+
+  it("runs the Sichuan exchange-three and missing-suit opening phases", () => {
+    let state = createInitialGame({ rules: sichuanRuleConfig, seed: 19 });
+    expect(state.phase).toBe("exchange-three");
+    expect(state.players.every((player) => player.handTiles.length === 13)).toBe(true);
+
+    for (let seatIndex = 0; seatIndex < 4; seatIndex += 1) {
+      const action = getLegalActions(state, seatIndex)[0];
+      expect(action?.type).toBe("exchangeThree");
+      if (!action) throw new Error("Expected an exchange-three action");
+      const result = applyAction(state, seatIndex, action);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error);
+      state = result.state;
+    }
+
+    expect(state.phase).toBe("choose-missing-suit");
+    for (let seatIndex = 0; seatIndex < 4; seatIndex += 1) {
+      const action = getLegalActions(state, seatIndex).find(
+        (candidate) => candidate.suit === "characters"
+      );
+      expect(action?.type).toBe("chooseMissingSuit");
+      if (!action) throw new Error("Expected a missing-suit action");
+      const result = applyAction(state, seatIndex, action);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(result.error);
+      state = result.state;
+    }
+
+    expect(state.phase).toBe("playing");
+    expect(state.players[0]?.handTiles).toHaveLength(14);
+    expect(createPlayerView(state, 0).missingSuit).toBe("characters");
+
+    const missingTiles =
+      state.players[0]?.handTiles.filter((tile) => tile.suit === "characters") ?? [];
+    if (missingTiles.length > 0) {
+      const discardActions = getLegalActions(state, 0).filter(
+        (action) => action.type === "discard"
+      );
+      expect(
+        discardActions.every((action) => missingTiles.some((tile) => tile.id === action.tileId))
+      ).toBe(true);
+      const botAction = chooseBasicBotAction(state, 0);
+      if (botAction.type === "discard") {
+        expect(missingTiles.some((tile) => tile.id === botAction.tileId)).toBe(true);
+      }
+      const offSuitTile = state.players[0]?.handTiles.find((tile) => tile.suit !== "characters");
+      if (offSuitTile) {
+        expect(applyAction(state, 0, { type: "discard", tileId: offSuitTile.id })).toMatchObject({
+          ok: false,
+          error: "Must discard the selected missing-suit tiles first"
+        });
+      }
+    }
+  });
+
+  it("lets four bots complete the Sichuan opening phases", () => {
+    let state = createInitialGame({ rules: sichuanRuleConfig, seed: 23 });
+    for (const phase of ["exchange-three", "choose-missing-suit"] as const) {
+      expect(state.phase).toBe(phase);
+      for (let seatIndex = 0; seatIndex < 4; seatIndex += 1) {
+        const action = chooseBasicBotAction(state, seatIndex);
+        expect(action.type).toBe(
+          phase === "exchange-three" ? "exchangeThree" : "chooseMissingSuit"
+        );
+        const result = applyAction(state, seatIndex, action);
+        expect(result.ok).toBe(true);
+        if (!result.ok) throw new Error(result.error);
+        state = result.state;
+      }
+    }
+    expect(state.phase).toBe("playing");
   });
 
   it("rejects invalid numeric rule configuration before creating a game", () => {

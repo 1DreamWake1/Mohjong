@@ -23,6 +23,7 @@ export {
   getRuleConfigValidationErrors,
   getRuleTileSet,
   normalizeRuleConfig,
+  sichuanRuleConfig,
   shouldEndOnEmptyWall,
   simpleRuleConfig,
   standardRuleConfig

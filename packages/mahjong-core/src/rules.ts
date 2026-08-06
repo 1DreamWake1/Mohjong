@@ -46,7 +46,7 @@ export type RuleConfig = {
   };
 };
 
-export type RulePresetName = "simple" | "standard";
+export type RulePresetName = "simple" | "standard" | "sichuan";
 
 const standardClaimPriority = Object.freeze({ chi: 1, gang: 2, hu: 3, peng: 2 });
 const standardEnabledFans = Object.freeze({
@@ -108,9 +108,38 @@ export const simpleRuleConfig: RuleConfig = Object.freeze({
   })
 });
 
+/** Base configuration for the Sichuan ruleset; opening phases are added later. */
+export const sichuanRuleConfig: RuleConfig = Object.freeze({
+  name: "sichuan",
+  version: 1,
+  actions: Object.freeze({ chi: false, gang: true, peng: true }),
+  claimPriority: standardClaimPriority,
+  enabledFans: Object.freeze({
+    ...standardEnabledFans,
+    pinfu: false,
+    riichi: false
+  }),
+  fanValues: Object.freeze({
+    ...standardFanValues,
+    pinfu: 0,
+    riichi: 0
+  }),
+  winningPatterns: Object.freeze({ sevenPairs: true }),
+  tileSet: "suited",
+  drawCondition: "wallEmpty",
+  scoring: Object.freeze({
+    basePoints: 10,
+    fanLimit: 5,
+    fanPointValue: 0,
+    minimumFan: 1,
+    mode: "sichuan"
+  })
+});
+
 const rulePresetByName: Readonly<Record<RulePresetName, RuleConfig>> = {
   simple: simpleRuleConfig,
-  standard: standardRuleConfig
+  standard: standardRuleConfig,
+  sichuan: sichuanRuleConfig
 };
 
 export function getRulePreset(name: string): RuleConfig | undefined {

@@ -21,14 +21,29 @@ export type DiscardPile = {
   tiles: TileInfo[];
 };
 
-export type GamePhase = "waiting" | "dealing" | "playing" | "ended";
+export type GamePhase =
+  | "waiting"
+  | "dealing"
+  | "exchange-three"
+  | "choose-missing-suit"
+  | "playing"
+  | "ended";
 
-export type PlayerActionType = "discard" | "chi" | "peng" | "gang" | "hu" | "pass";
+export type PlayerActionType =
+  | "discard"
+  | "chi"
+  | "peng"
+  | "gang"
+  | "hu"
+  | "pass"
+  | "exchangeThree"
+  | "chooseMissingSuit";
 
 export type Action = {
   type: PlayerActionType;
   tileId?: string;
   tileIds?: string[];
+  suit?: TileSuit;
 };
 
 export type GameEventMessage = {
@@ -69,7 +84,7 @@ export type GameLobbySeat = {
 export type GameLobbyRoom = {
   roomId: string;
   ownerUserId: number;
-  ruleName?: "simple" | "standard";
+  ruleName?: "simple" | "standard" | "sichuan";
   ruleVersion?: number;
   status: GameLobbyRoomStatus;
   seats: GameLobbySeat[];
@@ -78,7 +93,7 @@ export type GameLobbyRoom = {
 };
 
 export type CreateGameRoomRequest = {
-  ruleName?: "simple" | "standard";
+  ruleName?: "simple" | "standard" | "sichuan";
 };
 
 export type CreateGameRoomResponse = {
@@ -225,6 +240,7 @@ export type PlayerView = {
   currentTurn: number;
   availableActions: Action[];
   phase: GamePhase;
+  missingSuit?: Extract<TileSuit, "bamboo" | "characters" | "dots">;
   wallTileCount: number;
   eventMessages: GameEventMessage[];
   turnTimer?: TurnTimerInfo;
