@@ -310,7 +310,9 @@ export function GamePage(props: GamePageProps): JSX.Element {
                 {resultSummary.winTypeText ? <p>方式：{resultSummary.winTypeText}</p> : null}
                 {resultSummary.winningTileText ? <p>{resultSummary.winningTileText}</p> : null}
                 {resultSummary.fanText ? <p>{resultSummary.fanText}</p> : null}
-                {view.waitingTiles && view.waitingTiles.length > 0 ? (
+                {(!view.readyResults || view.readyResults.length === 0) &&
+                view.waitingTiles &&
+                view.waitingTiles.length > 0 ? (
                   <p>听牌：{view.waitingTiles.map((tile) => tile.label).join("、")}</p>
                 ) : null}
                 {view.readyResults?.map((ready) => (

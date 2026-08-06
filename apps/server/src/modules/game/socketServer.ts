@@ -171,12 +171,34 @@ function scheduleBots(input: {
   }
 
   const room = input.gameRoomService.getRoom(input.roomId);
-  if (!room || room.state.phase !== "playing") {
+  if (!room || room.state.phase === "ended") {
     return;
   }
 
+  const isOpeningPhase =
+    room.state.phase === "exchange-three" || room.state.phase === "choose-missing-suit";
+  const hasPendingOpeningBot = isOpeningPhase
+    ? room.state.players.some(
+        (player) =>
+          player.isBot &&
+          (room.state.phase === "exchange-three"
+            ? !room.state.exchangeThreeSelections?.[player.seatIndex]
+            : !room.state.missingSuits?.[player.seatIndex])
+      )
+    : false;
+
+  if (isOpeningPhase && !hasPendingOpeningBot) {
+    return;
+  }
+
+  if (isOpeningPhase) {
+    if (input.scheduledBotTimeoutsByRoomId.has(room.id)) {
+      return;
+    }
+  }
+
   const player = room.state.players[room.state.currentTurn];
-  if (!player?.isBot) {
+  if (!isOpeningPhase && !player?.isBot) {
     scheduleHumanTimeout(input);
     const latestSockets = input.activeSocketsByRoomId.get(input.roomId);
     if (latestSockets) {
@@ -206,7 +228,7 @@ function scheduleBots(input: {
     }
 
     const latestSockets = input.activeSocketsByRoomId.get(input.roomId);
-    if (latestRoom.state.phase !== "playing") {
+    if (latestRoom.state.phase === "ended") {
       if (latestSockets) {
         emitRoomStateToSockets({
           gameRoomService: input.gameRoomService,
@@ -219,7 +241,10 @@ function scheduleBots(input: {
     }
 
     const latestPlayer = latestRoom.state.players[latestRoom.state.currentTurn];
-    if (!latestPlayer?.isBot) {
+    const latestIsOpeningPhase =
+      latestRoom.state.phase === "exchange-three" ||
+      latestRoom.state.phase === "choose-missing-suit";
+    if (!latestIsOpeningPhase && !latestPlayer?.isBot) {
       if (latestSockets) {
         emitRoomStateToSockets({
           gameRoomService: input.gameRoomService,

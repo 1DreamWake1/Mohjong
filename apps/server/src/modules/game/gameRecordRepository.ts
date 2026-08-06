@@ -577,17 +577,15 @@ function parseReadyResults(value: unknown): GameReadyResult[] {
   if (!Array.isArray(value)) return [];
 
   return value.flatMap((entry): GameReadyResult[] => {
-    if (
-      !isRecord(entry) ||
-      typeof entry.seatIndex !== "number" ||
-      !Array.isArray(entry.waitingTiles)
-    ) {
+    if (!isRecord(entry) || !isSeatIndex(entry.seatIndex) || !Array.isArray(entry.waitingTiles)) {
       return [];
     }
     const waitingTiles = entry.waitingTiles.filter(isTileInfo);
     return waitingTiles.length > 0 &&
       typeof entry.maxFanTotal === "number" &&
-      typeof entry.maxPoints === "number"
+      Number.isFinite(entry.maxFanTotal) &&
+      typeof entry.maxPoints === "number" &&
+      Number.isFinite(entry.maxPoints)
       ? [
           {
             maxFanTotal: entry.maxFanTotal,
@@ -616,7 +614,7 @@ function parseWinnerResults(value: unknown): GameWinnerResult[] {
   if (!Array.isArray(value)) return [];
 
   return value.flatMap((entry): GameWinnerResult[] => {
-    if (!isRecord(entry) || typeof entry.winnerSeatIndex !== "number") return [];
+    if (!isRecord(entry) || !isSeatIndex(entry.winnerSeatIndex)) return [];
     const fans = Array.isArray(entry.fans)
       ? entry.fans.flatMap((fan) =>
           isRecord(fan) && typeof fan.name === "string" && typeof fan.value === "number"
@@ -704,6 +702,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+function isSeatIndex(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value < 4;
 }
 
 function isTileInfo(value: unknown): value is TileInfo {

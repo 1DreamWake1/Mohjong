@@ -1259,6 +1259,85 @@ describe("mahjong-core game reducer", () => {
     expect(createPlayerView(result.state, 0).gangPoints).toBe(6);
   });
 
+  it("does not charge a player who has already won for a later gang", () => {
+    const state = createInitialGame({ rules: sichuanRuleConfig, seed: 10 });
+    state.phase = "playing";
+    state.missingSuits = {};
+    state.currentTurn = 0;
+    state.wall = [createTile("m9", 0)];
+    state.players[1].hasWon = true;
+    state.wonSeatIndexes = [1];
+    state.players[0].handTiles = handFromCodes(["m1", "m1", "m1", "m1"]);
+
+    const gangAction = getLegalActions(state, 0).find((action) => action.type === "gang");
+    expect(gangAction).toBeDefined();
+    if (!gangAction) return;
+
+    const result = applyAction(state, 0, gangAction);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.state.gangScores).toEqual([4, 0, -2, -2]);
+  });
+
+  it("charges only the discarder for a Sichuan claimed gang", () => {
+    const state = createClaimScenario(
+      "m3",
+      {
+        1: ["m3", "m3", "m3", "m1", "m2", "m4", "m5", "p1", "p2", "p3", "s1", "s2", "s3"]
+      },
+      sichuanRuleConfig
+    );
+    state.phase = "playing";
+    state.missingSuits = {};
+    state.wall = [createTile("m9", 0)];
+    const discardTileId = state.players[0].handTiles[0]?.id;
+    if (!discardTileId) throw new Error("Expected a discard tile");
+
+    const discardResult = applyAction(state, 0, { type: "discard", tileId: discardTileId });
+    expect(discardResult.ok).toBe(true);
+    if (!discardResult.ok) return;
+
+    const gangAction = getLegalActions(discardResult.state, 1).find(
+      (action) => action.type === "gang"
+    );
+    expect(gangAction).toBeDefined();
+    if (!gangAction) return;
+
+    const gangResult = applyAction(discardResult.state, 1, gangAction);
+    expect(gangResult.ok).toBe(true);
+    if (!gangResult.ok) return;
+
+    expect(gangResult.state.gangScores).toEqual([-1, 1, 0, 0]);
+  });
+
+  it("settles Sichuan added gang points from all active opponents", () => {
+    const state = createInitialGame({ rules: sichuanRuleConfig, seed: 11 });
+    state.phase = "playing";
+    state.missingSuits = {};
+    state.currentTurn = 0;
+    state.wall = [createTile("m9", 0)];
+    state.players[0].handTiles = handFromCodes(["m1"]);
+    state.players[0].publicMelds = [
+      {
+        type: "peng",
+        ownerSeatIndex: 0,
+        tiles: handFromCodes(["m1", "m1", "m1"])
+      }
+    ];
+
+    const gangAction = getLegalActions(state, 0).find((action) => action.type === "gang");
+    expect(gangAction).toBeDefined();
+    if (!gangAction) return;
+
+    const result = applyAction(state, 0, gangAction);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.state.gangScores).toEqual([3, -1, -1, -1]);
+    expect(result.state.players[0].publicMelds[0]?.type).toBe("gang");
+  });
+
   it("allows added gang from an existing peng meld", () => {
     const state = createInitialGame({ seed: 9 });
     const pengTiles = handFromCodes(["red", "red", "red"]);
