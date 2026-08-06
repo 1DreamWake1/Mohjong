@@ -1004,6 +1004,10 @@ describe("mahjong-core game reducer", () => {
       winnerSeatIndex: 0,
       winType: "selfDraw"
     });
+    if (firstWin.state.winRecords?.[0]) {
+      firstWin.state.winRecords[0].winContext = "gangDraw";
+    }
+    expect(createPlayerView(firstWin.state, 0).winnerResults?.[0]?.winContext).toBe("gangDraw");
     expect(getLegalActions(firstWin.state, 0)).toEqual([]);
     expect(createPlayerView(firstWin.state, 0).hasWon).toBe(true);
 
@@ -1336,6 +1340,51 @@ describe("mahjong-core game reducer", () => {
 
     expect(result.state.gangScores).toEqual([3, -1, -1, -1]);
     expect(result.state.players[0].publicMelds[0]?.type).toBe("gang");
+  });
+
+  it("allows Sichuan rob-gang hu before an added gang is completed", () => {
+    const state = createInitialGame({ rules: sichuanRuleConfig, seed: 12 });
+    state.phase = "playing";
+    state.missingSuits = {};
+    state.currentTurn = 0;
+    state.wall = [createTile("m9", 0)];
+    state.players[0].handTiles = handFromCodes(["p8"]);
+    state.players[0].publicMelds = [
+      { type: "peng", ownerSeatIndex: 0, tiles: handFromCodes(["p8", "p8", "p8"]) }
+    ];
+    state.players[1].handTiles = handFromCodes([
+      "m2",
+      "m3",
+      "m4",
+      "m3",
+      "m4",
+      "m5",
+      "p4",
+      "p5",
+      "p6",
+      "s6",
+      "s7",
+      "s8",
+      "p8"
+    ]);
+
+    const gangAction = getLegalActions(state, 0).find((action) => action.type === "gang");
+    expect(gangAction).toBeDefined();
+    if (!gangAction) return;
+    const gangResult = applyAction(state, 0, gangAction);
+    expect(gangResult.ok).toBe(true);
+    if (!gangResult.ok) return;
+    expect(gangResult.state.pendingGang).toBeDefined();
+    expect(getLegalActions(gangResult.state, 1).map((action) => action.type)).toEqual([
+      "pass",
+      "hu"
+    ]);
+
+    const huResult = applyAction(gangResult.state, 1, { type: "hu" });
+    expect(huResult.ok).toBe(true);
+    if (!huResult.ok) return;
+    expect(huResult.state.winRecords?.[0]?.winContext).toBe("robGang");
+    expect(huResult.state.players[0].publicMelds[0]?.type).toBe("peng");
   });
 
   it("allows added gang from an existing peng meld", () => {

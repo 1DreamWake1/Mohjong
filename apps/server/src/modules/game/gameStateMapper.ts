@@ -91,6 +91,7 @@ export function createRoomPlayerView(input: {
             fanTotal: record.score.fanTotal,
             totalPoints: record.score.totalPoints,
             winType: record.winType,
+            ...(record.winContext ? { winContext: record.winContext } : {}),
             winnerSeatIndex: record.winnerSeatIndex,
             ...(record.winningTile ? { winningTile: record.winningTile } : {})
           }))

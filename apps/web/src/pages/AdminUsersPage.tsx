@@ -659,7 +659,16 @@ export function AdminUsersPage(props: AdminUsersPageProps): JSX.Element {
                     {selectedGame.result.winnerResults?.map((winner) => (
                       <p key={`${winner.winnerSeatIndex}-${winner.winningTile?.id ?? "unknown"}`}>
                         {winner.winnerSeatIndex + 1}号位
-                        {winner.winType === "selfDraw" ? "自摸" : "点炮"}：{winner.totalPoints}分，
+                        {winner.winContext === "gangDraw"
+                          ? "杠上花"
+                          : winner.winContext === "gangDiscard"
+                            ? "杠上炮"
+                            : winner.winContext === "robGang"
+                              ? "抢杠胡"
+                              : winner.winType === "selfDraw"
+                                ? "自摸"
+                                : "点炮"}
+                        ：{winner.totalPoints}分，
                         {winner.fanTotal}番
                       </p>
                     ))}

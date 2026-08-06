@@ -175,7 +175,8 @@ describe("game result snapshots", () => {
           totalPoints: 80
         },
         winnerSeatIndex: 1,
-        winType: "discard"
+        winType: "discard",
+        winContext: "robGang"
       }
     ];
     await repository.finishRecord({ roomId: "sichuan-0001", state });
@@ -187,7 +188,8 @@ describe("game result snapshots", () => {
         fanTotal: 2,
         totalPoints: 80,
         winnerSeatIndex: 1,
-        winType: "discard"
+        winType: "discard",
+        winContext: "robGang"
       }
     ]);
     expect(repository.getRecord("sichuan-0001")?.result?.gangScores).toEqual([6, -2, -2, -2]);

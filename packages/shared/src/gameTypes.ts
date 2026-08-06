@@ -58,6 +58,7 @@ export type GameScoreFan = {
 };
 
 export type WinType = "selfDraw" | "discard";
+export type WinContext = "gangDraw" | "gangDiscard" | "robGang";
 
 export type GameResultInfo = {
   endReason: "hu" | "draw";
@@ -65,6 +66,7 @@ export type GameResultInfo = {
   fanTotal: number;
   totalPoints: number;
   winType?: WinType;
+  winContext?: WinContext;
   winningTile?: TileInfo;
 };
 

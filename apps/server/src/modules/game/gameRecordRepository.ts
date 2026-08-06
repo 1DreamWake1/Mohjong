@@ -517,6 +517,7 @@ function createResultSnapshot(state: MahjongGameState): GameHistoryResultSnapsho
             fanTotal: record.score.fanTotal,
             totalPoints: record.score.totalPoints,
             winType: record.winType,
+            ...(record.winContext ? { winContext: record.winContext } : {}),
             winnerSeatIndex: record.winnerSeatIndex,
             ...(record.winningTile ? { winningTile: record.winningTile } : {})
           }))
@@ -623,6 +624,7 @@ function parseWinnerResults(value: unknown): GameWinnerResult[] {
         )
       : [];
     const winType = toWinType(readString(entry.winType));
+    const winContext = toWinContext(readString(entry.winContext));
     return [
       {
         endReason: "hu",
@@ -631,6 +633,7 @@ function parseWinnerResults(value: unknown): GameWinnerResult[] {
         totalPoints: typeof entry.totalPoints === "number" ? entry.totalPoints : 0,
         winnerSeatIndex: entry.winnerSeatIndex,
         ...(winType ? { winType } : {}),
+        ...(winContext ? { winContext } : {}),
         ...(isTileInfo(entry.winningTile) ? { winningTile: entry.winningTile } : {})
       }
     ];
@@ -694,6 +697,10 @@ function toResultEndReason(value: string | null): "hu" | "draw" | undefined {
 
 function toWinType(value: string | null): WinType | undefined {
   return value === "selfDraw" || value === "discard" ? value : undefined;
+}
+
+function toWinContext(value: string | null): "gangDraw" | "gangDiscard" | "robGang" | undefined {
+  return value === "gangDraw" || value === "gangDiscard" || value === "robGang" ? value : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
