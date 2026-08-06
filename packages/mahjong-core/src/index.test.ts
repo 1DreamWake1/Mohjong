@@ -969,6 +969,103 @@ describe("mahjong-core game reducer", () => {
     });
   });
 
+  it("keeps a Sichuan hand playing after each of the first three winners", () => {
+    const state = createInitialGame({ rules: sichuanRuleConfig, seed: 31 });
+    state.phase = "playing";
+    state.missingSuits = {};
+    state.wonSeatIndexes = [];
+    const winningHand = handFromCodes([
+      "m2",
+      "m3",
+      "m4",
+      "m3",
+      "m4",
+      "m5",
+      "p4",
+      "p5",
+      "p6",
+      "s6",
+      "s7",
+      "s8",
+      "p8",
+      "p8"
+    ]);
+
+    state.players[0].handTiles = [...winningHand];
+    state.currentTurn = 0;
+    const firstWin = applyAction(state, 0, { type: "hu" });
+    expect(firstWin.ok).toBe(true);
+    if (!firstWin.ok) throw new Error(firstWin.error);
+    expect(firstWin.state.phase).toBe("playing");
+    expect(firstWin.state.players[0].hasWon).toBe(true);
+    expect(firstWin.state.currentTurn).toBe(1);
+    expect(firstWin.state.winRecords).toHaveLength(1);
+    expect(firstWin.state.winRecords?.[0]).toMatchObject({
+      winnerSeatIndex: 0,
+      winType: "selfDraw"
+    });
+    expect(getLegalActions(firstWin.state, 0)).toEqual([]);
+    expect(createPlayerView(firstWin.state, 0).hasWon).toBe(true);
+
+    firstWin.state.players[1].handTiles = [...winningHand];
+    const secondWin = applyAction(firstWin.state, 1, { type: "hu" });
+    expect(secondWin.ok).toBe(true);
+    if (!secondWin.ok) throw new Error(secondWin.error);
+    expect(secondWin.state.phase).toBe("playing");
+    expect(secondWin.state.currentTurn).toBe(2);
+    expect(secondWin.state.winRecords).toHaveLength(2);
+    expect(secondWin.state.winRecords?.map((record) => record.winnerSeatIndex)).toEqual([0, 1]);
+
+    secondWin.state.players[2].handTiles = [...winningHand];
+    const thirdWin = applyAction(secondWin.state, 2, { type: "hu" });
+    expect(thirdWin.ok).toBe(true);
+    if (!thirdWin.ok) throw new Error(thirdWin.error);
+    expect(thirdWin.state.phase).toBe("ended");
+    expect(thirdWin.state.wonSeatIndexes).toEqual([0, 1, 2]);
+  });
+
+  it("allows multiple Sichuan winners to claim the same discard", () => {
+    const state = createClaimScenario(
+      "m3",
+      {
+        1: ["m2", "m4", "m3", "m4", "m5", "p4", "p5", "p6", "s6", "s7", "s8", "p8", "p8"],
+        2: ["m2", "m4", "m3", "m4", "m5", "p4", "p5", "p6", "s6", "s7", "s8", "p8", "p8"]
+      },
+      sichuanRuleConfig
+    );
+    state.phase = "playing";
+    state.missingSuits = {};
+    state.wonSeatIndexes = [];
+    state.wall = [createTile("m9", 0)];
+
+    const discardedTileId = state.players[0].handTiles[0]?.id;
+    if (!discardedTileId) throw new Error("Expected a discarded tile");
+    const discardResult = applyAction(state, 0, { type: "discard", tileId: discardedTileId });
+    expect(discardResult.ok).toBe(true);
+    if (!discardResult.ok) throw new Error(discardResult.error);
+    expect(discardResult.state.currentTurn).toBe(1);
+    expect(getLegalActions(discardResult.state, 1).map((action) => action.type)).toEqual([
+      "pass",
+      "hu"
+    ]);
+
+    const firstWin = applyAction(discardResult.state, 1, { type: "hu" });
+    expect(firstWin.ok).toBe(true);
+    if (!firstWin.ok) throw new Error(firstWin.error);
+    expect(firstWin.state.phase).toBe("playing");
+    expect(firstWin.state.currentTurn).toBe(2);
+    expect(getLegalActions(firstWin.state, 2).map((action) => action.type)).toEqual(["pass", "hu"]);
+
+    const secondWin = applyAction(firstWin.state, 2, { type: "hu" });
+    expect(secondWin.ok).toBe(true);
+    if (!secondWin.ok) throw new Error(secondWin.error);
+    expect(secondWin.state.phase).toBe("playing");
+    expect(secondWin.state.wonSeatIndexes).toEqual([1, 2]);
+    expect(secondWin.state.winRecords?.map((record) => record.winnerSeatIndex)).toEqual([1, 2]);
+    expect(secondWin.state.pendingDiscard).toBeUndefined();
+    expect(secondWin.state.currentTurn).toBe(3);
+  });
+
   it("only exposes and accepts hu when the hand meets the configured minimum fan", () => {
     const state = createInitialGame({
       rules: {

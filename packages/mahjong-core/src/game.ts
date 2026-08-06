@@ -19,6 +19,7 @@ export type PlayerState = {
   discardTiles: Tile[];
   publicMelds: MeldInfo[];
   isBot: boolean;
+  hasWon?: boolean;
   lastDrawnTileId?: string;
 };
 
@@ -29,6 +30,15 @@ export type PendingDiscard = {
   respondentSeatIndexes: [number, number, number];
   respondentCursor: number;
   passedSeatIndexes: number[];
+  huSeatIndexes?: number[];
+  huCursor?: number;
+};
+
+export type WinRecord = {
+  score: ScoreResult;
+  winnerSeatIndex: number;
+  winType: WinType;
+  winningTile?: Tile;
 };
 
 export type MahjongGameState = {
@@ -40,6 +50,8 @@ export type MahjongGameState = {
   rules: RuleConfig;
   exchangeThreeSelections?: Partial<Record<number, string[]>>;
   missingSuits?: Partial<Record<number, Extract<TileSuit, "bamboo" | "characters" | "dots">>>;
+  wonSeatIndexes?: number[];
+  winRecords?: WinRecord[];
   winnerSeatIndex?: number;
   winningTile?: Tile;
   winType?: WinType;
@@ -101,7 +113,8 @@ export function createInitialGame(options: CreateGameOptions = {}): MahjongGameS
     dealerSeatIndex: 0,
     phase: rules.name === "sichuan" ? "exchange-three" : "playing",
     rules,
-    ...(rules.name === "sichuan" ? { exchangeThreeSelections: {}, missingSuits: {} } : {})
+    ...(rules.name === "sichuan" ? { exchangeThreeSelections: {}, missingSuits: {} } : {}),
+    ...(rules.name === "sichuan" ? { wonSeatIndexes: [], winRecords: [] } : {})
   };
 }
 
@@ -115,6 +128,10 @@ export function getLegalActions(state: MahjongGameState, seatIndex: number): Act
   }
 
   if (state.phase !== "playing" || state.currentTurn !== seatIndex) {
+    return [];
+  }
+
+  if (getPlayer(state, seatIndex).hasWon) {
     return [];
   }
 
@@ -181,6 +198,10 @@ export function applyAction(
       player.lastDrawnTileId === undefined
         ? player.handTiles.at(-1)
         : player.handTiles.find((tile) => tile.id === player.lastDrawnTileId);
+    if (state.rules.name === "sichuan") {
+      return completeSichuanWin(state, seatIndex, winningTile, "selfDraw", score);
+    }
+
     return {
       ok: true,
       state: winningTile
@@ -266,9 +287,11 @@ export function createPlayerView(state: MahjongGameState, seatIndex: number): Pl
         handTileCount: otherPlayer.handTiles.length,
         isBot: otherPlayer.isBot,
         seatIndex: otherPlayer.seatIndex,
-        username: otherPlayer.username
+        username: otherPlayer.username,
+        ...(otherPlayer.hasWon ? { hasWon: true } : {})
       })),
     phase: state.phase,
+    ...(player.hasWon ? { hasWon: true } : {}),
     publicMelds: state.players.flatMap((meldPlayer) => meldPlayer.publicMelds),
     roomId: "core-game",
     seatIndex,
@@ -462,6 +485,96 @@ function isSichuanSuit(suit: TileSuit | undefined): suit is SichuanSuit {
   return suit === "characters" || suit === "dots" || suit === "bamboo";
 }
 
+function completeSichuanWin(
+  state: MahjongGameState,
+  seatIndex: number,
+  winningTile: Tile | undefined,
+  winType: WinType,
+  score: ScoreResult
+): ApplyActionResult {
+  const nextState = cloneState(state);
+  const player = getPlayer(nextState, seatIndex);
+  player.hasWon = true;
+  nextState.wonSeatIndexes = [...(nextState.wonSeatIndexes ?? []), seatIndex];
+  nextState.winnerSeatIndex ??= seatIndex;
+  if (winningTile) {
+    nextState.winningTile = winningTile;
+  } else {
+    delete nextState.winningTile;
+  }
+  nextState.winType = winType;
+  nextState.score = score;
+  appendWinRecord(nextState, seatIndex, winType, winningTile, score);
+  delete nextState.pendingDiscard;
+
+  if (nextState.wonSeatIndexes.length >= 3) {
+    nextState.phase = "ended";
+    nextState.endReason = "hu";
+    return { ok: true, state: nextState };
+  }
+
+  nextState.phase = "playing";
+  nextState.currentTurn = findNextActiveSeat(nextState, seatIndex);
+  drawOrEnd(nextState, nextState.currentTurn);
+  return { ok: true, state: nextState };
+}
+
+function completeSichuanDiscardWin(
+  state: MahjongGameState,
+  seatIndex: number,
+  winningTile: Tile,
+  score: ScoreResult
+): ApplyActionResult {
+  const nextState = cloneState(state);
+  const player = getPlayer(nextState, seatIndex);
+  player.hasWon = true;
+  nextState.wonSeatIndexes = [...(nextState.wonSeatIndexes ?? []), seatIndex];
+  nextState.winnerSeatIndex ??= seatIndex;
+  nextState.winningTile = winningTile;
+  nextState.winType = "discard";
+  nextState.score = score;
+  appendWinRecord(nextState, seatIndex, "discard", winningTile, score);
+
+  if (nextState.wonSeatIndexes.length >= 3) {
+    delete nextState.pendingDiscard;
+    nextState.phase = "ended";
+    nextState.endReason = "hu";
+    return { ok: true, state: nextState };
+  }
+
+  const pendingDiscard = nextState.pendingDiscard;
+  const nextHuCursor = (pendingDiscard?.huCursor ?? 0) + 1;
+  const nextHuSeat = pendingDiscard?.huSeatIndexes?.[nextHuCursor];
+  if (pendingDiscard && nextHuSeat !== undefined) {
+    pendingDiscard.huCursor = nextHuCursor;
+    nextState.currentTurn = nextHuSeat;
+    return { ok: true, state: nextState };
+  }
+
+  const fromSeatIndex = pendingDiscard?.fromSeatIndex ?? seatIndex;
+  delete nextState.pendingDiscard;
+  nextState.phase = "playing";
+  nextState.currentTurn = findNextActiveSeat(nextState, fromSeatIndex);
+  drawOrEnd(nextState, nextState.currentTurn);
+  return { ok: true, state: nextState };
+}
+
+function appendWinRecord(
+  state: MahjongGameState,
+  winnerSeatIndex: number,
+  winType: WinType,
+  winningTile: Tile | undefined,
+  score: ScoreResult
+): void {
+  const record: WinRecord = {
+    score,
+    winnerSeatIndex,
+    winType,
+    ...(winningTile ? { winningTile } : {})
+  };
+  state.winRecords = [...(state.winRecords ?? []), record];
+}
+
 function createPlayerState(
   seatIndex: number,
   options?: { isBot: boolean; username: string }
@@ -487,6 +600,17 @@ function openClaimWindow(state: MahjongGameState, tile: Tile, fromSeatIndex: num
     respondentCursor: 0,
     passedSeatIndexes: []
   };
+  if (state.rules.name === "sichuan") {
+    const huSeatIndexes = state.pendingDiscard.respondentSeatIndexes.filter((seatIndex) =>
+      getAvailableClaimActionsForSeat(state, seatIndex).some((action) => action.type === "hu")
+    );
+    if (huSeatIndexes.length > 0) {
+      state.pendingDiscard.huSeatIndexes = huSeatIndexes;
+      state.pendingDiscard.huCursor = 0;
+      state.currentTurn = huSeatIndexes[0] ?? nextSeatIndex;
+      return;
+    }
+  }
   const respondentSeatIndex = findBestRespondentSeatIndex(state);
   if (respondentSeatIndex === undefined) {
     delete state.pendingDiscard;
@@ -523,6 +647,9 @@ function getAvailableClaimActionsForSeat(state: MahjongGameState, seatIndex: num
   }
 
   const player = getPlayer(state, seatIndex);
+  if (player.hasWon) {
+    return [];
+  }
   const actions: Action[] = [];
   const handWithDiscard = [...player.handTiles, pendingDiscard.tile];
   const sameTiles = player.handTiles.filter((tile) => isSameTileType(tile, pendingDiscard.tile));
@@ -588,6 +715,18 @@ function applyClaimAction(
 
     nextPendingDiscard.passedSeatIndexes.push(seatIndex);
 
+    if (nextPendingDiscard.huSeatIndexes) {
+      const nextHuCursor = (nextPendingDiscard.huCursor ?? 0) + 1;
+      const nextHuSeat = nextPendingDiscard.huSeatIndexes[nextHuCursor];
+      if (nextHuSeat !== undefined) {
+        nextPendingDiscard.huCursor = nextHuCursor;
+        nextState.currentTurn = nextHuSeat;
+        return { ok: true, state: nextState };
+      }
+      delete nextPendingDiscard.huSeatIndexes;
+      delete nextPendingDiscard.huCursor;
+    }
+
     const nextRespondentSeatIndex = findBestRespondentSeatIndex(nextState);
 
     if (nextRespondentSeatIndex === undefined) {
@@ -616,6 +755,13 @@ function applyClaimAction(
     }
     if (hasMissingSuitTiles(state, seatIndex, [...player.handTiles, pendingDiscard.tile])) {
       return { ok: false, error: "Must discard all missing-suit tiles before winning", state };
+    }
+
+    if (state.rules.name === "sichuan") {
+      if (pendingDiscard.huSeatIndexes) {
+        return completeSichuanDiscardWin(state, seatIndex, pendingDiscard.tile, score);
+      }
+      return completeSichuanWin(state, seatIndex, pendingDiscard.tile, "discard", score);
     }
 
     return {
@@ -779,6 +925,10 @@ function findBestRespondentSeatIndex(state: MahjongGameState): number | undefine
     return undefined;
   }
 
+  if (pendingDiscard.huSeatIndexes) {
+    return pendingDiscard.huSeatIndexes[pendingDiscard.huCursor ?? 0];
+  }
+
   let bestSeatIndex: number | undefined;
   let bestPriority = 0;
 
@@ -864,6 +1014,17 @@ function drawOrEnd(state: MahjongGameState, seatIndex: number): void {
   }
 
   drawTileIntoHand(getPlayer(state, seatIndex), state.wall);
+}
+
+function findNextActiveSeat(state: MahjongGameState, fromSeatIndex: number): number {
+  for (let offset = 1; offset <= 4; offset += 1) {
+    const seatIndex = (fromSeatIndex + offset) % 4;
+    if (!getPlayer(state, seatIndex).hasWon) {
+      return seatIndex;
+    }
+  }
+
+  return fromSeatIndex;
 }
 
 function removeTilesFromHand(player: PlayerState, tileIds: readonly string[]): Tile[] | undefined {
@@ -953,6 +1114,16 @@ function cloneState(state: MahjongGameState): MahjongGameState {
         }
       : {}),
     ...(state.missingSuits ? { missingSuits: { ...state.missingSuits } } : {}),
+    ...(state.wonSeatIndexes ? { wonSeatIndexes: [...state.wonSeatIndexes] } : {}),
+    ...(state.winRecords
+      ? {
+          winRecords: state.winRecords.map((record) => ({
+            ...record,
+            score: { ...record.score, fans: record.score.fans.map((fan) => ({ ...fan })) },
+            ...(record.winningTile ? { winningTile: record.winningTile } : {})
+          }))
+        }
+      : {}),
     ...(state.pendingDiscard
       ? {
           pendingDiscard: {
@@ -962,7 +1133,13 @@ function cloneState(state: MahjongGameState): MahjongGameState {
               number,
               number
             ],
-            passedSeatIndexes: [...state.pendingDiscard.passedSeatIndexes]
+            passedSeatIndexes: [...state.pendingDiscard.passedSeatIndexes],
+            ...(state.pendingDiscard.huSeatIndexes
+              ? { huSeatIndexes: [...state.pendingDiscard.huSeatIndexes] }
+              : {}),
+            ...(state.pendingDiscard.huCursor !== undefined
+              ? { huCursor: state.pendingDiscard.huCursor }
+              : {})
           }
         }
       : {})

@@ -11,7 +11,8 @@ export type {
   ApplyActionResult,
   CreateGameOptions,
   MahjongGameState,
-  PlayerState
+  PlayerState,
+  WinRecord
 } from "./game.js";
 export { canHu, countTiles, isSevenPairs } from "./hand.js";
 export type { HuPattern, HuResult } from "./hand.js";

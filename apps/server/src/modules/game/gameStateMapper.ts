@@ -29,9 +29,11 @@ export function createRoomPlayerView(input: {
         handTileCount: otherPlayer.handTiles.length,
         isBot: otherPlayer.isBot,
         seatIndex: otherPlayer.seatIndex,
-        username: otherPlayer.username
+        username: otherPlayer.username,
+        ...(otherPlayer.hasWon ? { hasWon: true } : {})
       })),
     phase: input.state.phase,
+    ...(player.hasWon ? { hasWon: true } : {}),
     publicMelds: input.state.players.flatMap((meldPlayer) => meldPlayer.publicMelds),
     roomId: input.roomId,
     seatIndex: input.seatIndex,

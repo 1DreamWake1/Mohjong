@@ -223,6 +223,7 @@ export type OtherPlayerView = {
   username: string;
   handTileCount: number;
   isBot: boolean;
+  hasWon?: boolean;
 };
 
 export type TurnTimerInfo = { mode: "countdown"; deadlineAt: string } | { mode: "unlimited" };
@@ -240,6 +241,7 @@ export type PlayerView = {
   currentTurn: number;
   availableActions: Action[];
   phase: GamePhase;
+  hasWon?: boolean;
   missingSuit?: Extract<TileSuit, "bamboo" | "characters" | "dots">;
   wallTileCount: number;
   eventMessages: GameEventMessage[];

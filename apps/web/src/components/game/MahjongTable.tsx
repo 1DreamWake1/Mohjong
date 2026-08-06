@@ -157,6 +157,7 @@ export function MahjongTable(props: MahjongTableProps): JSX.Element {
               <strong>{player.username}</strong>
               <div className={styles.playerMeta}>
                 <span className={styles.seatBadge}>{seatNames[player.seatIndex]}</span>
+                {player.hasWon ? <span className={styles.seatBadge}>已胡</span> : null}
                 <HandTileCount count={player.handTileCount} />
                 <PlayerTurnTimer
                   active={player.seatIndex === props.view.currentTurn}
@@ -214,6 +215,7 @@ export function MahjongTable(props: MahjongTableProps): JSX.Element {
           <strong>{props.view.username}</strong>
           <div className={styles.playerMeta}>
             <span className={styles.seatBadge}>{seatNames[props.view.seatIndex]}位视角</span>
+            {props.view.hasWon ? <span className={styles.seatBadge}>已胡</span> : null}
             <HandTileCount count={props.view.handTiles.length} />
             <PlayerTurnTimer
               active={props.view.seatIndex === props.view.currentTurn}
