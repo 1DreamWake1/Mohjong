@@ -395,6 +395,15 @@ export function HistoryPage(props: HistoryPageProps): JSX.Element {
                       （最高{ready.maxFanTotal}番，{ready.maxPoints}分）
                     </p>
                   ))}
+                  {selectedRecord.result.settlementScores ? (
+                    <p>终局分数：{selectedRecord.result.settlementScores.join("、")}</p>
+                  ) : null}
+                  {selectedRecord.result.settlementTransfers?.map((transfer, index) => (
+                    <p key={`${transfer.fromSeatIndex}-${transfer.toSeatIndex}-${index}`}>
+                      {transfer.fromSeatIndex + 1}号位 → {transfer.toSeatIndex + 1}号位：
+                      {transfer.points}分（{transfer.reason === "flowerPig" ? "花猪" : "查叫"}）
+                    </p>
+                  ))}
                   {selectedRecord.result.winnerResults?.map((winner) => (
                     <p key={`${winner.winnerSeatIndex}-${winner.winningTile?.id ?? "unknown"}`}>
                       {winner.winnerSeatIndex + 1}号位

@@ -17,6 +17,7 @@ import {
   getLegalActions,
   identifyFans,
   runBasicBotGame,
+  settleSichuanDraw,
   sichuanRuleConfig,
   shouldEndOnEmptyWall,
   simpleRuleConfig,
@@ -1055,6 +1056,25 @@ describe("mahjong-core game reducer", () => {
     ]);
     state.players[0].hasWon = true;
     expect(createPlayerView(state, 0).waitingTiles).toBeUndefined();
+  });
+
+  it("settles Sichuan flower-pig transfers when the wall is exhausted", () => {
+    const state = createInitialGame({ rules: sichuanRuleConfig, seed: 42 });
+    state.phase = "ended";
+    state.endReason = "draw";
+    state.missingSuits = { 0: "characters", 1: "characters", 2: "dots", 3: "bamboo" };
+    state.players[0].handTiles = [createTile("m1", 0)];
+    state.players[1].handTiles = [createTile("p1", 0)];
+    state.players[2].handTiles = [createTile("s1", 0)];
+    state.players[3].handTiles = [createTile("m2", 0)];
+
+    settleSichuanDraw(state);
+
+    expect(state.settlementScores).toEqual([-12, 4, 4, 4]);
+    expect(state.settlementTransfers).toHaveLength(3);
+    expect(state.settlementTransfers?.every((transfer) => transfer.reason === "flowerPig")).toBe(
+      true
+    );
   });
 
   it("allows multiple Sichuan winners to claim the same discard", () => {

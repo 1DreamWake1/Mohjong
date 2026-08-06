@@ -656,6 +656,15 @@ export function AdminUsersPage(props: AdminUsersPageProps): JSX.Element {
                         （最高{ready.maxFanTotal}番，{ready.maxPoints}分）
                       </p>
                     ))}
+                    {selectedGame.result.settlementScores ? (
+                      <p>终局分数：{selectedGame.result.settlementScores.join("、")}</p>
+                    ) : null}
+                    {selectedGame.result.settlementTransfers?.map((transfer, index) => (
+                      <p key={`${transfer.fromSeatIndex}-${transfer.toSeatIndex}-${index}`}>
+                        {transfer.fromSeatIndex + 1}号位 → {transfer.toSeatIndex + 1}号位：
+                        {transfer.points}分（{transfer.reason === "flowerPig" ? "花猪" : "查叫"}）
+                      </p>
+                    ))}
                     {selectedGame.result.winnerResults?.map((winner) => (
                       <p key={`${winner.winnerSeatIndex}-${winner.winningTile?.id ?? "unknown"}`}>
                         {winner.winnerSeatIndex + 1}号位

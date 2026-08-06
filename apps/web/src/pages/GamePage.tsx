@@ -322,6 +322,15 @@ export function GamePage(props: GamePageProps): JSX.Element {
                     {ready.maxFanTotal}番，{ready.maxPoints}分）
                   </p>
                 ))}
+                {view.result?.settlementScores ? (
+                  <p>终局分数：{view.result.settlementScores.join("、")}</p>
+                ) : null}
+                {view.result?.settlementTransfers?.map((transfer, index) => (
+                  <p key={`${transfer.fromSeatIndex}-${transfer.toSeatIndex}-${index}`}>
+                    {transfer.fromSeatIndex + 1}号位 → {transfer.toSeatIndex + 1}号位：
+                    {transfer.points}分（{transfer.reason === "flowerPig" ? "花猪" : "查叫"}）
+                  </p>
+                ))}
               </div>
             ) : null}
             {view.winnerResults && view.winnerResults.length > 0 ? (

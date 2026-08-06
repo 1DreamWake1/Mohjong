@@ -6,6 +6,7 @@ export {
   createInitialGame,
   createPlayerView,
   getLegalActions,
+  settleSichuanDraw,
   getWaitingTileScores,
   getWaitingTiles
 } from "./game.js";

@@ -6,6 +6,7 @@ import type {
   AdminGameHistoryItem,
   GameHistoryResultSnapshot,
   GameReadyResult,
+  GameSettlementTransfer,
   GameWinnerResult,
   GameRecordEndReason,
   GameRecordStatus,
@@ -504,6 +505,10 @@ function createResultSnapshot(state: MahjongGameState): GameHistoryResultSnapsho
     ...(state.gangScores
       ? { gangScores: [...state.gangScores] as [number, number, number, number] }
       : {}),
+    ...(state.settlementScores
+      ? { settlementScores: [...state.settlementScores] as [number, number, number, number] }
+      : {}),
+    ...(state.settlementTransfers ? { settlementTransfers: [...state.settlementTransfers] } : {}),
     ...(readyResults.length > 0 ? { readyResults } : {}),
     ...(state.endReason ? { endReason: state.endReason } : {}),
     ...(state.winnerSeatIndex === undefined ? {} : { winnerSeatIndex: state.winnerSeatIndex }),
@@ -556,6 +561,8 @@ function parseResultSnapshot(value: string | null): GameHistoryResultSnapshot | 
     const winnerResults = parseWinnerResults(parsedValue.winnerResults);
     const gangScores = parseGangScores(parsedValue.gangScores);
     const readyResults = parseReadyResults(parsedValue.readyResults);
+    const settlementScores = parseGangScores(parsedValue.settlementScores);
+    const settlementTransfers = parseSettlementTransfers(parsedValue.settlementTransfers);
 
     return {
       fanTotal,
@@ -567,11 +574,34 @@ function parseResultSnapshot(value: string | null): GameHistoryResultSnapshot | 
       ...(winType ? { winType } : {}),
       ...(gangScores ? { gangScores } : {}),
       ...(readyResults.length > 0 ? { readyResults } : {}),
+      ...(settlementScores ? { settlementScores } : {}),
+      ...(settlementTransfers.length > 0 ? { settlementTransfers } : {}),
       ...(winnerResults.length > 0 ? { winnerResults } : {})
     };
   } catch {
     return undefined;
   }
+}
+
+function parseSettlementTransfers(value: unknown): GameSettlementTransfer[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry): GameSettlementTransfer[] => {
+    if (!isRecord(entry) || !isSeatIndex(entry.fromSeatIndex) || !isSeatIndex(entry.toSeatIndex)) {
+      return [];
+    }
+    const reason =
+      entry.reason === "ready" || entry.reason === "flowerPig" ? entry.reason : undefined;
+    return reason && typeof entry.points === "number" && Number.isFinite(entry.points)
+      ? [
+          {
+            fromSeatIndex: entry.fromSeatIndex,
+            points: entry.points,
+            reason,
+            toSeatIndex: entry.toSeatIndex
+          }
+        ]
+      : [];
+  });
 }
 
 function parseReadyResults(value: unknown): GameReadyResult[] {

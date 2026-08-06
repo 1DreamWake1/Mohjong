@@ -1,4 +1,12 @@
-import type { Action, MeldInfo, PlayerView, TileSuit, WinContext, WinType } from "@mahjong/shared";
+import type {
+  Action,
+  GameSettlementTransfer,
+  MeldInfo,
+  PlayerView,
+  TileSuit,
+  WinContext,
+  WinType
+} from "@mahjong/shared";
 
 import {
   getClaimPriorityConfig,
@@ -69,6 +77,8 @@ export type MahjongGameState = {
   wonSeatIndexes?: number[];
   winRecords?: WinRecord[];
   gangScores?: [number, number, number, number];
+  settlementScores?: [number, number, number, number];
+  settlementTransfers?: GameSettlementTransfer[];
   gangDrawSeatIndex?: number;
   gangDiscardSeatIndex?: number;
   winnerSeatIndex?: number;
@@ -341,6 +351,10 @@ export function createPlayerView(state: MahjongGameState, seatIndex: number): Pl
     phase: state.phase,
     ...(player.hasWon ? { hasWon: true } : {}),
     ...(state.gangScores ? { gangPoints: state.gangScores[seatIndex] } : {}),
+    ...(state.settlementScores
+      ? { settlementScores: [...state.settlementScores] as [number, number, number, number] }
+      : {}),
+    ...(state.settlementTransfers ? { settlementTransfers: [...state.settlementTransfers] } : {}),
     ...(readyResults.length > 0 ? { readyResults } : {}),
     publicMelds: state.players.flatMap((meldPlayer) => meldPlayer.publicMelds),
     roomId: "core-game",
@@ -379,6 +393,12 @@ export function createPlayerView(state: MahjongGameState, seatIndex: number): Pl
           ...(state.endReason === "hu" && state.winType ? { winType: state.winType } : {}),
           ...(state.endReason === "hu" && state.winningTile
             ? { winningTile: state.winningTile }
+            : {}),
+          ...(state.settlementScores
+            ? { settlementScores: [...state.settlementScores] as [number, number, number, number] }
+            : {}),
+          ...(state.settlementTransfers
+            ? { settlementTransfers: [...state.settlementTransfers] }
             : {})
         }
       : undefined;
@@ -1312,10 +1332,64 @@ function drawOrEnd(state: MahjongGameState, seatIndex: number): void {
   if (state.wall.length === 0 && shouldEndOnEmptyWall(state.rules)) {
     state.phase = "ended";
     state.endReason = "draw";
+    settleSichuanDraw(state);
     return;
   }
 
   drawTileIntoHand(getPlayer(state, seatIndex), state.wall);
+}
+
+export function settleSichuanDraw(state: MahjongGameState): void {
+  if (state.rules.name !== "sichuan") {
+    return;
+  }
+
+  const activePlayers = state.players.filter((player) => !player.hasWon);
+  const readyResults = activePlayers.flatMap((player) => {
+    const waitingScores = getWaitingTileScores(state, player.seatIndex);
+    return waitingScores.length > 0
+      ? [
+          {
+            seatIndex: player.seatIndex,
+            maxPoints: Math.max(...waitingScores.map((result) => result.totalPoints))
+          }
+        ]
+      : [];
+  });
+  const readyBySeat = new Map(readyResults.map((result) => [result.seatIndex, result.maxPoints]));
+  const flowerPigSeats = activePlayers
+    .filter((player) => hasMissingSuitTiles(state, player.seatIndex))
+    .map((player) => player.seatIndex);
+  const scores = state.gangScores ? [...state.gangScores] : [0, 0, 0, 0];
+  const transfers: GameSettlementTransfer[] = [];
+  const addTransfer = (
+    fromSeatIndex: number,
+    toSeatIndex: number,
+    points: number,
+    reason: GameSettlementTransfer["reason"]
+  ) => {
+    if (points <= 0 || fromSeatIndex === toSeatIndex) return;
+    scores[fromSeatIndex] = (scores[fromSeatIndex] ?? 0) - points;
+    scores[toSeatIndex] = (scores[toSeatIndex] ?? 0) + points;
+    transfers.push({ fromSeatIndex, points, reason, toSeatIndex });
+  };
+
+  for (const flowerPigSeat of flowerPigSeats) {
+    for (const player of activePlayers) {
+      if (!flowerPigSeats.includes(player.seatIndex)) {
+        addTransfer(flowerPigSeat, player.seatIndex, 4, "flowerPig");
+      }
+    }
+  }
+  for (const payer of activePlayers) {
+    if (flowerPigSeats.includes(payer.seatIndex) || readyBySeat.has(payer.seatIndex)) continue;
+    for (const [winnerSeatIndex, points] of readyBySeat) {
+      addTransfer(payer.seatIndex, winnerSeatIndex, points, "ready");
+    }
+  }
+
+  state.settlementScores = scores as [number, number, number, number];
+  state.settlementTransfers = transfers;
 }
 
 function findNextActiveSeat(state: MahjongGameState, fromSeatIndex: number): number {
@@ -1420,6 +1494,10 @@ function cloneState(state: MahjongGameState): MahjongGameState {
     ...(state.gangScores
       ? { gangScores: [...state.gangScores] as [number, number, number, number] }
       : {}),
+    ...(state.settlementScores
+      ? { settlementScores: [...state.settlementScores] as [number, number, number, number] }
+      : {}),
+    ...(state.settlementTransfers ? { settlementTransfers: [...state.settlementTransfers] } : {}),
     ...(state.gangDrawSeatIndex === undefined
       ? {}
       : { gangDrawSeatIndex: state.gangDrawSeatIndex }),

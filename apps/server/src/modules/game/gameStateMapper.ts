@@ -61,6 +61,12 @@ export function createRoomPlayerView(input: {
     phase: input.state.phase,
     ...(player.hasWon ? { hasWon: true } : {}),
     ...(input.state.gangScores ? { gangPoints: input.state.gangScores[input.seatIndex] } : {}),
+    ...(input.state.settlementScores
+      ? { settlementScores: [...input.state.settlementScores] as [number, number, number, number] }
+      : {}),
+    ...(input.state.settlementTransfers
+      ? { settlementTransfers: [...input.state.settlementTransfers] }
+      : {}),
     ...(readyResults.length > 0 ? { readyResults } : {}),
     publicMelds: input.state.players.flatMap((meldPlayer) => meldPlayer.publicMelds),
     roomId: input.roomId,
@@ -111,6 +117,19 @@ export function createRoomPlayerView(input: {
             : {}),
           ...(input.state.endReason === "hu" && input.state.winningTile
             ? { winningTile: input.state.winningTile }
+            : {}),
+          ...(input.state.settlementScores
+            ? {
+                settlementScores: [...input.state.settlementScores] as [
+                  number,
+                  number,
+                  number,
+                  number
+                ]
+              }
+            : {}),
+          ...(input.state.settlementTransfers
+            ? { settlementTransfers: [...input.state.settlementTransfers] }
             : {})
         }
       : undefined;

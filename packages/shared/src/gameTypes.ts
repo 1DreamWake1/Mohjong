@@ -68,6 +68,8 @@ export type GameResultInfo = {
   winType?: WinType;
   winContext?: WinContext;
   winningTile?: TileInfo;
+  settlementScores?: [number, number, number, number];
+  settlementTransfers?: GameSettlementTransfer[];
 };
 
 export type GameWinnerResult = GameResultInfo & {
@@ -79,6 +81,13 @@ export type GameReadyResult = {
   maxPoints: number;
   seatIndex: number;
   waitingTiles: TileInfo[];
+};
+
+export type GameSettlementTransfer = {
+  fromSeatIndex: number;
+  points: number;
+  reason: "ready" | "flowerPig";
+  toSeatIndex: number;
 };
 
 export type GameRecordStatus = "playing" | "ended";
@@ -167,6 +176,8 @@ export type GameHistoryResultSnapshot = {
   winningTile?: TileInfo;
   winType?: WinType;
   winnerResults?: GameWinnerResult[];
+  settlementScores?: [number, number, number, number];
+  settlementTransfers?: GameSettlementTransfer[];
 };
 
 export type GameHistoryEvent = GameEventMessage & {
@@ -269,4 +280,6 @@ export type PlayerView = {
   waitingTiles?: TileInfo[];
   winnerResults?: GameWinnerResult[];
   winnerSeatIndex?: number;
+  settlementScores?: [number, number, number, number];
+  settlementTransfers?: GameSettlementTransfer[];
 };
