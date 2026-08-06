@@ -8,8 +8,28 @@
 - `server` 容器运行 Fastify、Socket.IO 和 Prisma。
 - SQLite 位于 Docker 命名卷 `mahjong-data`，备份位于 `mahjong-backups`，均不随容器删除。
 - Server 不发布宿主机端口，只能由 Web 容器访问。
-- 当前不能启动多个 Server 副本。
+- 默认 SQLite 模式不支持多个 Server 副本；使用 PostgreSQL + Redis 扩展配置后支持多实例广播和动作锁。
 - `NODE_ENV=production` 时 Server 强制校验 `AUTH_TOKEN_SECRET`（≥32 字符）和 `DATABASE_URL`，不合规直接拒绝启动。
+
+### PostgreSQL、Redis 与多实例扩展
+
+默认 Compose 仍使用 SQLite，适合单 Server 实例。仓库同时提供 `prisma/schema.postgresql.prisma`、PostgreSQL/Redis Compose 服务和 Socket.IO Redis 适配器。
+
+```bash
+POSTGRES_PASSWORD='change-this-password' \
+DATABASE_URL='postgresql://mahjong:change-this-password@postgres:5432/mahjong' \
+REDIS_URL='redis://redis:6379' \
+docker compose --profile scale up -d --build
+```
+
+PostgreSQL 扩展部署使用 `prisma db push` 同步当前 schema，不使用 SQLite migration 目录。构建 Server 镜像时指定 PostgreSQL Prisma schema：
+
+```bash
+docker build --build-arg PRISMA_SCHEMA=prisma/schema.postgresql.prisma \
+  -f apps/server/Dockerfile -t mahjong-server:postgres .
+```
+
+多实例必须共用 PostgreSQL 和 Redis，并设置相同的 `REDIS_URL`。Redis 负责 Socket.IO 跨实例广播和房间动作锁；房间恢复仍以数据库 recovery snapshot 为准。SQLite 备份脚本只适用于 SQLite，PostgreSQL 应使用 `pg_dump` 或云数据库备份。
 
 ## 2. 准备配置
 

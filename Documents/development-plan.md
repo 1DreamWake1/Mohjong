@@ -199,6 +199,18 @@
 
 阶段 22 验收结论：四川规则的核心结算参数已配置化，并提供可选的 v2 赛事预设；旧 v1 预设和其他规则保持兼容。
 
+### 阶段 23：PostgreSQL、Redis 与并发基础设施
+
+状态：基础接入完成。
+
+- 新增 PostgreSQL Prisma schema 和 PostgreSQL 版容器构建参数，SQLite 默认开发链路保持不变。
+- Compose 增加 `scale` profile，提供 PostgreSQL 和 Redis 服务；生产配置接受 PostgreSQL URL。
+- Socket.IO 可通过 `REDIS_URL` 启用跨实例广播，房间动作使用 Redis 分布式锁并保留进程内串行兜底。
+- 增加断线恢复所需的 Redis 连接关闭流程、动作锁超时保护和并发锁测试。
+- 部署文档补充 PostgreSQL、Redis、多实例构建和备份边界。
+
+阶段 23 剩余：将活动房间状态从单实例内存完全迁移到 Redis/数据库，并补充多实例端到端故障演练；当前版本仍要求同一房间请求具备粘性路由或在恢复快照基础上重新加载。
+
 ### 后续评估
 
 阶段 22 完成后继续推进：

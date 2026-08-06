@@ -1,0 +1,50 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  passwordHash String
+  role         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  gameRecords  GameRecord[]
+}
+
+model GameRecord {
+  id               Int      @id @default(autoincrement())
+  roomId           String   @unique
+  playerUserId     Int?
+  humanSeatIndex   Int
+  ruleName         String
+  ruleVersion      Int      @default(1)
+  status           String
+  startedAt        DateTime @default(now())
+  endedAt          DateTime?
+  endReason        String?
+  winnerSeatIndex  Int?
+  winType          String?
+  winningTile      String?
+  fanTotal         Int?
+  totalPoints      Int?
+  resultSnapshot   String?
+  recoverySnapshot String?
+  updatedAt        DateTime @updatedAt
+  player           User?    @relation(fields: [playerUserId], references: [id], onDelete: SetNull)
+  events           GameEvent[]
+}
+
+model GameEvent {
+  id            Int        @id @default(autoincrement())
+  recordId      Int
+  message       String
+  stateSnapshot String?
+  createdAt     DateTime   @default(now())
+  record        GameRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+}

@@ -169,7 +169,8 @@ export async function createApp(
     gameRoomService,
     playerConnectionRegistry,
     socketActionRateLimiter,
-    socketConnectionRateLimiter
+    socketConnectionRateLimiter,
+    ...(env.redisUrl ? { redisUrl: env.redisUrl } : {})
   });
 
   app.addHook("onClose", async () => {

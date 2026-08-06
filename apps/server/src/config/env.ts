@@ -9,6 +9,7 @@ export type ServerEnv = {
   loginRateLimitMax: number;
   loginRateLimitWindowMs: number;
   port: number;
+  redisUrl: string | undefined;
   shutdownTimeoutMs: number;
   socketActionRateLimitMax: number;
   socketActionRateLimitWindowMs: number;
@@ -92,8 +93,14 @@ export function readEnv(): ServerEnv {
     }
 
     const databaseUrl = process.env.DATABASE_URL ?? "";
-    if (!databaseUrl.startsWith("file:/")) {
-      throw new Error("DATABASE_URL must be an absolute file: path in production");
+    if (
+      !databaseUrl.startsWith("file:/") &&
+      !databaseUrl.startsWith("postgres://") &&
+      !databaseUrl.startsWith("postgresql://")
+    ) {
+      throw new Error(
+        "DATABASE_URL must be an absolute file: path or PostgreSQL URL in production"
+      );
     }
   }
 
@@ -105,6 +112,7 @@ export function readEnv(): ServerEnv {
     loginRateLimitMax: readNumber("LOGIN_RATE_LIMIT_MAX", 10),
     loginRateLimitWindowMs: readNumber("LOGIN_RATE_LIMIT_WINDOW_MS", 60_000),
     port: readNumber("PORT", 3000),
+    redisUrl: process.env.REDIS_URL?.trim() || undefined,
     shutdownTimeoutMs: readNumber("SHUTDOWN_TIMEOUT_MS", 10_000),
     socketActionRateLimitMax: readNumber("SOCKET_ACTION_RATE_LIMIT_MAX", 30),
     socketActionRateLimitWindowMs: readNumber("SOCKET_ACTION_RATE_LIMIT_WINDOW_MS", 10_000),

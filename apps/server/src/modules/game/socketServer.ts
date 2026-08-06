@@ -1,11 +1,14 @@
 import type { AuthUser, ClientToServerEvents, ServerToClientEvents } from "@mahjong/shared";
 import type { FastifyInstance } from "fastify";
 import { Server, type Socket } from "socket.io";
+import { createAdapter } from "@socket.io/redis-adapter";
+import { createClient } from "redis";
 
 import type { AuthService } from "../auth/authService.js";
 import { createUnlimitedRateLimiter, type RateLimiter } from "../../security/rateLimiter.js";
 import { createGameLobbyService, type GameLobbyService } from "./gameLobbyService.js";
 import { createGameRoomService, type GameRoomService } from "./gameRoomService.js";
+import { createRoomCoordinator, type RoomCoordinator } from "./roomCoordinator.js";
 import {
   createPlayerConnectionRegistry,
   type PlayerConnectionRegistry
@@ -349,6 +352,8 @@ export function registerGameSocketServer(input: {
   playerConnectionRegistry?: PlayerConnectionRegistry;
   socketActionRateLimiter?: RateLimiter;
   socketConnectionRateLimiter?: RateLimiter;
+  redisUrl?: string;
+  roomCoordinator?: RoomCoordinator;
 }): {
   io: Server<ClientToServerEvents, ServerToClientEvents>;
   stop: () => Promise<void>;
@@ -358,11 +363,39 @@ export function registerGameSocketServer(input: {
       origin: input.corsOrigins && input.corsOrigins.length > 0 ? input.corsOrigins : false
     }
   });
+  type RedisClient = ReturnType<typeof createClient>;
+  let redisClients: [RedisClient, RedisClient] | undefined;
+  const redisReady = input.redisUrl
+    ? (async () => {
+        const pubClient = createClient({ url: input.redisUrl! });
+        const subClient = pubClient.duplicate();
+        pubClient.on("error", () => undefined);
+        subClient.on("error", () => undefined);
+        try {
+          await Promise.all([pubClient.connect(), subClient.connect()]);
+          redisClients = [pubClient, subClient];
+          io.adapter(
+            createAdapter(
+              pubClient as Parameters<typeof createAdapter>[0],
+              subClient as Parameters<typeof createAdapter>[1]
+            )
+          );
+        } catch {
+          await Promise.all([
+            Promise.resolve(pubClient.disconnect()),
+            Promise.resolve(subClient.disconnect())
+          ]);
+        }
+      })()
+    : Promise.resolve();
   const socketConnectionRateLimiter =
     input.socketConnectionRateLimiter ?? createUnlimitedRateLimiter();
   const socketActionRateLimiter = input.socketActionRateLimiter ?? createUnlimitedRateLimiter();
   const gameLobbyService = input.gameLobbyService ?? createGameLobbyService();
   const gameRoomService = input.gameRoomService ?? createGameRoomService();
+  const roomCoordinator =
+    input.roomCoordinator ??
+    createRoomCoordinator(input.redisUrl ? { redisUrl: input.redisUrl } : {});
   const playerConnectionRegistry =
     input.playerConnectionRegistry ?? createPlayerConnectionRegistry();
   const activeSocketsByRoomId = new Map<string, Set<GameSocket>>();
@@ -585,7 +618,7 @@ export function registerGameSocketServer(input: {
       emitLatestRoomEvent(gameSocket, room);
     });
 
-    gameSocket.on("game:action", (payload) => {
+    gameSocket.on("game:action", async (payload) => {
       const accessError = getGameSocketAccessError(user, "action");
       if (accessError) {
         gameSocket.emit("game:error", { message: accessError });
@@ -598,7 +631,12 @@ export function registerGameSocketServer(input: {
         return;
       }
 
-      const result = gameRoomService.applyHumanAction(user, payload.action);
+      const activeRoom = gameRoomService.getRoomForUser(user);
+      const result = activeRoom
+        ? await roomCoordinator.runExclusive(activeRoom.id, async () =>
+            gameRoomService.applyHumanAction(user, payload.action)
+          )
+        : null;
       if (!result) {
         gameSocket.emit("game:error", { message: "No active game room" });
         return;
@@ -718,6 +756,11 @@ export function registerGameSocketServer(input: {
     await new Promise<void>((resolve) => {
       io.close(() => resolve());
     });
+    await redisReady;
+    if (redisClients) {
+      await Promise.all(redisClients.map((client) => client.quit().catch(() => undefined)));
+    }
+    if (!input.roomCoordinator) await roomCoordinator.close();
   }
 
   return { io, stop };

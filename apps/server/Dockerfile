@@ -8,6 +8,7 @@ RUN apt-get update \
 WORKDIR /app
 
 FROM base AS build
+ARG PRISMA_SCHEMA=prisma/schema.prisma
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.json tsconfig.base.json ./
 COPY apps/server/package.json apps/server/tsconfig.json ./apps/server/
 COPY packages/shared/package.json packages/shared/tsconfig.json ./packages/shared/
@@ -17,16 +18,17 @@ RUN pnpm install --frozen-lockfile
 COPY apps/server/src ./apps/server/src
 COPY packages/shared/src ./packages/shared/src
 COPY packages/mahjong-core/src ./packages/mahjong-core/src
-RUN pnpm prisma:generate && pnpm --filter server... build
+RUN pnpm prisma:generate --schema ./${PRISMA_SCHEMA} && pnpm --filter server... build
 
 FROM base AS production-dependencies
+ARG PRISMA_SCHEMA=prisma/schema.prisma
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/server/package.json ./apps/server/package.json
 COPY packages/shared/package.json ./packages/shared/package.json
 COPY packages/mahjong-core/package.json ./packages/mahjong-core/package.json
 COPY prisma ./prisma
 RUN pnpm install --prod --frozen-lockfile \
-  && pnpm prisma generate --schema ./prisma/schema.prisma
+  && pnpm prisma generate --schema ./${PRISMA_SCHEMA}
 
 FROM node:22.22.0-bookworm-slim AS runtime
 ENV NODE_ENV=production
