@@ -21,6 +21,7 @@ export type RuleConfig = {
     sevenPairs: boolean;
     tanyao: boolean;
     toitoi: boolean;
+    root?: boolean;
   };
   fanValues: {
     chinitsu: number;
@@ -31,6 +32,7 @@ export type RuleConfig = {
     sevenPairs: number;
     tanyao: number;
     toitoi: number;
+    root?: number;
   };
   winningPatterns: {
     sevenPairs: boolean;
@@ -44,9 +46,22 @@ export type RuleConfig = {
     minimumFan: number;
     mode: "standard" | "sichuan";
   };
+  sichuan?: SichuanRuleOptions;
 };
 
-export type RulePresetName = "simple" | "standard" | "sichuan";
+export type SichuanRuleOptions = {
+  root: { enabled: boolean; fanValue: number };
+  gangPoints: { concealed: number; added: number; discard: number };
+  settlement: {
+    flowerPigPoints: number;
+    readyPayment: "maxPoints" | "fixed";
+    readyFixedPoints: number;
+    skipFlowerPigReadyPayment: boolean;
+    winPayment: "selfDrawAll" | "discardPayer";
+  };
+};
+
+export type RulePresetName = "simple" | "standard" | "sichuan" | "sichuan-tournament";
 
 const standardClaimPriority = Object.freeze({ chi: 1, gang: 2, hu: 3, peng: 2 });
 const standardEnabledFans = Object.freeze({
@@ -68,6 +83,18 @@ const standardFanValues = Object.freeze({
   sevenPairs: 2,
   tanyao: 1,
   toitoi: 2
+});
+
+const defaultSichuanOptions: SichuanRuleOptions = Object.freeze({
+  root: Object.freeze({ enabled: true, fanValue: 1 }),
+  gangPoints: Object.freeze({ concealed: 2, added: 1, discard: 1 }),
+  settlement: Object.freeze({
+    flowerPigPoints: 4,
+    readyPayment: "maxPoints" as const,
+    readyFixedPoints: 4,
+    skipFlowerPigReadyPayment: true,
+    winPayment: "selfDrawAll" as const
+  })
 });
 
 export const standardRuleConfig: RuleConfig = Object.freeze({
@@ -117,12 +144,14 @@ export const sichuanRuleConfig: RuleConfig = Object.freeze({
   enabledFans: Object.freeze({
     ...standardEnabledFans,
     pinfu: false,
-    riichi: false
+    riichi: false,
+    root: true
   }),
   fanValues: Object.freeze({
     ...standardFanValues,
     pinfu: 0,
-    riichi: 0
+    riichi: 0,
+    root: 1
   }),
   winningPatterns: Object.freeze({ sevenPairs: true }),
   tileSet: "suited",
@@ -133,14 +162,35 @@ export const sichuanRuleConfig: RuleConfig = Object.freeze({
     fanPointValue: 0,
     minimumFan: 1,
     mode: "sichuan"
+  }),
+  sichuan: defaultSichuanOptions
+});
+
+/** Competitive preset with explicit versioned Sichuan settlement parameters. */
+export const sichuanTournamentRuleConfig: RuleConfig = Object.freeze({
+  ...sichuanRuleConfig,
+  name: "sichuan-tournament",
+  version: 2,
+  sichuan: Object.freeze({
+    ...defaultSichuanOptions,
+    settlement: Object.freeze({
+      ...defaultSichuanOptions.settlement,
+      readyPayment: "fixed",
+      readyFixedPoints: 4
+    })
   })
 });
 
 const rulePresetByName: Readonly<Record<RulePresetName, RuleConfig>> = {
   simple: simpleRuleConfig,
   standard: standardRuleConfig,
-  sichuan: sichuanRuleConfig
+  sichuan: sichuanRuleConfig,
+  "sichuan-tournament": sichuanTournamentRuleConfig
 };
+
+export function getSichuanRuleOptions(rules: RuleConfig): SichuanRuleOptions {
+  return rules.sichuan ?? defaultSichuanOptions;
+}
 
 export function getRulePreset(name: string): RuleConfig | undefined {
   return rulePresetByName[name as RulePresetName];
@@ -254,6 +304,20 @@ export function getRuleConfigValidationErrors(rules: RuleConfig): string[] {
     errors.push("Scoring minimum fan must be a non-negative integer");
   }
 
+  if (rules.sichuan) {
+    const { root, gangPoints, settlement } = rules.sichuan;
+    if (!Number.isFinite(root.fanValue) || root.fanValue < 0)
+      errors.push("Sichuan root fan value must be non-negative");
+    for (const [name, value] of Object.entries(gangPoints)) {
+      if (!Number.isFinite(value) || value < 0)
+        errors.push(`Sichuan gang points for ${name} must be non-negative`);
+    }
+    if (!Number.isFinite(settlement.flowerPigPoints) || settlement.flowerPigPoints < 0)
+      errors.push("Sichuan flower-pig points must be non-negative");
+    if (!Number.isFinite(settlement.readyFixedPoints) || settlement.readyFixedPoints < 0)
+      errors.push("Sichuan fixed ready points must be non-negative");
+  }
+
   return errors;
 }
 
@@ -276,6 +340,7 @@ export function normalizeRuleConfig(rules: RuleConfig): RuleConfig {
     drawCondition: "wallEmpty",
     scoring: getScoringConfig(rules),
     tileSet: getRuleTileSet(rules),
+    ...(rules.sichuan ? { sichuan: rules.sichuan } : {}),
     winningPatterns: { sevenPairs: allowsSevenPairs(rules) }
   };
 }

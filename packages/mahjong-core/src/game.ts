@@ -12,6 +12,7 @@ import {
   getClaimPriorityConfig,
   getRuleConfigValidationErrors,
   getRuleActions,
+  getSichuanRuleOptions,
   shouldEndOnEmptyWall,
   standardRuleConfig,
   type RuleConfig
@@ -127,7 +128,7 @@ export function createInitialGame(options: CreateGameOptions = {}): MahjongGameS
     }
   }
 
-  if (rules.name !== "sichuan") {
+  if (!rules.name.startsWith("sichuan")) {
     drawTileIntoHand(players[0], wall);
   }
 
@@ -141,10 +142,10 @@ export function createInitialGame(options: CreateGameOptions = {}): MahjongGameS
     wall,
     currentTurn: 0,
     dealerSeatIndex: 0,
-    phase: rules.name === "sichuan" ? "exchange-three" : "playing",
+    phase: rules.name.startsWith("sichuan") ? "exchange-three" : "playing",
     rules,
-    ...(rules.name === "sichuan" ? { exchangeThreeSelections: {}, missingSuits: {} } : {}),
-    ...(rules.name === "sichuan"
+    ...(rules.name.startsWith("sichuan") ? { exchangeThreeSelections: {}, missingSuits: {} } : {}),
+    ...(rules.name.startsWith("sichuan")
       ? {
           gangScores: [0, 0, 0, 0] as [number, number, number, number],
           wonSeatIndexes: [],
@@ -242,7 +243,7 @@ export function applyAction(
       player.lastDrawnTileId === undefined
         ? player.handTiles.at(-1)
         : player.handTiles.find((tile) => tile.id === player.lastDrawnTileId);
-    if (state.rules.name === "sichuan") {
+    if (state.rules.name.startsWith("sichuan")) {
       return completeSichuanWin(
         state,
         seatIndex,
@@ -413,7 +414,7 @@ export function createPlayerView(state: MahjongGameState, seatIndex: number): Pl
 function getReadyResults(
   state: MahjongGameState
 ): Array<{ maxFanTotal: number; maxPoints: number; seatIndex: number; waitingTiles: Tile[] }> {
-  if (state.phase !== "ended" || state.rules.name !== "sichuan") {
+  if (state.phase !== "ended" || !state.rules.name.startsWith("sichuan")) {
     return [];
   }
 
@@ -446,7 +447,7 @@ export function getWaitingTileScores(
   state: MahjongGameState,
   seatIndex: number
 ): WaitingTileScore[] {
-  if (state.phase !== "ended" || state.rules.name !== "sichuan") {
+  if (state.phase !== "ended" || !state.rules.name.startsWith("sichuan")) {
     return [];
   }
 
@@ -649,6 +650,9 @@ function completeSichuanWin(
   nextState.winType = winType;
   nextState.score = score;
   appendWinRecord(nextState, seatIndex, winType, winningTile, score, winContext);
+  if (state.rules.name.startsWith("sichuan")) {
+    settleSichuanWin(nextState, seatIndex, score.totalPoints, "selfDraw");
+  }
   if (winContext) delete nextState.gangDrawSeatIndex;
   delete nextState.pendingDiscard;
 
@@ -682,6 +686,15 @@ function completeSichuanDiscardWin(
   nextState.winType = "discard";
   nextState.score = score;
   appendWinRecord(nextState, seatIndex, "discard", winningTile, score, winContext);
+  if (state.rules.name.startsWith("sichuan")) {
+    settleSichuanWin(
+      nextState,
+      seatIndex,
+      score.totalPoints,
+      "discard",
+      pendingDiscard?.fromSeatIndex
+    );
+  }
 
   if (nextState.wonSeatIndexes.length >= 3) {
     delete nextState.pendingDiscard;
@@ -726,6 +739,34 @@ function appendWinRecord(
   state.winRecords = [...(state.winRecords ?? []), record];
 }
 
+function settleSichuanWin(
+  state: MahjongGameState,
+  winnerSeatIndex: number,
+  points: number,
+  winType: WinType,
+  fromSeatIndex?: number
+): void {
+  const paymentMode = getSichuanRuleOptions(state.rules).settlement.winPayment;
+  const payers =
+    winType === "discard" || paymentMode === "discardPayer"
+      ? fromSeatIndex === undefined
+        ? []
+        : [fromSeatIndex]
+      : state.players
+          .filter((player) => player.seatIndex !== winnerSeatIndex && !player.hasWon)
+          .map((player) => player.seatIndex);
+  const scores = state.gangScores ? [...state.gangScores] : [0, 0, 0, 0];
+  const transfers = state.settlementTransfers ? [...state.settlementTransfers] : [];
+  for (const payer of payers) {
+    if (points <= 0) continue;
+    scores[payer] = (scores[payer] ?? 0) - points;
+    scores[winnerSeatIndex] = (scores[winnerSeatIndex] ?? 0) + points;
+    transfers.push({ fromSeatIndex: payer, points, reason: "win", toSeatIndex: winnerSeatIndex });
+  }
+  state.gangScores = scores as [number, number, number, number];
+  state.settlementTransfers = transfers;
+}
+
 function createPlayerState(
   seatIndex: number,
   options?: { isBot: boolean; username: string }
@@ -751,7 +792,7 @@ function openClaimWindow(state: MahjongGameState, tile: Tile, fromSeatIndex: num
     respondentCursor: 0,
     passedSeatIndexes: []
   };
-  if (state.rules.name === "sichuan") {
+  if (state.rules.name.startsWith("sichuan")) {
     const huSeatIndexes = state.pendingDiscard.respondentSeatIndexes.filter((seatIndex) =>
       getAvailableClaimActionsForSeat(state, seatIndex).some((action) => action.type === "hu")
     );
@@ -909,7 +950,7 @@ function applyClaimAction(
       return { ok: false, error: "Must discard all missing-suit tiles before winning", state };
     }
 
-    if (state.rules.name === "sichuan") {
+    if (state.rules.name.startsWith("sichuan")) {
       if (pendingDiscard.huSeatIndexes) {
         return completeSichuanDiscardWin(state, seatIndex, pendingDiscard.tile, score);
       }
@@ -1143,7 +1184,7 @@ function applyGangClaimAction(
     const score = calculateScore([...player.handTiles, pendingGang.gangTile], state.rules, {
       publicMelds: player.publicMelds
     });
-    if (state.rules.name === "sichuan") {
+    if (state.rules.name.startsWith("sichuan")) {
       return completeSichuanWin(
         state,
         seatIndex,
@@ -1218,12 +1259,13 @@ function settleSichuanGang(
   type: "concealed" | "added" | "discard",
   payerSeatIndex?: number
 ): void {
-  if (state.rules.name !== "sichuan") {
+  if (!state.rules.name.startsWith("sichuan")) {
     return;
   }
 
   const scores = state.gangScores ? [...state.gangScores] : [0, 0, 0, 0];
-  const amount = type === "concealed" ? 2 : 1;
+  const gangPoints = getSichuanRuleOptions(state.rules).gangPoints;
+  const amount = gangPoints[type];
   const payers =
     type === "discard"
       ? payerSeatIndex === undefined
@@ -1340,7 +1382,7 @@ function drawOrEnd(state: MahjongGameState, seatIndex: number): void {
 }
 
 export function settleSichuanDraw(state: MahjongGameState): void {
-  if (state.rules.name !== "sichuan") {
+  if (!state.rules.name.startsWith("sichuan")) {
     return;
   }
 
@@ -1357,6 +1399,7 @@ export function settleSichuanDraw(state: MahjongGameState): void {
       : [];
   });
   const readyBySeat = new Map(readyResults.map((result) => [result.seatIndex, result.maxPoints]));
+  const sichuanOptions = getSichuanRuleOptions(state.rules);
   const flowerPigSeats = activePlayers
     .filter((player) => hasMissingSuitTiles(state, player.seatIndex))
     .map((player) => player.seatIndex);
@@ -1377,14 +1420,31 @@ export function settleSichuanDraw(state: MahjongGameState): void {
   for (const flowerPigSeat of flowerPigSeats) {
     for (const player of activePlayers) {
       if (!flowerPigSeats.includes(player.seatIndex)) {
-        addTransfer(flowerPigSeat, player.seatIndex, 4, "flowerPig");
+        addTransfer(
+          flowerPigSeat,
+          player.seatIndex,
+          sichuanOptions.settlement.flowerPigPoints,
+          "flowerPig"
+        );
       }
     }
   }
   for (const payer of activePlayers) {
-    if (flowerPigSeats.includes(payer.seatIndex) || readyBySeat.has(payer.seatIndex)) continue;
+    if (
+      (sichuanOptions.settlement.skipFlowerPigReadyPayment &&
+        flowerPigSeats.includes(payer.seatIndex)) ||
+      readyBySeat.has(payer.seatIndex)
+    )
+      continue;
     for (const [winnerSeatIndex, points] of readyBySeat) {
-      addTransfer(payer.seatIndex, winnerSeatIndex, points, "ready");
+      addTransfer(
+        payer.seatIndex,
+        winnerSeatIndex,
+        sichuanOptions.settlement.readyPayment === "fixed"
+          ? sichuanOptions.settlement.readyFixedPoints
+          : points,
+        "ready"
+      );
     }
   }
 

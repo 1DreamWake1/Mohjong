@@ -86,7 +86,7 @@ export type GameReadyResult = {
 export type GameSettlementTransfer = {
   fromSeatIndex: number;
   points: number;
-  reason: "ready" | "flowerPig";
+  reason: "ready" | "flowerPig" | "win";
   toSeatIndex: number;
 };
 
@@ -103,10 +103,12 @@ export type GameLobbySeat = {
   isReady: boolean;
 };
 
+export type GameRulePresetName = "simple" | "standard" | "sichuan" | "sichuan-tournament";
+
 export type GameLobbyRoom = {
   roomId: string;
   ownerUserId: number;
-  ruleName?: "simple" | "standard" | "sichuan";
+  ruleName?: GameRulePresetName;
   ruleVersion?: number;
   status: GameLobbyRoomStatus;
   seats: GameLobbySeat[];
@@ -115,7 +117,7 @@ export type GameLobbyRoom = {
 };
 
 export type CreateGameRoomRequest = {
-  ruleName?: "simple" | "standard" | "sichuan";
+  ruleName?: GameRulePresetName;
 };
 
 export type CreateGameRoomResponse = {

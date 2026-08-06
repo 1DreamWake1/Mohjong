@@ -156,14 +156,14 @@ function describeAction(state: MahjongGameState, seatIndex: number, action: Acti
 
 export function describeGameEnd(state: MahjongGameState): string {
   if (state.endReason === "draw") {
-    if (state.rules.name === "sichuan" && state.winRecords && state.winRecords.length > 0) {
+    if (state.rules.name.startsWith("sichuan") && state.winRecords && state.winRecords.length > 0) {
       return `牌局流局，${state.winRecords.length} 位玩家已胡`;
     }
     return "牌局流局";
   }
 
   if (state.endReason === "hu") {
-    if (state.rules.name === "sichuan" && state.winRecords && state.winRecords.length > 0) {
+    if (state.rules.name.startsWith("sichuan") && state.winRecords && state.winRecords.length > 0) {
       const winnerText = state.winRecords
         .map((record) => {
           const name =

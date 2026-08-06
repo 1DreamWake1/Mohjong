@@ -590,7 +590,9 @@ function parseSettlementTransfers(value: unknown): GameSettlementTransfer[] {
       return [];
     }
     const reason =
-      entry.reason === "ready" || entry.reason === "flowerPig" ? entry.reason : undefined;
+      entry.reason === "ready" || entry.reason === "flowerPig" || entry.reason === "win"
+        ? entry.reason
+        : undefined;
     return reason && typeof entry.points === "number" && Number.isFinite(entry.points)
       ? [
           {

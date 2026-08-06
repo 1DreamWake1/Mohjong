@@ -21,7 +21,7 @@ export function createRoomPlayerView(input: {
   }
 
   const readyResults =
-    input.state.phase === "ended" && input.state.rules.name === "sichuan"
+    input.state.phase === "ended" && input.state.rules.name.startsWith("sichuan")
       ? input.state.players.flatMap((readyPlayer) => {
           const waitingScores = getWaitingTileScores(input.state, readyPlayer.seatIndex);
           return waitingScores.length > 0

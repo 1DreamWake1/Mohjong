@@ -22,6 +22,7 @@ export { canHu, countTiles, isSevenPairs } from "./hand.js";
 export type { HuPattern, HuResult } from "./hand.js";
 export {
   getRulePreset,
+  getSichuanRuleOptions,
   getClaimPriorityConfig,
   getEnabledFans,
   getFanValues,
@@ -29,11 +30,12 @@ export {
   getRuleTileSet,
   normalizeRuleConfig,
   sichuanRuleConfig,
+  sichuanTournamentRuleConfig,
   shouldEndOnEmptyWall,
   simpleRuleConfig,
   standardRuleConfig
 } from "./rules.js";
-export type { RuleConfig, RulePresetName } from "./rules.js";
+export type { RuleConfig, RulePresetName, SichuanRuleOptions } from "./rules.js";
 export {
   calculateScore,
   identifyFans,

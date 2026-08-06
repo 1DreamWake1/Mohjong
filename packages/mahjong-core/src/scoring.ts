@@ -6,6 +6,7 @@ import {
   getEnabledFans,
   getFanValues,
   getScoringConfig,
+  getSichuanRuleOptions,
   type RuleConfig
 } from "./rules.js";
 import { getTileDefinition, isSuited, tileDefinitions, type Tile, type TileCode } from "./tiles.js";
@@ -18,7 +19,8 @@ export type FanType =
   | "chinitsu"
   | "toitoi"
   | "sevenPairs"
-  | "honroutou";
+  | "honroutou"
+  | "root";
 
 export type Fan = {
   type: FanType;
@@ -49,7 +51,8 @@ const fanDefinitions: Record<FanType, Omit<Fan, "value">> = {
   chinitsu: { type: "chinitsu", name: "清一色" },
   toitoi: { type: "toitoi", name: "对对胡" },
   sevenPairs: { type: "sevenPairs", name: "七对子" },
-  honroutou: { type: "honroutou", name: "混老头" }
+  honroutou: { type: "honroutou", name: "混老头" },
+  root: { type: "root", name: "根" }
 };
 
 export function calculateScore(
@@ -70,14 +73,19 @@ export function calculateScore(
   }
 
   const fans = identifyFans(tiles, rules, options);
-  const fanTotal = fans.reduce((total, fan) => total + fan.value, 0);
+  const rootTotal = fans
+    .filter((fan) => fan.type === "root")
+    .reduce((total, fan) => total + fan.value, 0);
+  const fanTotal = fans
+    .filter((fan) => fan.type !== "root")
+    .reduce((total, fan) => total + fan.value, 0);
   const basePoints = options.basePoints ?? scoring.basePoints;
   const fanPointValue = options.fanPointValue ?? scoring.fanPointValue;
   const appliedFanTotal =
     scoring.fanLimit === null ? fanTotal : Math.min(fanTotal, Math.max(0, scoring.fanLimit));
   const totalPoints =
     scoring.mode === "sichuan"
-      ? basePoints * 2 ** appliedFanTotal
+      ? basePoints * 2 ** (appliedFanTotal + rootTotal)
       : basePoints + appliedFanTotal * fanPointValue;
 
   return {
@@ -140,7 +148,27 @@ export function identifyFans(
     fanTypes.push("honroutou");
   }
 
-  return fanTypes.map((type) => ({ ...fanDefinitions[type], value: fanValues[type] }));
+  const rootOptions = rules.name.startsWith("sichuan")
+    ? getSichuanRuleOptions(rules).root
+    : undefined;
+  const rootValue = rootOptions?.fanValue ?? getFanValues(rules).root ?? 0;
+  if (
+    enabledFans.root &&
+    rootOptions?.enabled !== false &&
+    rootValue > 0 &&
+    rules.name.startsWith("sichuan")
+  ) {
+    const rootCount = [...counts.values()].filter((count) => count === 4).length;
+    if (rootCount > 0) fanTypes.push("root");
+  }
+
+  return fanTypes.map((type) => ({
+    ...fanDefinitions[type],
+    value:
+      type === "root"
+        ? rootValue * [...counts.values()].filter((count) => count === 4).length
+        : (fanValues[type] ?? 0)
+  }));
 }
 
 export function meetsMinimumFan(score: ScoreResult, rules: RuleConfig): boolean {

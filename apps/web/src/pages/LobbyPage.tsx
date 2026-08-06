@@ -27,6 +27,7 @@ const seatNames = ["东", "南", "西", "北"];
 export function getRulePresetText(ruleName: GameLobbyRoom["ruleName"]): string {
   if (ruleName === "standard") return "标准规则";
   if (ruleName === "sichuan") return "四川麻将";
+  if (ruleName === "sichuan-tournament") return "四川赛事规则";
   return "简单规则";
 }
 
@@ -86,9 +87,9 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
   const socket = useSocketStore((state) => state.socket);
   const socketStatus = useSocketStore((state) => state.status);
   const [joinRoomId, setJoinRoomId] = useState("");
-  const [selectedRuleName, setSelectedRuleName] = useState<"simple" | "standard" | "sichuan">(
-    "simple"
-  );
+  const [selectedRuleName, setSelectedRuleName] = useState<
+    "simple" | "standard" | "sichuan" | "sichuan-tournament"
+  >("simple");
   const [room, setRoom] = useState<GameLobbyRoom | null>(null);
   const [roomError, setRoomError] = useState<string | null>(null);
   const [isRoomBusy, setIsRoomBusy] = useState(false);
@@ -361,6 +362,18 @@ export function LobbyPage(props: LobbyPageProps): JSX.Element {
                 type="button"
               >
                 四川麻将
+              </button>
+              <button
+                className={
+                  selectedRuleName === "sichuan-tournament"
+                    ? styles.segmentButtonActive
+                    : styles.segmentButton
+                }
+                disabled={isRoomBusy || !canCreateOrJoinRoom}
+                onClick={() => setSelectedRuleName("sichuan-tournament")}
+                type="button"
+              >
+                四川赛事
               </button>
             </div>
             <button

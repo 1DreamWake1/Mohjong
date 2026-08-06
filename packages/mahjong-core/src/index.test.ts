@@ -19,6 +19,7 @@ import {
   runBasicBotGame,
   settleSichuanDraw,
   sichuanRuleConfig,
+  sichuanTournamentRuleConfig,
   shouldEndOnEmptyWall,
   simpleRuleConfig,
   standardRuleConfig,
@@ -31,9 +32,15 @@ describe("mahjong-core tiles and wall", () => {
     expect(simpleRuleConfig).toMatchObject({ name: "simple", version: 1 });
     expect(standardRuleConfig).toMatchObject({ name: "standard", version: 1 });
     expect(sichuanRuleConfig).toMatchObject({ name: "sichuan", version: 1 });
+    expect(sichuanTournamentRuleConfig).toMatchObject({
+      name: "sichuan-tournament",
+      version: 2,
+      sichuan: { settlement: { readyPayment: "fixed", readyFixedPoints: 4 } }
+    });
     expect(getRulePreset("simple")).toBe(simpleRuleConfig);
     expect(getRulePreset("standard")).toBe(standardRuleConfig);
     expect(getRulePreset("sichuan")).toBe(sichuanRuleConfig);
+    expect(getRulePreset("sichuan-tournament")).toBe(sichuanTournamentRuleConfig);
     expect(getRulePreset("unknown")).toBeUndefined();
     expect(simpleRuleConfig).toMatchObject({
       actions: { chi: false, gang: true, peng: true },
@@ -271,6 +278,21 @@ describe("mahjong-core hand evaluation", () => {
     ]);
 
     expect(canHu(hand, standardRuleConfig).canHu).toBe(false);
+  });
+
+  it("scores Sichuan roots from a gang without raising the minimum fan", () => {
+    const hand = handFromCodes(["m1", "m2", "m3", "m4", "m5", "m6", "p2", "p3", "p4", "s7", "s7"]);
+    const gang = {
+      ownerSeatIndex: 0,
+      tiles: handFromCodes(["s1", "s1", "s1", "s1"]),
+      type: "gang" as const
+    };
+    const score = calculateScore(hand, sichuanRuleConfig, { publicMelds: [gang] });
+
+    expect(score.canHu).toBe(true);
+    expect(score.fans.map((fan) => fan.type)).toContain("root");
+    expect(score.fanTotal).toBe(1);
+    expect(score.totalPoints).toBe(40);
   });
 });
 

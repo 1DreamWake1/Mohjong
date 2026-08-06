@@ -401,7 +401,13 @@ export function HistoryPage(props: HistoryPageProps): JSX.Element {
                   {selectedRecord.result.settlementTransfers?.map((transfer, index) => (
                     <p key={`${transfer.fromSeatIndex}-${transfer.toSeatIndex}-${index}`}>
                       {transfer.fromSeatIndex + 1}号位 → {transfer.toSeatIndex + 1}号位：
-                      {transfer.points}分（{transfer.reason === "flowerPig" ? "花猪" : "查叫"}）
+                      {transfer.points}分（
+                      {transfer.reason === "flowerPig"
+                        ? "花猪"
+                        : transfer.reason === "win"
+                          ? "胡牌"
+                          : "查叫"}
+                      ）
                     </p>
                   ))}
                   {selectedRecord.result.winnerResults?.map((winner) => (

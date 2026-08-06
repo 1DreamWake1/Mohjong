@@ -111,7 +111,8 @@ function parseCreateGameRoomRequest(value: unknown): CreateGameRoomRequest | nul
     value.ruleName !== undefined &&
     value.ruleName !== "simple" &&
     value.ruleName !== "standard" &&
-    value.ruleName !== "sichuan"
+    value.ruleName !== "sichuan" &&
+    value.ruleName !== "sichuan-tournament"
   ) {
     return null;
   }
