@@ -1,5 +1,10 @@
 import type { GameEventMessage, PlayerView } from "@mahjong/shared";
-import { compareTiles, getLegalActions, type MahjongGameState } from "mahjong-core";
+import {
+  compareTiles,
+  getLegalActions,
+  getWaitingTiles,
+  type MahjongGameState
+} from "mahjong-core";
 
 export function createRoomPlayerView(input: {
   events: GameEventMessage[];
@@ -30,10 +35,14 @@ export function createRoomPlayerView(input: {
         isBot: otherPlayer.isBot,
         seatIndex: otherPlayer.seatIndex,
         username: otherPlayer.username,
+        ...(input.state.gangScores
+          ? { gangPoints: input.state.gangScores[otherPlayer.seatIndex] }
+          : {}),
         ...(otherPlayer.hasWon ? { hasWon: true } : {})
       })),
     phase: input.state.phase,
     ...(player.hasWon ? { hasWon: true } : {}),
+    ...(input.state.gangScores ? { gangPoints: input.state.gangScores[input.seatIndex] } : {}),
     publicMelds: input.state.players.flatMap((meldPlayer) => meldPlayer.publicMelds),
     roomId: input.roomId,
     seatIndex: input.seatIndex,
@@ -51,7 +60,23 @@ export function createRoomPlayerView(input: {
     ...(input.state.lastDiscardedTileId
       ? { lastDiscardedTileId: input.state.lastDiscardedTileId }
       : {}),
-    ...(player.lastDrawnTileId ? { lastDrawnTileId: player.lastDrawnTileId } : {})
+    ...(player.lastDrawnTileId ? { lastDrawnTileId: player.lastDrawnTileId } : {}),
+    ...(getWaitingTiles(input.state, input.seatIndex).length > 0
+      ? { waitingTiles: getWaitingTiles(input.state, input.seatIndex) }
+      : {}),
+    ...(input.state.winRecords && input.state.winRecords.length > 0
+      ? {
+          winnerResults: input.state.winRecords.map((record) => ({
+            endReason: "hu" as const,
+            fans: record.score.fans.map((fan) => ({ name: fan.name, value: fan.value })),
+            fanTotal: record.score.fanTotal,
+            totalPoints: record.score.totalPoints,
+            winType: record.winType,
+            winnerSeatIndex: record.winnerSeatIndex,
+            ...(record.winningTile ? { winningTile: record.winningTile } : {})
+          }))
+        }
+      : {})
   };
 
   const result =

@@ -310,6 +310,20 @@ export function GamePage(props: GamePageProps): JSX.Element {
                 {resultSummary.winTypeText ? <p>方式：{resultSummary.winTypeText}</p> : null}
                 {resultSummary.winningTileText ? <p>{resultSummary.winningTileText}</p> : null}
                 {resultSummary.fanText ? <p>{resultSummary.fanText}</p> : null}
+                {view.waitingTiles && view.waitingTiles.length > 0 ? (
+                  <p>听牌：{view.waitingTiles.map((tile) => tile.label).join("、")}</p>
+                ) : null}
+              </div>
+            ) : null}
+            {view.winnerResults && view.winnerResults.length > 0 ? (
+              <div className={styles.resultSummary}>
+                <strong>赢家明细</strong>
+                {view.winnerResults.map((winner) => (
+                  <p key={`${winner.winnerSeatIndex}-${winner.winningTile?.id ?? "win"}`}>
+                    {winner.winnerSeatIndex + 1}号位 ·{" "}
+                    {winner.winType === "selfDraw" ? "自摸" : "点炮"} · {winner.totalPoints} 分
+                  </p>
+                ))}
               </div>
             ) : null}
           </section>

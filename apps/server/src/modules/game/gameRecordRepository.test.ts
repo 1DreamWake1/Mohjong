@@ -149,3 +149,47 @@ describe("game recovery snapshots", () => {
     });
   });
 });
+
+describe("game result snapshots", () => {
+  it("persists and returns blood-battle winner results", async () => {
+    const repository = createMemoryGameRecordRepository();
+    await repository.createRecord({
+      humanSeatIndex: 0,
+      playerUserId: 1,
+      roomId: "sichuan-0001",
+      ruleName: "sichuan",
+      ruleVersion: 1
+    });
+
+    const state = createInitialGame({ rules: simpleRuleConfig, seed: 2 });
+    state.phase = "ended";
+    state.endReason = "hu";
+    state.gangScores = [6, -2, -2, -2];
+    state.winRecords = [
+      {
+        score: {
+          basePoints: 20,
+          canHu: true,
+          fanTotal: 2,
+          fans: [{ name: "清一色", type: "chinitsu", value: 2 }],
+          totalPoints: 80
+        },
+        winnerSeatIndex: 1,
+        winType: "discard"
+      }
+    ];
+    await repository.finishRecord({ roomId: "sichuan-0001", state });
+
+    expect(repository.getRecord("sichuan-0001")?.result?.winnerResults).toEqual([
+      {
+        endReason: "hu",
+        fans: [{ name: "清一色", value: 2 }],
+        fanTotal: 2,
+        totalPoints: 80,
+        winnerSeatIndex: 1,
+        winType: "discard"
+      }
+    ]);
+    expect(repository.getRecord("sichuan-0001")?.result?.gangScores).toEqual([6, -2, -2, -2]);
+  });
+});

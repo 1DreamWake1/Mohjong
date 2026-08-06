@@ -5,7 +5,8 @@ export {
   createEmptyPlayerView,
   createInitialGame,
   createPlayerView,
-  getLegalActions
+  getLegalActions,
+  getWaitingTiles
 } from "./game.js";
 export type {
   ApplyActionResult,

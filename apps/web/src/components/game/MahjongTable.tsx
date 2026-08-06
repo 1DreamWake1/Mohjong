@@ -1,5 +1,5 @@
 import type { Action, MeldType, PlayerView } from "@mahjong/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import styles from "./gameComponents.module.css";
 import { ActionBar } from "./ActionBar.js";
@@ -120,6 +120,11 @@ export function shouldRenderActionBar(
 }
 
 export function MahjongTable(props: MahjongTableProps): JSX.Element {
+  const [exchangeSelection, setExchangeSelection] = useState<string[]>([]);
+  useEffect(() => {
+    setExchangeSelection([]);
+  }, [props.view.phase, props.view.roomId]);
+
   const currentPlayerName =
     props.view.currentTurn === props.view.seatIndex
       ? props.view.username
@@ -127,6 +132,23 @@ export function MahjongTable(props: MahjongTableProps): JSX.Element {
           ?.username;
 
   const visibleActions = getVisibleActions(props.view.availableActions, props.selectedTileId);
+  const exchangeAction = useMemo(() => {
+    if (props.view.phase !== "exchange-three" || exchangeSelection.length !== 3) {
+      return undefined;
+    }
+    return props.view.availableActions.find(
+      (action) =>
+        action.type === "exchangeThree" &&
+        action.tileIds &&
+        action.tileIds.every((tileId) => exchangeSelection.includes(tileId))
+    );
+  }, [exchangeSelection, props.view.availableActions, props.view.phase]);
+  const tableActions =
+    props.view.phase === "exchange-three"
+      ? exchangeAction
+        ? [exchangeAction]
+        : []
+      : visibleActions;
   const promptForDiscardSelection = shouldPromptForDiscardSelection(
     props.view.availableActions,
     props.selectedTileId
@@ -158,6 +180,9 @@ export function MahjongTable(props: MahjongTableProps): JSX.Element {
               <div className={styles.playerMeta}>
                 <span className={styles.seatBadge}>{seatNames[player.seatIndex]}</span>
                 {player.hasWon ? <span className={styles.seatBadge}>已胡</span> : null}
+                {player.gangPoints !== undefined ? (
+                  <span className={styles.seatBadge}>杠 {player.gangPoints}</span>
+                ) : null}
                 <HandTileCount count={player.handTileCount} />
                 <PlayerTurnTimer
                   active={player.seatIndex === props.view.currentTurn}
@@ -216,6 +241,9 @@ export function MahjongTable(props: MahjongTableProps): JSX.Element {
           <div className={styles.playerMeta}>
             <span className={styles.seatBadge}>{seatNames[props.view.seatIndex]}位视角</span>
             {props.view.hasWon ? <span className={styles.seatBadge}>已胡</span> : null}
+            {props.view.gangPoints !== undefined ? (
+              <span className={styles.seatBadge}>杠 {props.view.gangPoints}</span>
+            ) : null}
             <HandTileCount count={props.view.handTiles.length} />
             <PlayerTurnTimer
               active={props.view.seatIndex === props.view.currentTurn}
@@ -225,17 +253,38 @@ export function MahjongTable(props: MahjongTableProps): JSX.Element {
           </div>
         </div>
         <HandTiles
-          onSelectTile={props.onSelectTile}
+          onSelectTile={(tileId) => {
+            if (props.view.phase !== "exchange-three") {
+              props.onSelectTile(tileId);
+              return;
+            }
+            setExchangeSelection((current) =>
+              current.includes(tileId)
+                ? current.filter((selectedTileId) => selectedTileId !== tileId)
+                : current.length < 3
+                  ? [...current, tileId]
+                  : current
+            );
+          }}
           selectedTileId={props.selectedTileId}
+          selectedTileIds={exchangeSelection}
           tiles={props.view.handTiles}
           {...(props.view.lastDrawnTileId ? { highlightedTileId: props.view.lastDrawnTileId } : {})}
         />
-        {shouldRenderActionBar(visibleActions, promptForDiscardSelection) ? (
+        {shouldRenderActionBar(
+          tableActions,
+          props.view.phase === "exchange-three" ? false : promptForDiscardSelection
+        ) ? (
           <ActionBar
-            actions={visibleActions}
+            actions={tableActions}
             disabled={props.view.phase === "ended"}
             onAction={props.onAction}
           />
+        ) : null}
+        {props.view.phase === "exchange-three" ? (
+          <p className={styles.actionHint}>
+            已选择 {exchangeSelection.length}/3 张，请选择同一花色的三张牌
+          </p>
         ) : null}
         {promptForDiscardSelection ? <p className={styles.actionHint}>请选择一张手牌打出</p> : null}
       </footer>

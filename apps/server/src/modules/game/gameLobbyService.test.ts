@@ -44,6 +44,15 @@ describe("gameLobbyService", () => {
     });
   });
 
+  it("creates a Sichuan room with the Sichuan rule preset", () => {
+    const service = createGameLobbyService();
+
+    expect(service.createRoom(createPlayer(1, "player1"), "sichuan")).toMatchObject({
+      ruleName: "sichuan",
+      ruleVersion: 1
+    });
+  });
+
   it("allows players to join the first available seat", () => {
     const service = createGameLobbyService();
     const room = service.createRoom(createPlayer(1, "player1"));

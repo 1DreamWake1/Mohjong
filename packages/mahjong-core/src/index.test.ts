@@ -1024,6 +1024,32 @@ describe("mahjong-core game reducer", () => {
     expect(thirdWin.state.wonSeatIndexes).toEqual([0, 1, 2]);
   });
 
+  it("reports waiting tiles for a non-winning Sichuan player after the hand ends", () => {
+    const state = createInitialGame({ rules: sichuanRuleConfig, seed: 41 });
+    state.phase = "ended";
+    state.endReason = "draw";
+    state.missingSuits = {};
+    state.players[0].handTiles = handFromCodes([
+      "m2",
+      "m3",
+      "m4",
+      "m3",
+      "m4",
+      "m5",
+      "p4",
+      "p5",
+      "p6",
+      "s6",
+      "s7",
+      "s8",
+      "p8"
+    ]);
+
+    expect(createPlayerView(state, 0).waitingTiles?.map((tile) => tile.label)).toEqual(["8筒"]);
+    state.players[0].hasWon = true;
+    expect(createPlayerView(state, 0).waitingTiles).toBeUndefined();
+  });
+
   it("allows multiple Sichuan winners to claim the same discard", () => {
     const state = createClaimScenario(
       "m3",
@@ -1208,6 +1234,26 @@ describe("mahjong-core game reducer", () => {
 
     expect(result.state.players[0].publicMelds[0]?.type).toBe("gang");
     expect(result.state.players[0].handTiles[0]?.code).toBe("south");
+  });
+
+  it("settles Sichuan concealed gang points between active players", () => {
+    const state = createInitialGame({ rules: sichuanRuleConfig, seed: 9 });
+    state.phase = "playing";
+    state.missingSuits = {};
+    state.currentTurn = 0;
+    state.wall = [createTile("m9", 0)];
+    state.players[0].handTiles = handFromCodes(["m1", "m1", "m1", "m1"]);
+
+    const gangAction = getLegalActions(state, 0).find((action) => action.type === "gang");
+    expect(gangAction).toBeDefined();
+    if (!gangAction) return;
+
+    const result = applyAction(state, 0, gangAction);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.state.gangScores).toEqual([6, -2, -2, -2]);
+    expect(createPlayerView(result.state, 0).gangPoints).toBe(6);
   });
 
   it("allows added gang from an existing peng meld", () => {

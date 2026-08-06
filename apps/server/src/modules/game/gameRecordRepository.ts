@@ -5,6 +5,7 @@ import type {
   AdminGameHistoryDetail,
   AdminGameHistoryItem,
   GameHistoryResultSnapshot,
+  GameWinnerResult,
   GameRecordEndReason,
   GameRecordStatus,
   PlayerView,
@@ -484,10 +485,26 @@ function createResultSnapshot(state: MahjongGameState): GameHistoryResultSnapsho
     fanTotal: state.score?.fanTotal ?? 0,
     fans: state.score?.fans.map((fan) => ({ name: fan.name, value: fan.value })) ?? [],
     totalPoints: state.score?.totalPoints ?? 0,
+    ...(state.gangScores
+      ? { gangScores: [...state.gangScores] as [number, number, number, number] }
+      : {}),
     ...(state.endReason ? { endReason: state.endReason } : {}),
     ...(state.winnerSeatIndex === undefined ? {} : { winnerSeatIndex: state.winnerSeatIndex }),
     ...(state.winningTile ? { winningTile: state.winningTile } : {}),
-    ...(state.winType ? { winType: state.winType } : {})
+    ...(state.winType ? { winType: state.winType } : {}),
+    ...(state.winRecords && state.winRecords.length > 0
+      ? {
+          winnerResults: state.winRecords.map((record) => ({
+            endReason: "hu" as const,
+            fans: record.score.fans.map((fan) => ({ name: fan.name, value: fan.value })),
+            fanTotal: record.score.fanTotal,
+            totalPoints: record.score.totalPoints,
+            winType: record.winType,
+            winnerSeatIndex: record.winnerSeatIndex,
+            ...(record.winningTile ? { winningTile: record.winningTile } : {})
+          }))
+        }
+      : {})
   };
 }
 
@@ -518,6 +535,8 @@ function parseResultSnapshot(value: string | null): GameHistoryResultSnapshot | 
     const winnerSeatIndex =
       typeof parsedValue.winnerSeatIndex === "number" ? parsedValue.winnerSeatIndex : undefined;
     const winningTile = isTileInfo(parsedValue.winningTile) ? parsedValue.winningTile : undefined;
+    const winnerResults = parseWinnerResults(parsedValue.winnerResults);
+    const gangScores = parseGangScores(parsedValue.gangScores);
 
     return {
       fanTotal,
@@ -526,11 +545,52 @@ function parseResultSnapshot(value: string | null): GameHistoryResultSnapshot | 
       ...(endReason ? { endReason } : {}),
       ...(winnerSeatIndex === undefined ? {} : { winnerSeatIndex }),
       ...(winningTile ? { winningTile } : {}),
-      ...(winType ? { winType } : {})
+      ...(winType ? { winType } : {}),
+      ...(gangScores ? { gangScores } : {}),
+      ...(winnerResults.length > 0 ? { winnerResults } : {})
     };
   } catch {
     return undefined;
   }
+}
+
+function parseGangScores(value: unknown): [number, number, number, number] | undefined {
+  if (
+    !Array.isArray(value) ||
+    value.length !== 4 ||
+    !value.every((score) => typeof score === "number" && Number.isFinite(score))
+  ) {
+    return undefined;
+  }
+
+  return [value[0] as number, value[1] as number, value[2] as number, value[3] as number];
+}
+
+function parseWinnerResults(value: unknown): GameWinnerResult[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((entry): GameWinnerResult[] => {
+    if (!isRecord(entry) || typeof entry.winnerSeatIndex !== "number") return [];
+    const fans = Array.isArray(entry.fans)
+      ? entry.fans.flatMap((fan) =>
+          isRecord(fan) && typeof fan.name === "string" && typeof fan.value === "number"
+            ? [{ name: fan.name, value: fan.value }]
+            : []
+        )
+      : [];
+    const winType = toWinType(readString(entry.winType));
+    return [
+      {
+        endReason: "hu",
+        fanTotal: typeof entry.fanTotal === "number" ? entry.fanTotal : 0,
+        fans,
+        totalPoints: typeof entry.totalPoints === "number" ? entry.totalPoints : 0,
+        winnerSeatIndex: entry.winnerSeatIndex,
+        ...(winType ? { winType } : {}),
+        ...(isTileInfo(entry.winningTile) ? { winningTile: entry.winningTile } : {})
+      }
+    ];
+  });
 }
 
 function parsePlayerViewSnapshot(value: string | null): PlayerView | undefined {

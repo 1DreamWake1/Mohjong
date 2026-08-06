@@ -110,7 +110,8 @@ function parseCreateGameRoomRequest(value: unknown): CreateGameRoomRequest | nul
   if (
     value.ruleName !== undefined &&
     value.ruleName !== "simple" &&
-    value.ruleName !== "standard"
+    value.ruleName !== "standard" &&
+    value.ruleName !== "sichuan"
   ) {
     return null;
   }

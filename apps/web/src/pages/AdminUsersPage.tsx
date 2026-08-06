@@ -646,6 +646,16 @@ export function AdminUsersPage(props: AdminUsersPageProps): JSX.Element {
                             .join("、")
                         : "无番型记录"}
                     </p>
+                    {selectedGame.result.gangScores ? (
+                      <p>杠分：{selectedGame.result.gangScores.join("、")}</p>
+                    ) : null}
+                    {selectedGame.result.winnerResults?.map((winner) => (
+                      <p key={`${winner.winnerSeatIndex}-${winner.winningTile?.id ?? "unknown"}`}>
+                        {winner.winnerSeatIndex + 1}号位
+                        {winner.winType === "selfDraw" ? "自摸" : "点炮"}：{winner.totalPoints}分，
+                        {winner.fanTotal}番
+                      </p>
+                    ))}
                   </div>
                 ) : null}
                 {selectedEvent?.viewSnapshot ? (

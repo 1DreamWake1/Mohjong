@@ -9,7 +9,14 @@ import {
   type RuleConfig
 } from "./rules.js";
 import { calculateScore, meetsMinimumFan, type ScoreResult } from "./scoring.js";
-import { compareTiles, isSameTileType, isSuited, type Tile } from "./tiles.js";
+import {
+  compareTiles,
+  createTile,
+  isSameTileType,
+  isSuited,
+  tileDefinitions,
+  type Tile
+} from "./tiles.js";
 import { createSeededRandom, createShuffledWall, type RandomSource } from "./wall.js";
 
 export type PlayerState = {
@@ -52,6 +59,7 @@ export type MahjongGameState = {
   missingSuits?: Partial<Record<number, Extract<TileSuit, "bamboo" | "characters" | "dots">>>;
   wonSeatIndexes?: number[];
   winRecords?: WinRecord[];
+  gangScores?: [number, number, number, number];
   winnerSeatIndex?: number;
   winningTile?: Tile;
   winType?: WinType;
@@ -114,7 +122,13 @@ export function createInitialGame(options: CreateGameOptions = {}): MahjongGameS
     phase: rules.name === "sichuan" ? "exchange-three" : "playing",
     rules,
     ...(rules.name === "sichuan" ? { exchangeThreeSelections: {}, missingSuits: {} } : {}),
-    ...(rules.name === "sichuan" ? { wonSeatIndexes: [], winRecords: [] } : {})
+    ...(rules.name === "sichuan"
+      ? {
+          gangScores: [0, 0, 0, 0] as [number, number, number, number],
+          wonSeatIndexes: [],
+          winRecords: []
+        }
+      : {})
   };
 }
 
@@ -288,10 +302,12 @@ export function createPlayerView(state: MahjongGameState, seatIndex: number): Pl
         isBot: otherPlayer.isBot,
         seatIndex: otherPlayer.seatIndex,
         username: otherPlayer.username,
+        ...(state.gangScores ? { gangPoints: state.gangScores[otherPlayer.seatIndex] } : {}),
         ...(otherPlayer.hasWon ? { hasWon: true } : {})
       })),
     phase: state.phase,
     ...(player.hasWon ? { hasWon: true } : {}),
+    ...(state.gangScores ? { gangPoints: state.gangScores[seatIndex] } : {}),
     publicMelds: state.players.flatMap((meldPlayer) => meldPlayer.publicMelds),
     roomId: "core-game",
     seatIndex,
@@ -299,7 +315,23 @@ export function createPlayerView(state: MahjongGameState, seatIndex: number): Pl
     wallTileCount: state.wall.length,
     ...(state.lastDiscardedTileId ? { lastDiscardedTileId: state.lastDiscardedTileId } : {}),
     ...(player.lastDrawnTileId ? { lastDrawnTileId: player.lastDrawnTileId } : {}),
-    ...(state.missingSuits?.[seatIndex] ? { missingSuit: state.missingSuits[seatIndex] } : {})
+    ...(state.missingSuits?.[seatIndex] ? { missingSuit: state.missingSuits[seatIndex] } : {}),
+    ...(getWaitingTiles(state, seatIndex).length > 0
+      ? { waitingTiles: getWaitingTiles(state, seatIndex) }
+      : {}),
+    ...(state.winRecords && state.winRecords.length > 0
+      ? {
+          winnerResults: state.winRecords.map((record) => ({
+            endReason: "hu" as const,
+            fans: record.score.fans.map((fan) => ({ name: fan.name, value: fan.value })),
+            fanTotal: record.score.fanTotal,
+            totalPoints: record.score.totalPoints,
+            winType: record.winType,
+            winnerSeatIndex: record.winnerSeatIndex,
+            ...(record.winningTile ? { winningTile: record.winningTile } : {})
+          }))
+        }
+      : {})
   };
 
   const result =
@@ -321,6 +353,25 @@ export function createPlayerView(state: MahjongGameState, seatIndex: number): Pl
   return state.winnerSeatIndex === undefined
     ? viewWithResult
     : { ...viewWithResult, winnerSeatIndex: state.winnerSeatIndex };
+}
+
+export function getWaitingTiles(state: MahjongGameState, seatIndex: number): Tile[] {
+  if (state.phase !== "ended" || state.rules.name !== "sichuan") {
+    return [];
+  }
+
+  const player = getPlayer(state, seatIndex);
+  if (player.hasWon) {
+    return [];
+  }
+
+  return tileDefinitions.flatMap((definition) => {
+    const tile = createTile(definition.code, 0);
+    const score = calculateScore([...player.handTiles, tile], state.rules, {
+      publicMelds: player.publicMelds
+    });
+    return score.canHu && meetsMinimumFan(score, state.rules) ? [tile] : [];
+  });
 }
 
 export function createEmptyPlayerView(seatIndex: number): PlayerView {
@@ -821,6 +872,7 @@ function applyClaimAction(
   nextState.currentTurn = seatIndex;
 
   if (action.type === "gang") {
+    settleSichuanGang(nextState, seatIndex, "discard", nextPendingDiscard.fromSeatIndex);
     drawOrEnd(nextState, seatIndex);
   }
 
@@ -896,6 +948,7 @@ function applyTurnGangAction(
       ownerSeatIndex: seatIndex,
       tiles: removedTiles.sort(compareTiles)
     });
+    settleSichuanGang(nextState, seatIndex, "concealed");
   } else if (removedTiles.length === 1) {
     const tile = removedTiles[0];
     const meld = tile
@@ -912,10 +965,39 @@ function applyTurnGangAction(
 
     meld.type = "gang";
     meld.tiles = [...meld.tiles, tile].sort((a, b) => compareTiles(a as Tile, b as Tile));
+    settleSichuanGang(nextState, seatIndex, "added");
   }
 
   drawOrEnd(nextState, seatIndex);
   return { ok: true, state: nextState };
+}
+
+function settleSichuanGang(
+  state: MahjongGameState,
+  ownerSeatIndex: number,
+  type: "concealed" | "added" | "discard",
+  payerSeatIndex?: number
+): void {
+  if (state.rules.name !== "sichuan") {
+    return;
+  }
+
+  const scores = state.gangScores ? [...state.gangScores] : [0, 0, 0, 0];
+  const amount = type === "concealed" ? 2 : 1;
+  const payers =
+    type === "discard"
+      ? payerSeatIndex === undefined
+        ? []
+        : [payerSeatIndex]
+      : state.players
+          .filter((player) => player.seatIndex !== ownerSeatIndex && !player.hasWon)
+          .map((player) => player.seatIndex);
+
+  scores[ownerSeatIndex] = (scores[ownerSeatIndex] ?? 0) + amount * payers.length;
+  for (const payer of payers) {
+    scores[payer] = (scores[payer] ?? 0) - amount;
+  }
+  state.gangScores = scores as [number, number, number, number];
 }
 
 function findBestRespondentSeatIndex(state: MahjongGameState): number | undefined {
@@ -1115,6 +1197,9 @@ function cloneState(state: MahjongGameState): MahjongGameState {
       : {}),
     ...(state.missingSuits ? { missingSuits: { ...state.missingSuits } } : {}),
     ...(state.wonSeatIndexes ? { wonSeatIndexes: [...state.wonSeatIndexes] } : {}),
+    ...(state.gangScores
+      ? { gangScores: [...state.gangScores] as [number, number, number, number] }
+      : {}),
     ...(state.winRecords
       ? {
           winRecords: state.winRecords.map((record) => ({

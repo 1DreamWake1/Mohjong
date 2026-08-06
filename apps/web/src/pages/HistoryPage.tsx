@@ -385,6 +385,16 @@ export function HistoryPage(props: HistoryPageProps): JSX.Element {
                     {selectedRecord.result.totalPoints}
                   </p>
                   {selectedFanText ? <p>{selectedFanText}</p> : null}
+                  {selectedRecord.result.gangScores ? (
+                    <p>杠分：{selectedRecord.result.gangScores.join("、")}</p>
+                  ) : null}
+                  {selectedRecord.result.winnerResults?.map((winner) => (
+                    <p key={`${winner.winnerSeatIndex}-${winner.winningTile?.id ?? "unknown"}`}>
+                      {winner.winnerSeatIndex + 1}号位
+                      {winner.winType === "selfDraw" ? "自摸" : "点炮"}：{winner.totalPoints}分，
+                      {winner.fanTotal}番
+                    </p>
+                  ))}
                 </div>
               ) : null}
 

@@ -68,6 +68,10 @@ export type GameResultInfo = {
   winningTile?: TileInfo;
 };
 
+export type GameWinnerResult = GameResultInfo & {
+  winnerSeatIndex: number;
+};
+
 export type GameRecordStatus = "playing" | "ended";
 export type GameRecordEndReason = "hu" | "draw" | "abnormal";
 
@@ -147,10 +151,12 @@ export type GameHistoryResultSnapshot = {
   endReason?: "hu" | "draw";
   fanTotal: number;
   fans: GameScoreFan[];
+  gangScores?: [number, number, number, number];
   totalPoints: number;
   winnerSeatIndex?: number;
   winningTile?: TileInfo;
   winType?: WinType;
+  winnerResults?: GameWinnerResult[];
 };
 
 export type GameHistoryEvent = GameEventMessage & {
@@ -219,6 +225,7 @@ export type ListAdminPersistenceDiagnosticsResponse = {
 };
 
 export type OtherPlayerView = {
+  gangPoints?: number;
   seatIndex: number;
   username: string;
   handTileCount: number;
@@ -233,6 +240,7 @@ export type PlayerView = {
   seatIndex: number;
   username: string;
   handTiles: TileInfo[];
+  gangPoints?: number;
   lastDrawnTileId?: string;
   lastDiscardedTileId?: string;
   otherPlayers: OtherPlayerView[];
@@ -247,5 +255,7 @@ export type PlayerView = {
   eventMessages: GameEventMessage[];
   turnTimer?: TurnTimerInfo;
   result?: GameResultInfo;
+  waitingTiles?: TileInfo[];
+  winnerResults?: GameWinnerResult[];
   winnerSeatIndex?: number;
 };

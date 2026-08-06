@@ -46,6 +46,7 @@ describe("LobbyPage", () => {
   it("formats room rule presets", () => {
     expect(getRulePresetText("simple")).toBe("简单规则");
     expect(getRulePresetText("standard")).toBe("标准规则");
+    expect(getRulePresetText("sichuan")).toBe("四川麻将");
     expect(getRulePresetText(undefined)).toBe("简单规则");
   });
 
