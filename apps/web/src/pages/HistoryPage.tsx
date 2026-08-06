@@ -388,6 +388,13 @@ export function HistoryPage(props: HistoryPageProps): JSX.Element {
                   {selectedRecord.result.gangScores ? (
                     <p>杠分：{selectedRecord.result.gangScores.join("、")}</p>
                   ) : null}
+                  {selectedRecord.result.readyResults?.map((ready) => (
+                    <p key={ready.seatIndex}>
+                      {ready.seatIndex + 1}号位听牌：
+                      {ready.waitingTiles.map((tile) => tile.label).join("、")}
+                      （最高{ready.maxFanTotal}番，{ready.maxPoints}分）
+                    </p>
+                  ))}
                   {selectedRecord.result.winnerResults?.map((winner) => (
                     <p key={`${winner.winnerSeatIndex}-${winner.winningTile?.id ?? "unknown"}`}>
                       {winner.winnerSeatIndex + 1}号位

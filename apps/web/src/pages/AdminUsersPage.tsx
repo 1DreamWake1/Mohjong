@@ -649,6 +649,13 @@ export function AdminUsersPage(props: AdminUsersPageProps): JSX.Element {
                     {selectedGame.result.gangScores ? (
                       <p>杠分：{selectedGame.result.gangScores.join("、")}</p>
                     ) : null}
+                    {selectedGame.result.readyResults?.map((ready) => (
+                      <p key={ready.seatIndex}>
+                        {ready.seatIndex + 1}号位听牌：
+                        {ready.waitingTiles.map((tile) => tile.label).join("、")}
+                        （最高{ready.maxFanTotal}番，{ready.maxPoints}分）
+                      </p>
+                    ))}
                     {selectedGame.result.winnerResults?.map((winner) => (
                       <p key={`${winner.winnerSeatIndex}-${winner.winningTile?.id ?? "unknown"}`}>
                         {winner.winnerSeatIndex + 1}号位

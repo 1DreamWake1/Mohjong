@@ -2,6 +2,7 @@ import type { GameEventMessage, PlayerView } from "@mahjong/shared";
 import {
   compareTiles,
   getLegalActions,
+  getWaitingTileScores,
   getWaitingTiles,
   type MahjongGameState
 } from "mahjong-core";
@@ -18,6 +19,23 @@ export function createRoomPlayerView(input: {
   if (!player) {
     throw new Error(`Unknown seat index: ${input.seatIndex}`);
   }
+
+  const readyResults =
+    input.state.phase === "ended" && input.state.rules.name === "sichuan"
+      ? input.state.players.flatMap((readyPlayer) => {
+          const waitingScores = getWaitingTileScores(input.state, readyPlayer.seatIndex);
+          return waitingScores.length > 0
+            ? [
+                {
+                  maxFanTotal: Math.max(...waitingScores.map((result) => result.fanTotal)),
+                  maxPoints: Math.max(...waitingScores.map((result) => result.totalPoints)),
+                  seatIndex: readyPlayer.seatIndex,
+                  waitingTiles: waitingScores.map((result) => result.tile)
+                }
+              ]
+            : [];
+        })
+      : [];
 
   const view: PlayerView = {
     availableActions: getLegalActions(input.state, input.seatIndex),
@@ -43,6 +61,7 @@ export function createRoomPlayerView(input: {
     phase: input.state.phase,
     ...(player.hasWon ? { hasWon: true } : {}),
     ...(input.state.gangScores ? { gangPoints: input.state.gangScores[input.seatIndex] } : {}),
+    ...(readyResults.length > 0 ? { readyResults } : {}),
     publicMelds: input.state.players.flatMap((meldPlayer) => meldPlayer.publicMelds),
     roomId: input.roomId,
     seatIndex: input.seatIndex,

@@ -5,6 +5,7 @@ import type {
   AdminGameHistoryDetail,
   AdminGameHistoryItem,
   GameHistoryResultSnapshot,
+  GameReadyResult,
   GameWinnerResult,
   GameRecordEndReason,
   GameRecordStatus,
@@ -15,6 +16,7 @@ import type {
 import type { PrismaClient } from "@prisma/client";
 import {
   getRuleConfigValidationErrors,
+  getWaitingTileScores,
   normalizeRuleConfig,
   type MahjongGameState,
   type RuleConfig
@@ -481,6 +483,20 @@ export function parseGameRecoverySnapshot(value: string | null): GameRecoverySna
 }
 
 function createResultSnapshot(state: MahjongGameState): GameHistoryResultSnapshot {
+  const readyResults: GameReadyResult[] = state.players.flatMap((player) => {
+    const waitingScores = getWaitingTileScores(state, player.seatIndex);
+    return waitingScores.length > 0
+      ? [
+          {
+            maxFanTotal: Math.max(...waitingScores.map((result) => result.fanTotal)),
+            maxPoints: Math.max(...waitingScores.map((result) => result.totalPoints)),
+            seatIndex: player.seatIndex,
+            waitingTiles: waitingScores.map((result) => result.tile)
+          }
+        ]
+      : [];
+  });
+
   return {
     fanTotal: state.score?.fanTotal ?? 0,
     fans: state.score?.fans.map((fan) => ({ name: fan.name, value: fan.value })) ?? [],
@@ -488,6 +504,7 @@ function createResultSnapshot(state: MahjongGameState): GameHistoryResultSnapsho
     ...(state.gangScores
       ? { gangScores: [...state.gangScores] as [number, number, number, number] }
       : {}),
+    ...(readyResults.length > 0 ? { readyResults } : {}),
     ...(state.endReason ? { endReason: state.endReason } : {}),
     ...(state.winnerSeatIndex === undefined ? {} : { winnerSeatIndex: state.winnerSeatIndex }),
     ...(state.winningTile ? { winningTile: state.winningTile } : {}),
@@ -537,6 +554,7 @@ function parseResultSnapshot(value: string | null): GameHistoryResultSnapshot | 
     const winningTile = isTileInfo(parsedValue.winningTile) ? parsedValue.winningTile : undefined;
     const winnerResults = parseWinnerResults(parsedValue.winnerResults);
     const gangScores = parseGangScores(parsedValue.gangScores);
+    const readyResults = parseReadyResults(parsedValue.readyResults);
 
     return {
       fanTotal,
@@ -547,11 +565,39 @@ function parseResultSnapshot(value: string | null): GameHistoryResultSnapshot | 
       ...(winningTile ? { winningTile } : {}),
       ...(winType ? { winType } : {}),
       ...(gangScores ? { gangScores } : {}),
+      ...(readyResults.length > 0 ? { readyResults } : {}),
       ...(winnerResults.length > 0 ? { winnerResults } : {})
     };
   } catch {
     return undefined;
   }
+}
+
+function parseReadyResults(value: unknown): GameReadyResult[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((entry): GameReadyResult[] => {
+    if (
+      !isRecord(entry) ||
+      typeof entry.seatIndex !== "number" ||
+      !Array.isArray(entry.waitingTiles)
+    ) {
+      return [];
+    }
+    const waitingTiles = entry.waitingTiles.filter(isTileInfo);
+    return waitingTiles.length > 0 &&
+      typeof entry.maxFanTotal === "number" &&
+      typeof entry.maxPoints === "number"
+      ? [
+          {
+            maxFanTotal: entry.maxFanTotal,
+            maxPoints: entry.maxPoints,
+            seatIndex: entry.seatIndex,
+            waitingTiles
+          }
+        ]
+      : [];
+  });
 }
 
 function parseGangScores(value: unknown): [number, number, number, number] | undefined {

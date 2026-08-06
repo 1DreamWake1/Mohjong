@@ -6,6 +6,7 @@ export {
   createInitialGame,
   createPlayerView,
   getLegalActions,
+  getWaitingTileScores,
   getWaitingTiles
 } from "./game.js";
 export type {
@@ -15,6 +16,7 @@ export type {
   PlayerState,
   WinRecord
 } from "./game.js";
+export type { WaitingTileScore } from "./game.js";
 export { canHu, countTiles, isSevenPairs } from "./hand.js";
 export type { HuPattern, HuResult } from "./hand.js";
 export {

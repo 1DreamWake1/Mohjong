@@ -313,6 +313,13 @@ export function GamePage(props: GamePageProps): JSX.Element {
                 {view.waitingTiles && view.waitingTiles.length > 0 ? (
                   <p>听牌：{view.waitingTiles.map((tile) => tile.label).join("、")}</p>
                 ) : null}
+                {view.readyResults?.map((ready) => (
+                  <p key={ready.seatIndex}>
+                    {ready.seatIndex + 1}号位听牌：
+                    {ready.waitingTiles.map((tile) => tile.label).join("、")}（最高
+                    {ready.maxFanTotal}番，{ready.maxPoints}分）
+                  </p>
+                ))}
               </div>
             ) : null}
             {view.winnerResults && view.winnerResults.length > 0 ? (

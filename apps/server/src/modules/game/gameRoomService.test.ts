@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createTile, getLegalActions, type TileCode } from "mahjong-core";
+import { createTile, getLegalActions, sichuanRuleConfig, type TileCode } from "mahjong-core";
 
 import { createGameRoomService, describeGameEnd } from "./gameRoomService.js";
 import {
@@ -230,6 +230,44 @@ describe("gameRoomService", () => {
     const progressed = service.applyNextBotAction(room);
     expect(typeof progressed).toBe("boolean");
     expect(service.getPlayerView(room).roomId).toBe(room.id);
+  });
+
+  it("advances bot players through Sichuan opening phases", () => {
+    const service = createGameRoomService();
+    const room = service.getOrCreateQuickRoom(player);
+    room.state.rules = sichuanRuleConfig;
+    room.state.phase = "exchange-three";
+    room.state.exchangeThreeSelections = {};
+    room.state.currentTurn = 1;
+    room.state.players[1].handTiles = [
+      "m1",
+      "m2",
+      "m3",
+      "m4",
+      "m5",
+      "m6",
+      "p1",
+      "p2",
+      "p3",
+      "s1",
+      "s2",
+      "s3",
+      "p4",
+      "p5"
+    ].map((code, index) => createTile(code as TileCode, index));
+
+    expect(service.applyNextBotAction(room)).toBe(true);
+    expect(room.state.exchangeThreeSelections?.[1]).toHaveLength(3);
+    expect(service.applyNextBotAction(room)).toBe(true);
+    expect(service.applyNextBotAction(room)).toBe(true);
+    expect(Object.keys(room.state.exchangeThreeSelections ?? {})).toHaveLength(3);
+
+    room.state.phase = "choose-missing-suit";
+    room.state.missingSuits = {};
+    expect(service.applyNextBotAction(room)).toBe(true);
+    expect(service.applyNextBotAction(room)).toBe(true);
+    expect(service.applyNextBotAction(room)).toBe(true);
+    expect(Object.keys(room.state.missingSuits ?? {})).toHaveLength(3);
   });
 
   it("auto-plays a legal human action when the player times out", () => {
@@ -616,6 +654,28 @@ describe("gameRoomService", () => {
 
     room.state.endReason = "draw";
     expect(describeGameEnd(room.state)).toBe("牌局流局");
+  });
+
+  it("describes Sichuan multi-winner and gang settlement", () => {
+    const room = createGameRoomService().getOrCreateQuickRoom(player);
+    room.state.rules = sichuanRuleConfig;
+    room.state.endReason = "hu";
+    room.state.winRecords = [
+      {
+        score: { basePoints: 20, canHu: true, fanTotal: 1, fans: [], totalPoints: 40 },
+        winnerSeatIndex: 0,
+        winType: "selfDraw"
+      },
+      {
+        score: { basePoints: 20, canHu: true, fanTotal: 2, fans: [], totalPoints: 80 },
+        winnerSeatIndex: 1,
+        winType: "discard"
+      }
+    ];
+    room.state.gangScores = [6, -2, -2, -2];
+
+    expect(describeGameEnd(room.state)).toContain("血战结束：player-a 40分、玩家Bot1 80分");
+    expect(describeGameEnd(room.state)).toContain("杠分 6/-2/-2/-2");
   });
 
   it("restores the current active room without an explicit room id", () => {

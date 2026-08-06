@@ -1046,6 +1046,9 @@ describe("mahjong-core game reducer", () => {
     ]);
 
     expect(createPlayerView(state, 0).waitingTiles?.map((tile) => tile.label)).toEqual(["8筒"]);
+    expect(createPlayerView(state, 0).readyResults).toEqual([
+      expect.objectContaining({ seatIndex: 0, maxFanTotal: 1, maxPoints: 20 })
+    ]);
     state.players[0].hasWon = true;
     expect(createPlayerView(state, 0).waitingTiles).toBeUndefined();
   });

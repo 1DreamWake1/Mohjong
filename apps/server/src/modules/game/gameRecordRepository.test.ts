@@ -1,4 +1,4 @@
-import { createInitialGame, simpleRuleConfig } from "mahjong-core";
+import { createInitialGame, createTile, sichuanRuleConfig, simpleRuleConfig } from "mahjong-core";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -191,5 +191,40 @@ describe("game result snapshots", () => {
       }
     ]);
     expect(repository.getRecord("sichuan-0001")?.result?.gangScores).toEqual([6, -2, -2, -2]);
+  });
+
+  it("persists basic Sichuan ready-hand results", async () => {
+    const repository = createMemoryGameRecordRepository();
+    await repository.createRecord({
+      humanSeatIndex: 0,
+      playerUserId: 1,
+      roomId: "sichuan-ready-0001",
+      ruleName: "sichuan",
+      ruleVersion: 1
+    });
+    const state = createInitialGame({ rules: sichuanRuleConfig, seed: 3 });
+    state.phase = "ended";
+    state.endReason = "draw";
+    state.missingSuits = {};
+    state.players[0].handTiles = [
+      "m2",
+      "m3",
+      "m4",
+      "m3",
+      "m4",
+      "m5",
+      "p4",
+      "p5",
+      "p6",
+      "s6",
+      "s7",
+      "s8",
+      "p8"
+    ].map((code, index) => createTile(code as Parameters<typeof createTile>[0], index));
+    await repository.finishRecord({ roomId: "sichuan-ready-0001", state });
+
+    expect(repository.getRecord("sichuan-ready-0001")?.result?.readyResults).toEqual([
+      expect.objectContaining({ seatIndex: 0, waitingTiles: expect.any(Array) })
+    ]);
   });
 });

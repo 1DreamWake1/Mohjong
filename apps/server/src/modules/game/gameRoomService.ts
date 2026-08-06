@@ -156,10 +156,24 @@ function describeAction(state: MahjongGameState, seatIndex: number, action: Acti
 
 export function describeGameEnd(state: MahjongGameState): string {
   if (state.endReason === "draw") {
+    if (state.rules.name === "sichuan" && state.winRecords && state.winRecords.length > 0) {
+      return `牌局流局，${state.winRecords.length} 位玩家已胡`;
+    }
     return "牌局流局";
   }
 
   if (state.endReason === "hu") {
+    if (state.rules.name === "sichuan" && state.winRecords && state.winRecords.length > 0) {
+      const winnerText = state.winRecords
+        .map((record) => {
+          const name =
+            state.players[record.winnerSeatIndex]?.username ?? `${record.winnerSeatIndex + 1}号位`;
+          return `${name} ${record.score.totalPoints}分`;
+        })
+        .join("、");
+      const gangText = state.gangScores ? `，杠分 ${state.gangScores.join("/")}` : "";
+      return `血战结束：${winnerText}${gangText}`;
+    }
     const winner =
       state.winnerSeatIndex === undefined ? undefined : state.players[state.winnerSeatIndex];
     const winnerName = winner?.username ?? "玩家";
@@ -500,7 +514,7 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
 
   function applyHumanTimeout(room: GameRoom): boolean {
     if (
-      room.state.phase !== "playing" ||
+      room.state.phase === "ended" ||
       ![...room.humanSeatIndexByUserId.values()].includes(room.state.currentTurn)
     ) {
       return false;
@@ -531,11 +545,22 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
   }
 
   function applyNextBotAction(room: GameRoom): boolean {
-    if (room.state.phase !== "playing") {
+    if (room.state.phase === "ended") {
       return false;
     }
 
-    const player = room.state.players[room.state.currentTurn];
+    const botSeatIndex =
+      room.state.phase === "exchange-three"
+        ? room.state.players.find(
+            (candidate) =>
+              candidate.isBot && !room.state.exchangeThreeSelections?.[candidate.seatIndex]
+          )?.seatIndex
+        : room.state.phase === "choose-missing-suit"
+          ? room.state.players.find(
+              (candidate) => candidate.isBot && !room.state.missingSuits?.[candidate.seatIndex]
+            )?.seatIndex
+          : room.state.currentTurn;
+    const player = botSeatIndex === undefined ? undefined : room.state.players[botSeatIndex];
     if (!player?.isBot) {
       return false;
     }

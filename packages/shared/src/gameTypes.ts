@@ -72,6 +72,13 @@ export type GameWinnerResult = GameResultInfo & {
   winnerSeatIndex: number;
 };
 
+export type GameReadyResult = {
+  maxFanTotal: number;
+  maxPoints: number;
+  seatIndex: number;
+  waitingTiles: TileInfo[];
+};
+
 export type GameRecordStatus = "playing" | "ended";
 export type GameRecordEndReason = "hu" | "draw" | "abnormal";
 
@@ -152,6 +159,7 @@ export type GameHistoryResultSnapshot = {
   fanTotal: number;
   fans: GameScoreFan[];
   gangScores?: [number, number, number, number];
+  readyResults?: GameReadyResult[];
   totalPoints: number;
   winnerSeatIndex?: number;
   winningTile?: TileInfo;
@@ -255,6 +263,7 @@ export type PlayerView = {
   eventMessages: GameEventMessage[];
   turnTimer?: TurnTimerInfo;
   result?: GameResultInfo;
+  readyResults?: GameReadyResult[];
   waitingTiles?: TileInfo[];
   winnerResults?: GameWinnerResult[];
   winnerSeatIndex?: number;

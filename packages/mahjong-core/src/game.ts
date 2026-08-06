@@ -279,6 +279,7 @@ export function applyAction(
 
 export function createPlayerView(state: MahjongGameState, seatIndex: number): PlayerView {
   const player = getPlayer(state, seatIndex);
+  const readyResults = getReadyResults(state);
 
   const view: PlayerView = {
     availableActions: getLegalActions(state, seatIndex),
@@ -308,6 +309,7 @@ export function createPlayerView(state: MahjongGameState, seatIndex: number): Pl
     phase: state.phase,
     ...(player.hasWon ? { hasWon: true } : {}),
     ...(state.gangScores ? { gangPoints: state.gangScores[seatIndex] } : {}),
+    ...(readyResults.length > 0 ? { readyResults } : {}),
     publicMelds: state.players.flatMap((meldPlayer) => meldPlayer.publicMelds),
     roomId: "core-game",
     seatIndex,
@@ -355,7 +357,42 @@ export function createPlayerView(state: MahjongGameState, seatIndex: number): Pl
     : { ...viewWithResult, winnerSeatIndex: state.winnerSeatIndex };
 }
 
+function getReadyResults(
+  state: MahjongGameState
+): Array<{ maxFanTotal: number; maxPoints: number; seatIndex: number; waitingTiles: Tile[] }> {
+  if (state.phase !== "ended" || state.rules.name !== "sichuan") {
+    return [];
+  }
+
+  return state.players.flatMap((player) => {
+    const waitingScores = getWaitingTileScores(state, player.seatIndex);
+    return waitingScores.length > 0
+      ? [
+          {
+            maxFanTotal: Math.max(...waitingScores.map((result) => result.fanTotal)),
+            maxPoints: Math.max(...waitingScores.map((result) => result.totalPoints)),
+            seatIndex: player.seatIndex,
+            waitingTiles: waitingScores.map((result) => result.tile)
+          }
+        ]
+      : [];
+  });
+}
+
 export function getWaitingTiles(state: MahjongGameState, seatIndex: number): Tile[] {
+  return getWaitingTileScores(state, seatIndex).map((result) => result.tile);
+}
+
+export type WaitingTileScore = {
+  fanTotal: number;
+  tile: Tile;
+  totalPoints: number;
+};
+
+export function getWaitingTileScores(
+  state: MahjongGameState,
+  seatIndex: number
+): WaitingTileScore[] {
   if (state.phase !== "ended" || state.rules.name !== "sichuan") {
     return [];
   }
@@ -370,7 +407,9 @@ export function getWaitingTiles(state: MahjongGameState, seatIndex: number): Til
     const score = calculateScore([...player.handTiles, tile], state.rules, {
       publicMelds: player.publicMelds
     });
-    return score.canHu && meetsMinimumFan(score, state.rules) ? [tile] : [];
+    return score.canHu && meetsMinimumFan(score, state.rules)
+      ? [{ fanTotal: score.fanTotal, tile, totalPoints: score.totalPoints }]
+      : [];
   });
 }
 
