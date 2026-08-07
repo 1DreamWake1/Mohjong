@@ -16,6 +16,7 @@ import {
   getRuleConfigValidationErrors,
   getLegalActions,
   identifyFans,
+  meetsMinimumFan,
   runBasicBotGame,
   settleSichuanDraw,
   sichuanRuleConfig,
@@ -292,7 +293,8 @@ describe("mahjong-core hand evaluation", () => {
     expect(score.canHu).toBe(true);
     expect(score.fans.map((fan) => fan.type)).toContain("root");
     expect(score.fanTotal).toBe(1);
-    expect(score.totalPoints).toBe(40);
+    expect(score.totalPoints).toBe(20);
+    expect(meetsMinimumFan(score, sichuanRuleConfig)).toBe(false);
   });
 });
 

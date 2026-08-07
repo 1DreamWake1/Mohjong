@@ -76,13 +76,14 @@ export function calculateScore(
   const rootTotal = fans
     .filter((fan) => fan.type === "root")
     .reduce((total, fan) => total + fan.value, 0);
-  const fanTotal = fans
-    .filter((fan) => fan.type !== "root")
-    .reduce((total, fan) => total + fan.value, 0);
+  const fanTotal = fans.reduce((total, fan) => total + fan.value, 0);
+  const minimumEligibleFanTotal = fanTotal - rootTotal;
   const basePoints = options.basePoints ?? scoring.basePoints;
   const fanPointValue = options.fanPointValue ?? scoring.fanPointValue;
   const appliedFanTotal =
-    scoring.fanLimit === null ? fanTotal : Math.min(fanTotal, Math.max(0, scoring.fanLimit));
+    scoring.fanLimit === null
+      ? minimumEligibleFanTotal
+      : Math.min(minimumEligibleFanTotal, Math.max(0, scoring.fanLimit));
   const totalPoints =
     scoring.mode === "sichuan"
       ? basePoints * 2 ** (appliedFanTotal + rootTotal)
@@ -172,7 +173,12 @@ export function identifyFans(
 }
 
 export function meetsMinimumFan(score: ScoreResult, rules: RuleConfig): boolean {
-  return score.canHu && score.fanTotal >= getScoringConfig(rules).minimumFan;
+  if (!score.canHu) return false;
+
+  const rootTotal = score.fans
+    .filter((fan) => fan.type === "root")
+    .reduce((total, fan) => total + fan.value, 0);
+  return score.fanTotal - rootTotal >= getScoringConfig(rules).minimumFan;
 }
 
 export function isTanyao(tiles: readonly Tile[]): boolean {

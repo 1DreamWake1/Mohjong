@@ -62,10 +62,10 @@ jobs:
 
       - name: Prepare .env
         run: |
-          echo "AUTH_TOKEN_SECRET=[redacted]
+          echo "AUTH_TOKEN_SECRET=ci-only-secret-change-me-0123456789" >> .env
           echo "WEB_PORT=8080" >> .env
           echo "ADMIN_USERNAME=admin" >> .env
-          echo "ADMIN_PASSWORD=[redacted]
+          echo "ADMIN_PASSWORD=admin123456" >> .env
 
       - name: Build and start stack
         run: |
@@ -89,14 +89,14 @@ jobs:
         run: |
           docker compose exec \
             -e ADMIN_USERNAME=admin \
-            -e ADMIN_PASSWORD=[redacted]
+            -e ADMIN_PASSWORD=admin123456 \
             server node ./apps/server/dist/scripts/seedAdmin.js
 
       - name: Run smoke script (probes / login / socket)
         run: |
           SMOKE_BASE_URL=http://127.0.0.1:8080 \
           SMOKE_USERNAME=admin \
-          SMOKE_PASSWORD=[redacted]
+          SMOKE_PASSWORD=admin123456 \
           pnpm --filter server run smoke
 
       - name: Collect logs on failure
