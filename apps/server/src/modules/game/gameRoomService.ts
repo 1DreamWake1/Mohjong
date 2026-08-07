@@ -464,6 +464,11 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     const { snapshots } = await gameRecordRepository.listActiveRecoverySnapshots();
     const snapshot = snapshots.find((candidate) => candidate.roomId === roomId);
     if (!snapshot) return false;
+    return restoreSnapshot(snapshot);
+  }
+
+  function restoreSnapshot(snapshot: GameRecoverySnapshot, force = false): boolean {
+    if (roomsById.has(snapshot.roomId) && !force) return true;
     const room: GameRoom = {
       events: snapshot.events,
       humanSeatIndex: snapshot.humanSeatIndex,
@@ -482,6 +487,11 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
       activeRoomIdByUserId.set(userId, room.id);
     }
     return true;
+  }
+
+  function getRecoverySnapshot(roomId: string): GameRecoverySnapshot | undefined {
+    const room = roomsById.get(roomId);
+    return room ? createRecoverySnapshot(room) : undefined;
   }
 
   function cleanupExpiredRooms(options: CleanupGameRoomsOptions): string[] {
@@ -691,11 +701,13 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     createRoomFromLobby,
     getOrCreateQuickRoom,
     getPlayerView,
+    getRecoverySnapshot,
     getRoom,
     getRoomForUser,
     leaveActiveGame,
     restoreActiveRooms,
     restoreRoom,
+    restoreSnapshot,
     waitForPersistentWrites
   };
 }

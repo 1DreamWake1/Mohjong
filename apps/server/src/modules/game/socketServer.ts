@@ -9,6 +9,7 @@ import { createUnlimitedRateLimiter, type RateLimiter } from "../../security/rat
 import { createGameLobbyService, type GameLobbyService } from "./gameLobbyService.js";
 import { createGameRoomService, type GameRoomService } from "./gameRoomService.js";
 import { createRoomCoordinator, type RoomCoordinator } from "./roomCoordinator.js";
+import { createRoomStateStore, type RoomStateStore } from "./roomStateStore.js";
 import {
   createPlayerConnectionRegistry,
   type PlayerConnectionRegistry
@@ -354,6 +355,7 @@ export function registerGameSocketServer(input: {
   socketConnectionRateLimiter?: RateLimiter;
   redisUrl?: string;
   roomCoordinator?: RoomCoordinator;
+  roomStateStore?: RoomStateStore;
 }): {
   io: Server<ClientToServerEvents, ServerToClientEvents>;
   stop: () => Promise<void>;
@@ -396,6 +398,7 @@ export function registerGameSocketServer(input: {
   const roomCoordinator =
     input.roomCoordinator ??
     createRoomCoordinator(input.redisUrl ? { redisUrl: input.redisUrl } : {});
+  const roomStateStore = input.roomStateStore ?? createRoomStateStore(input.redisUrl);
   const playerConnectionRegistry =
     input.playerConnectionRegistry ?? createPlayerConnectionRegistry();
   const activeSocketsByRoomId = new Map<string, Set<GameSocket>>();
@@ -635,15 +638,38 @@ export function registerGameSocketServer(input: {
         ? gameRoomService.getRoomForUser(user, payload.gameId)
         : gameRoomService.getRoomForUser(user);
       if (!activeRoom && payload.gameId) {
+        const distributedSnapshot = await roomStateStore.get(payload.gameId);
+        if (distributedSnapshot) gameRoomService.restoreSnapshot(distributedSnapshot);
         await gameRoomService.restoreRoom(payload.gameId);
       }
       const restoredRoom = payload.gameId
         ? gameRoomService.getRoomForUser(user, payload.gameId)
         : gameRoomService.getRoomForUser(user);
       const result = restoredRoom
-        ? await roomCoordinator.runExclusive(restoredRoom.id, async () =>
-            gameRoomService.applyHumanAction(user, payload.action, payload.stateVersion)
-          )
+        ? await roomCoordinator.runExclusive(restoredRoom.id, async () => {
+            let actionResult = gameRoomService.applyHumanAction(
+              user,
+              payload.action,
+              payload.stateVersion
+            );
+            if (actionResult?.error === "Stale game state, please sync and retry") {
+              const latestSnapshot = await roomStateStore.get(restoredRoom.id);
+              const latestVersion = latestSnapshot?.stateVersion;
+              if (
+                latestSnapshot &&
+                latestVersion !== undefined &&
+                latestVersion !== payload.stateVersion
+              ) {
+                gameRoomService.restoreSnapshot(latestSnapshot, true);
+                actionResult = gameRoomService.applyHumanAction(
+                  user,
+                  payload.action,
+                  latestVersion
+                );
+              }
+            }
+            return actionResult;
+          })
         : null;
       if (!result) {
         gameSocket.emit("game:error", { message: "No active game room" });
@@ -655,6 +681,8 @@ export function registerGameSocketServer(input: {
         emitRoomState(gameSocket, gameRoomService, humanTurnDeadlinesByRoomId, result.room.id);
         return;
       }
+      const updatedSnapshot = gameRoomService.getRecoverySnapshot(result.room.id);
+      if (updatedSnapshot) await roomStateStore.set(updatedSnapshot);
       syncLobbyRoomEnd(gameLobbyService, result.room);
 
       const timeout = scheduledHumanTimeoutsByRoomId.get(result.room.id);
@@ -727,7 +755,11 @@ export function registerGameSocketServer(input: {
         return;
       }
 
-      if (payload.gameId) await gameRoomService.restoreRoom(payload.gameId);
+      if (payload.gameId) {
+        const distributedSnapshot = await roomStateStore.get(payload.gameId);
+        if (distributedSnapshot) gameRoomService.restoreSnapshot(distributedSnapshot);
+        await gameRoomService.restoreRoom(payload.gameId);
+      }
       const room = gameRoomService.getRoomForUser(user, payload.gameId);
       if (!room) {
         gameSocket.emit("game:error", { message: "Game room not found" });
@@ -770,6 +802,7 @@ export function registerGameSocketServer(input: {
       await Promise.all(redisClients.map((client) => client.quit().catch(() => undefined)));
     }
     if (!input.roomCoordinator) await roomCoordinator.close();
+    if (!input.roomStateStore) await roomStateStore.close();
   }
 
   return { io, stop };
