@@ -4,7 +4,7 @@ import { create } from "zustand";
 import { getCurrentUser, login, logout } from "../api/client.js";
 import { useSocketStore } from "./socketStore.js";
 
-const TOKEN_STORAGE_KEY = "mahjong.authToken";
+const COOKIE_SESSION_TOKEN = "cookie-session";
 
 type AuthStatus = "checking" | "anonymous" | "authenticated";
 
@@ -18,20 +18,7 @@ type AuthStore = {
   clearSession: () => void;
 };
 
-function clearStoredToken(): void {
-  localStorage.removeItem(TOKEN_STORAGE_KEY);
-}
-
-function getStoredToken(): string | null {
-  return localStorage.getItem(TOKEN_STORAGE_KEY);
-}
-
-function storeToken(token: string): void {
-  localStorage.setItem(TOKEN_STORAGE_KEY, token);
-}
-
 function clearClientSession(): void {
-  clearStoredToken();
   useSocketStore.getState().disconnectSocket();
 }
 
@@ -46,15 +33,10 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   restoreSession: async () => {
-    const token = getStoredToken();
-    if (!token) {
-      set({ status: "anonymous", token: null, user: null });
-      return;
-    }
-
     try {
-      const user = await getCurrentUser(token);
-      set({ status: "authenticated", token, user });
+      const user = await getCurrentUser();
+      if (!user) throw new Error("No active cookie session");
+      set({ status: "authenticated", token: COOKIE_SESSION_TOKEN, user });
     } catch {
       clearClientSession();
       set({ status: "anonymous", token: null, user: null });
@@ -64,10 +46,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   signIn: async (input) => {
     const response = await login(input);
     useSocketStore.getState().disconnectSocket();
-    storeToken(response.token);
     set({
       status: "authenticated",
-      token: response.token,
+      token: COOKIE_SESSION_TOKEN,
       user: response.user
     });
   },

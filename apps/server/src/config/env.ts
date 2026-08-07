@@ -3,6 +3,8 @@ import { dirname, resolve } from "node:path";
 
 export type ServerEnv = {
   authTokenSecret: string;
+  authCookieName: string;
+  authCookieSecure: boolean;
   bodyLimitBytes: number;
   corsOrigins: string[];
   host: string;
@@ -11,6 +13,7 @@ export type ServerEnv = {
   port: number;
   redisUrl: string | undefined;
   shutdownTimeoutMs: number;
+  trustProxy: boolean;
   socketActionRateLimitMax: number;
   socketActionRateLimitWindowMs: number;
   socketConnectionRateLimitMax: number;
@@ -106,6 +109,8 @@ export function readEnv(): ServerEnv {
 
   return {
     authTokenSecret: process.env.AUTH_TOKEN_SECRET ?? DEV_AUTH_TOKEN_SECRET,
+    authCookieName: process.env.AUTH_COOKIE_NAME?.trim() || "mahjong_session",
+    authCookieSecure: isProduction || process.env.AUTH_COOKIE_SECURE === "1",
     bodyLimitBytes: readNumber("BODY_LIMIT_BYTES", 64 * 1024),
     corsOrigins: readCorsOrigins(),
     host: process.env.HOST ?? "0.0.0.0",
@@ -114,6 +119,7 @@ export function readEnv(): ServerEnv {
     port: readNumber("PORT", 3000),
     redisUrl: process.env.REDIS_URL?.trim() || undefined,
     shutdownTimeoutMs: readNumber("SHUTDOWN_TIMEOUT_MS", 10_000),
+    trustProxy: process.env.TRUST_PROXY !== "0",
     socketActionRateLimitMax: readNumber("SOCKET_ACTION_RATE_LIMIT_MAX", 30),
     socketActionRateLimitWindowMs: readNumber("SOCKET_ACTION_RATE_LIMIT_WINDOW_MS", 10_000),
     socketConnectionRateLimitMax: readNumber("SOCKET_CONNECTION_RATE_LIMIT_MAX", 20),

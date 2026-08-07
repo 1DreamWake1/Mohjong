@@ -1,4 +1,5 @@
 import cors from "@fastify/cors";
+import cookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
 import { resolve } from "node:path";
@@ -57,7 +58,8 @@ export async function createApp(
   const env = readEnv();
   const app = Fastify({
     bodyLimit: env.bodyLimitBytes,
-    logger: true
+    logger: true,
+    trustProxy: env.trustProxy
   });
   const lifecycle = createServerLifecycle();
   const closeDatabase = options.closeDatabase ?? closePrisma;
@@ -134,10 +136,14 @@ export async function createApp(
   cleanupTimer.unref();
   // 同源部署（vite proxy / nginx）默认不需要 CORS；配置 CORS_ORIGIN 时启用白名单。
   await app.register(cors, {
+    credentials: true,
     origin: env.corsOrigins.length > 0 ? env.corsOrigins : false
   });
+  await app.register(cookie);
   await registerRoutes(app, {
     authService,
+    authCookieName: env.authCookieName,
+    authCookieSecure: env.authCookieSecure,
     databaseReadinessCheck,
     gameLobbyService,
     gameRecordRepository,

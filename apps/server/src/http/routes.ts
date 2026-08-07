@@ -33,6 +33,8 @@ import type { createUserService } from "../modules/users/userService.js";
 
 type RouteServices = {
   authService: AuthService;
+  authCookieName: string;
+  authCookieSecure: boolean;
   databaseReadinessCheck: () => Promise<void>;
   gameLobbyService: GameLobbyService;
   gameRecordRepository: GameRecordRepository;
@@ -152,9 +154,10 @@ function readBearerToken(authorizationHeader: unknown): string | null {
 async function requireUser(
   app: FastifyInstance,
   services: RouteServices,
-  authorizationHeader: unknown
+  authorizationHeader: unknown,
+  cookieToken?: string
 ): Promise<AuthenticatedUser | null> {
-  const token = readBearerToken(authorizationHeader);
+  const token = readBearerToken(authorizationHeader) ?? cookieToken;
   if (!token) {
     return null;
   }
@@ -169,6 +172,14 @@ async function requireUser(
 }
 
 export async function registerRoutes(app: FastifyInstance, services: RouteServices): Promise<void> {
+  app.addHook("onRequest", async (request) => {
+    if (readBearerToken(request.headers.authorization)) return;
+    const cookieToken = request.cookies[services.authCookieName];
+    if (cookieToken) {
+      request.headers.authorization = `Bearer ${cookieToken}`;
+    }
+  });
+
   app.get("/health", async () => ({
     status: "ok"
   }));
@@ -205,6 +216,13 @@ export async function registerRoutes(app: FastifyInstance, services: RouteServic
       return reply.code(401).send({ message: "Invalid username or password" });
     }
 
+    reply.setCookie(services.authCookieName, result.token, {
+      httpOnly: true,
+      maxAge: 60 * 60 * 24 * 7,
+      path: "/",
+      sameSite: "lax",
+      secure: services.authCookieSecure
+    });
     return result;
   });
 
@@ -218,12 +236,10 @@ export async function registerRoutes(app: FastifyInstance, services: RouteServic
     return { user };
   });
 
-  app.post(
-    "/auth/logout",
-    async (): Promise<LogoutResponse> => ({
-      ok: true
-    })
-  );
+  app.post("/auth/logout", async (_request, reply): Promise<LogoutResponse> => {
+    reply.clearCookie(services.authCookieName, { path: "/" });
+    return { ok: true };
+  });
 
   app.get("/rooms/current", async (request, reply): Promise<GetCurrentGameRoomResponse | void> => {
     const user = await requireUser(app, services, request.headers.authorization);

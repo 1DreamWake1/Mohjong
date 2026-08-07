@@ -37,6 +37,15 @@ export function readSocketToken(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+function readCookieToken(value: unknown, cookieName = "mahjong_session"): string | null {
+  if (typeof value !== "string") return null;
+  const entry = value
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${cookieName}=`));
+  return entry ? decodeURIComponent(entry.slice(cookieName.length + 1)) : null;
+}
+
 export function getGameSocketAccessError(
   user: AuthUser,
   operation: GameSocketOperation
@@ -417,7 +426,12 @@ export function registerGameSocketServer(input: {
       next(new Error("Server is shutting down"));
       return;
     }
-    const token = readSocketToken(socket.handshake.auth.token);
+    const token =
+      readSocketToken(socket.handshake.auth.token) ??
+      readCookieToken(
+        socket.handshake.headers.cookie,
+        process.env.AUTH_COOKIE_NAME ?? "mahjong_session"
+      );
     if (!token) {
       next(new Error("Unauthorized"));
       return;

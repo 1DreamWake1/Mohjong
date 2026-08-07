@@ -67,7 +67,8 @@ describe("authStore", () => {
     });
   });
 
-  it("restores anonymous state when no token is stored", async () => {
+  it("restores anonymous state when the cookie session is absent", async () => {
+    vi.mocked(getCurrentUser).mockRejectedValue(new Error("no cookie"));
     await useAuthStore.getState().restoreSession();
 
     expect(useAuthStore.getState()).toMatchObject({
@@ -75,24 +76,23 @@ describe("authStore", () => {
       token: null,
       user: null
     });
-    expect(getCurrentUser).not.toHaveBeenCalled();
+    expect(getCurrentUser).toHaveBeenCalledWith();
   });
 
-  it("restores authenticated state from a stored token", async () => {
+  it("restores authenticated state from the HttpOnly cookie", async () => {
     vi.mocked(getCurrentUser).mockResolvedValue(adminUser);
-    localStorage.setItem("mahjong.authToken", "stored-token");
 
     await useAuthStore.getState().restoreSession();
 
-    expect(getCurrentUser).toHaveBeenCalledWith("stored-token");
+    expect(getCurrentUser).toHaveBeenCalledWith();
     expect(useAuthStore.getState()).toMatchObject({
       status: "authenticated",
-      token: "stored-token",
+      token: "cookie-session",
       user: adminUser
     });
   });
 
-  it("stores token and user after sign in", async () => {
+  it("stores the cookie session marker and user after sign in", async () => {
     vi.mocked(login).mockResolvedValue({
       token: "next-token",
       user: adminUser
@@ -106,31 +106,30 @@ describe("authStore", () => {
     await useAuthStore.getState().signIn({ password: "admin123", username: "admin" });
 
     expect(disconnectSocket).toHaveBeenCalledTimes(1);
-    expect(localStorage.getItem("mahjong.authToken")).toBe("next-token");
+    expect(localStorage.getItem("mahjong.authToken")).toBeNull();
     expect(useAuthStore.getState()).toMatchObject({
       status: "authenticated",
-      token: "next-token",
+      token: "cookie-session",
       user: adminUser
     });
   });
 
   it("clears token and user after sign out", async () => {
     vi.mocked(logout).mockResolvedValue({ ok: true });
-    localStorage.setItem("mahjong.authToken", "current-token");
     useAuthStore.setState({
       status: "authenticated",
-      token: "current-token",
+      token: "cookie-session",
       user: adminUser
     });
     useSocketStore.setState({
-      preparedToken: "current-token",
+      preparedToken: "cookie-session",
       socket: createSocketMock(),
       status: "ready"
     });
 
     await useAuthStore.getState().signOut();
 
-    expect(logout).toHaveBeenCalledWith("current-token");
+    expect(logout).toHaveBeenCalledWith("cookie-session");
     expect(disconnectSocket).toHaveBeenCalledTimes(1);
     expect(localStorage.getItem("mahjong.authToken")).toBeNull();
     expect(useAuthStore.getState()).toMatchObject({
@@ -147,9 +146,8 @@ describe("authStore", () => {
 
   it("clears socket state when restoring with an invalid token", async () => {
     vi.mocked(getCurrentUser).mockRejectedValue(new Error("invalid token"));
-    localStorage.setItem("mahjong.authToken", "expired-token");
     useSocketStore.setState({
-      preparedToken: "expired-token",
+      preparedToken: "cookie-session",
       socket: createSocketMock(),
       status: "ready"
     });

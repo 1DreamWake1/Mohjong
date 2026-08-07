@@ -219,6 +219,7 @@ describe("routes", () => {
       username: "admin",
       role: "admin"
     });
+    expect(loginResponse.headers["set-cookie"]).toContain("HttpOnly");
 
     const meResponse = await app.inject({
       headers: {

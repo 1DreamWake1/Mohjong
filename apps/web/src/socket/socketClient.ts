@@ -5,9 +5,9 @@ import { API_BASE_URL } from "../api/client.js";
 
 export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
-export function createGameSocket(token: string): GameSocket {
+export function createGameSocket(token?: string): GameSocket {
   return io(API_BASE_URL, {
-    auth: { token },
+    auth: token && token !== "cookie-session" ? { token } : {},
     autoConnect: false,
     transports: ["websocket", "polling"]
   }) as GameSocket;

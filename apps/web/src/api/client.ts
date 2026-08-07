@@ -50,12 +50,13 @@ async function request<T>(
   if (options.body !== undefined) {
     headers.set("content-type", "application/json");
   }
-  if (options.token) {
+  if (options.token && options.token !== "cookie-session") {
     headers.set("authorization", `Bearer ${options.token}`);
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
+    credentials: "include",
     headers
   });
 
@@ -85,8 +86,8 @@ export async function login(input: LoginRequest): Promise<LoginResponse> {
   });
 }
 
-export async function getCurrentUser(token: string): Promise<AuthUser> {
-  const response = await request<{ user: AuthUser }>("/auth/me", { token });
+export async function getCurrentUser(token?: string): Promise<AuthUser> {
+  const response = await request<{ user: AuthUser }>("/auth/me", token ? { token } : {});
   return response.user;
 }
 

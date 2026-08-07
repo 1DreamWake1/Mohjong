@@ -13,6 +13,7 @@ RUN pnpm --filter web build
 
 FROM nginx:1.28.0-alpine AS runtime
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY apps/web/nginx.https.conf /etc/nginx/nginx.https.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 RUN chown -R nginx:nginx /usr/share/nginx/html \
   && sed -i '/^user /d' /etc/nginx/nginx.conf \

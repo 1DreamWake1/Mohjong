@@ -1,6 +1,6 @@
 # Docker Compose 部署手册
 
-本文适用于当前单 Server、SQLite 和 Docker Compose 架构。公网域名、HTTPS 和生产安全强化仍需按阶段 18E 补齐。
+本文适用于当前单 Server、SQLite 和 Docker Compose 架构，也包含正式 HTTPS 和公网安全基线。
 
 ## 1. 部署边界
 
@@ -10,6 +10,13 @@
 - Server 不发布宿主机端口，只能由 Web 容器访问。
 - 默认 SQLite 模式不支持多个 Server 副本；使用 PostgreSQL + Redis 扩展配置后支持多实例广播和动作锁。
 - `NODE_ENV=production` 时 Server 强制校验 `AUTH_TOKEN_SECRET`（≥32 字符）和 `DATABASE_URL`，不合规直接拒绝启动。
+
+### 会话 Cookie 与公网安全
+
+- 登录会话使用 `HttpOnly`、`SameSite=Lax` Cookie，前端请求携带 `credentials: include`，令牌不会写入 `localStorage`。
+- 生产环境默认启用 `Secure` Cookie；本地纯 HTTP 调试时可设置 `AUTH_COOKIE_SECURE=0`。
+- 反向代理部署保持 `TRUST_PROXY=1`，并将 `CORS_ORIGIN` 限制为实际前端来源。
+- 公网防火墙只开放 80/443，`AUTH_TOKEN_SECRET` 必须使用随机高强度值。
 
 ### PostgreSQL、Redis 与多实例扩展
 
@@ -48,6 +55,9 @@ WEB_PORT="8080"
 SHUTDOWN_TIMEOUT_MS="10000"
 BACKUP_KEEP="5"
 BACKUP_ON_BOOT="1"
+AUTH_COOKIE_NAME="mahjong_session"
+AUTH_COOKIE_SECURE="1"
+TRUST_PROXY="1"
 ```
 
 说明：
@@ -57,6 +67,25 @@ BACKUP_ON_BOOT="1"
 - `SHUTDOWN_TIMEOUT_MS` 应小于 Compose 的 15 秒 Server 停机宽限期。
 - `BACKUP_KEEP` 为备份保留数量，`BACKUP_ON_BOOT` 控制在启动迁移前是否自动备份（默认开启）。
 - `.env` 包含密钥，不得提交 Git。
+
+## 2.1 正式 HTTPS
+
+将证书链和私钥放入未提交的目录：
+
+```text
+deploy/tls/fullchain.pem
+deploy/tls/privkey.pem
+```
+
+容器内部监听 8080/8443，由宿主机映射到标准 80/443；HTTP 会自动跳转 HTTPS。
+
+```bash
+docker compose -f compose.yaml -f compose.https.yaml config --quiet
+docker compose -f compose.yaml -f compose.https.yaml up -d --build --wait
+curl --fail https://your-domain.example/health
+```
+
+证书应由 ACME 客户端定期续期，续期后重启 `web` 容器加载新证书。私钥不得提交 Git。
 
 ## 3. 构建并启动
 

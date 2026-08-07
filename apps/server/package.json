@@ -17,6 +17,7 @@
     "smoke": "tsx src/scripts/smoke.ts"
   },
   "dependencies": {
+    "@fastify/cookie": "^10.0.1",
     "@fastify/cors": "^10.0.1",
     "@fastify/static": "^10.1.2",
     "@mahjong/shared": "workspace:*",

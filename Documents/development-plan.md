@@ -217,11 +217,18 @@
 
 ### 后续评估
 
-阶段 22 完成后继续推进：
+### 阶段 24：公网安全基线
 
-- 四川地方规则扩展，包括更细分的退税变体和赛事规则配置。
-- PostgreSQL、Redis 和多 Server 实例。
-- HttpOnly Cookie、正式域名和公网 HTTPS。
+- 登录会话迁移到 HttpOnly、SameSite Cookie，前端不再持久化访问令牌。
+- Socket.IO 支持通过浏览器 Cookie 完成握手认证，保留非浏览器 Bearer 兼容路径。
+- 增加正式 HTTPS Nginx 配置、TLS 1.2/1.3、HSTS、CSP 和基础安全响应头。
+- 增加 `compose.https.yaml`、证书挂载说明、可信代理和生产 Cookie 配置。
+
+阶段 24 验收结论：同源 HTTPS 部署默认使用 Secure HttpOnly Cookie，HTTP 自动跳转 HTTPS；生产环境可通过 CORS 白名单、随机密钥和防火墙限制公网暴露面。
+
+### 后续评估
+
+- 真实 Redis/PostgreSQL 双实例故障演练和状态复制压测。
 - 观战、匹配、排行和商业化能力。
 
 ## 5. 开发准入
