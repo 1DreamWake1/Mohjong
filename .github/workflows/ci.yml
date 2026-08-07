@@ -63,6 +63,7 @@ jobs:
       - name: Prepare .env
         run: |
           echo "AUTH_TOKEN_SECRET=ci-only-secret-change-me-0123456789" >> .env
+          echo "POSTGRES_PASSWORD=ci-postgres-password" >> .env
           echo "WEB_PORT=8080" >> .env
           echo "ADMIN_USERNAME=admin" >> .env
           echo "ADMIN_PASSWORD=admin123456" >> .env
