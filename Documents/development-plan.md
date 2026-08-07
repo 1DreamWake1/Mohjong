@@ -206,10 +206,12 @@
 - 新增 PostgreSQL Prisma schema 和 PostgreSQL 版容器构建参数，SQLite 默认开发链路保持不变。
 - Compose 增加 `scale` profile，提供 PostgreSQL 和 Redis 服务；生产配置接受 PostgreSQL URL。
 - Socket.IO 可通过 `REDIS_URL` 启用跨实例广播，房间动作使用 Redis 分布式锁并保留进程内串行兜底。
+- 活动房间每次事件都写入 PostgreSQL/持久化 recovery snapshot；新实例可按房间 ID 延迟恢复并继续处理动作。
+- 增加状态版本号和乐观锁，客户端提交旧版本动作会被拒绝并要求重新同步。
 - 增加断线恢复所需的 Redis 连接关闭流程、动作锁超时保护和并发锁测试。
 - 部署文档补充 PostgreSQL、Redis、多实例构建和备份边界。
 
-阶段 23 剩余：将活动房间状态从单实例内存完全迁移到 Redis/数据库，并补充多实例端到端故障演练；当前版本仍要求同一房间请求具备粘性路由或在恢复快照基础上重新加载。
+阶段 23 剩余：补充真实 Redis/PostgreSQL 双实例端到端故障演练和实时状态复制压测；当前版本已支持基于持久化快照的跨实例恢复，Redis 不可用时自动降级为本地锁。
 
 ### 后续评估
 

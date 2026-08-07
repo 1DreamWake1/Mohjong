@@ -196,6 +196,7 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
   const gameRecordRepository = options.gameRecordRepository ?? createNoopGameRecordRepository();
   const persistentWriteQueueByRoomId = new Map<string, Promise<void>>();
   const updatedAtMsByRoomId = new Map<string, number>();
+  const stateVersionByRoomId = new Map<string, number>();
 
   function enqueuePersistentWrite(
     roomId: string,
@@ -215,7 +216,8 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
       events: room.events.map(stripEventSnapshot),
       roomId: room.id,
       seatIndex: room.humanSeatIndex,
-      state: room.state
+      state: room.state,
+      stateVersion: stateVersionByRoomId.get(room.id) ?? 0
     });
   }
 
@@ -231,6 +233,7 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
       playerUserId: room.playerUserId,
       roomId: room.id,
       state: room.state,
+      stateVersion: stateVersionByRoomId.get(room.id) ?? 0,
       version: 1 as const
     });
   }
@@ -413,7 +416,8 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
       seatIndex: getHumanSeatIndex(room, user),
       state: room.state,
       ...(timing?.turnDeadlineAt ? { turnDeadlineAt: timing.turnDeadlineAt } : {}),
-      unlimitedHumanTurn: !room.lobbyRoomId
+      unlimitedHumanTurn: !room.lobbyRoomId,
+      stateVersion: stateVersionByRoomId.get(room.id) ?? 0
     });
   }
 
@@ -438,6 +442,7 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
 
       roomsById.set(room.id, room);
       updatedAtMsByRoomId.set(room.id, Date.now());
+      stateVersionByRoomId.set(room.id, snapshot.stateVersion ?? 0);
       for (const userId of room.humanSeatIndexByUserId.keys()) {
         activeRoomIdByUserId.set(userId, room.id);
       }
@@ -452,6 +457,31 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     }
 
     return snapshots;
+  }
+
+  async function restoreRoom(roomId: string): Promise<boolean> {
+    if (roomsById.has(roomId)) return true;
+    const { snapshots } = await gameRecordRepository.listActiveRecoverySnapshots();
+    const snapshot = snapshots.find((candidate) => candidate.roomId === roomId);
+    if (!snapshot) return false;
+    const room: GameRoom = {
+      events: snapshot.events,
+      humanSeatIndex: snapshot.humanSeatIndex,
+      humanSeatIndexByUserId: new Map(
+        snapshot.humanSeats.map((seat) => [seat.userId, seat.seatIndex])
+      ),
+      id: snapshot.roomId,
+      ...(snapshot.lobbyRoomId ? { lobbyRoomId: snapshot.lobbyRoomId } : {}),
+      playerUserId: snapshot.playerUserId,
+      state: snapshot.state
+    };
+    roomsById.set(room.id, room);
+    updatedAtMsByRoomId.set(room.id, Date.now());
+    stateVersionByRoomId.set(room.id, snapshot.stateVersion ?? 0);
+    for (const userId of room.humanSeatIndexByUserId.keys()) {
+      activeRoomIdByUserId.set(userId, room.id);
+    }
+    return true;
   }
 
   function cleanupExpiredRooms(options: CleanupGameRoomsOptions): string[] {
@@ -483,7 +513,8 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
 
   function applyHumanAction(
     user: AuthUser,
-    action: Action
+    action: Action,
+    expectedStateVersion?: number
   ): { error?: string; room: GameRoom } | null {
     const room = getRoomForUser(user);
     if (!room) {
@@ -491,6 +522,10 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     }
 
     const seatIndex = getHumanSeatIndex(room, user);
+    const currentStateVersion = stateVersionByRoomId.get(room.id) ?? 0;
+    if (expectedStateVersion !== undefined && expectedStateVersion !== currentStateVersion) {
+      return { error: "Stale game state, please sync and retry", room };
+    }
     const legalActions = getLegalActions(room.state, seatIndex);
     if (!isLegalActionRequest(legalActions, action)) {
       return { error: "Illegal action", room };
@@ -503,6 +538,7 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     }
 
     room.state = result.state;
+    stateVersionByRoomId.set(room.id, (stateVersionByRoomId.get(room.id) ?? 0) + 1);
     recordRoomEvent(room, eventText);
     if (room.state.phase === "ended") {
       recordRoomEvent(room, describeGameEnd(room.state));
@@ -535,6 +571,7 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     }
 
     room.state = result.state;
+    stateVersionByRoomId.set(room.id, (stateVersionByRoomId.get(room.id) ?? 0) + 1);
     recordRoomEvent(room, eventText);
     if (room.state.phase === "ended") {
       recordRoomEvent(room, describeGameEnd(room.state));
@@ -574,6 +611,7 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     }
 
     room.state = result.state;
+    stateVersionByRoomId.set(room.id, (stateVersionByRoomId.get(room.id) ?? 0) + 1);
     recordRoomEvent(room, eventText);
     if (room.state.phase === "ended") {
       recordRoomEvent(room, describeGameEnd(room.state));
@@ -657,6 +695,7 @@ export function createGameRoomService(options: CreateGameRoomServiceOptions = {}
     getRoomForUser,
     leaveActiveGame,
     restoreActiveRooms,
+    restoreRoom,
     waitForPersistentWrites
   };
 }

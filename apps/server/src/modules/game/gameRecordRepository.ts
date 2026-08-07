@@ -47,6 +47,7 @@ export type GameRecoverySnapshot = {
   playerUserId: number;
   roomId: string;
   state: MahjongGameState;
+  stateVersion?: number;
   version: 1;
 };
 

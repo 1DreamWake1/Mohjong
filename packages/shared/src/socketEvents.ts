@@ -3,7 +3,7 @@ import type { Action, GameLobbyRoom, PlayerView } from "./gameTypes.js";
 export type ClientToServerEvents = {
   "game:join": (payload: { gameId?: string }) => void;
   "game:start": () => void;
-  "game:action": (payload: { action: Action }) => void;
+  "game:action": (payload: { action: Action; gameId?: string; stateVersion?: number }) => void;
   "game:leave": () => void;
   "game:sync": (payload: { gameId?: string }) => void;
   "lobby:watch": (payload: { roomId: string }) => void;

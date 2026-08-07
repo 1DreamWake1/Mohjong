@@ -284,4 +284,5 @@ export type PlayerView = {
   winnerSeatIndex?: number;
   settlementScores?: [number, number, number, number];
   settlementTransfers?: GameSettlementTransfer[];
+  stateVersion?: number;
 };

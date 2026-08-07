@@ -14,6 +14,7 @@ export function createRoomPlayerView(input: {
   state: MahjongGameState;
   turnDeadlineAt?: string;
   unlimitedHumanTurn?: boolean;
+  stateVersion?: number;
 }): PlayerView {
   const player = input.state.players[input.seatIndex];
   if (!player) {
@@ -61,6 +62,7 @@ export function createRoomPlayerView(input: {
     phase: input.state.phase,
     ...(player.hasWon ? { hasWon: true } : {}),
     ...(input.state.gangScores ? { gangPoints: input.state.gangScores[input.seatIndex] } : {}),
+    ...(input.stateVersion === undefined ? {} : { stateVersion: input.stateVersion }),
     ...(input.state.settlementScores
       ? { settlementScores: [...input.state.settlementScores] as [number, number, number, number] }
       : {}),

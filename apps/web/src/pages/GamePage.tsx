@@ -183,7 +183,11 @@ export function GamePage(props: GamePageProps): JSX.Element {
       return;
     }
 
-    socket.emit("game:action", { action });
+    socket.emit("game:action", {
+      action,
+      gameId: view.roomId,
+      ...(view.stateVersion === undefined ? {} : { stateVersion: view.stateVersion })
+    });
   }
 
   function handleRestartGame(): void {

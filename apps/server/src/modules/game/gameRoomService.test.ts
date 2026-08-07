@@ -62,6 +62,7 @@ describe("gameRoomService", () => {
       },
       version: 1
     });
+    expect(service.getPlayerView(room, player).stateVersion).toBe(0);
 
     const tileId = room.state.players[0].handTiles[0]?.id;
     if (!tileId) {
@@ -71,6 +72,8 @@ describe("gameRoomService", () => {
     await service.waitForPersistentWrites(room.id);
 
     const recoverySnapshot = gameRecordRepository.getRecord(room.id)?.recoverySnapshot;
+    expect(service.getPlayerView(room, player).stateVersion).toBe(1);
+    expect(recoverySnapshot?.stateVersion).toBe(1);
     expect(recoverySnapshot?.state.lastDiscardedTileId).toBe(tileId);
     expect(recoverySnapshot?.events.at(-1)?.text).toContain("打出");
   });
@@ -99,6 +102,25 @@ describe("gameRoomService", () => {
       }
     });
     expect(restoredService.getPlayerView(restoredRoom!, player).seatIndex).toBe(0);
+  });
+
+  it("fails over to a second service and rejects duplicate stale actions", async () => {
+    const gameRecordRepository = createMemoryGameRecordRepository();
+    const firstService = createGameRoomService({ gameRecordRepository });
+    const originalRoom = firstService.getOrCreateQuickRoom(player);
+    const tileId = originalRoom.state.players[0].handTiles[0]?.id;
+    if (!tileId) throw new Error("Expected a tile to discard");
+
+    const firstAction = firstService.applyHumanAction(player, { tileId, type: "discard" }, 0);
+    expect(firstAction?.error).toBeUndefined();
+    await firstService.waitForPersistentWrites(originalRoom.id);
+
+    const failoverService = createGameRoomService({ gameRecordRepository });
+    expect(await failoverService.restoreRoom(originalRoom.id)).toBe(true);
+    const restoredRoom = failoverService.getRoomForUser(player, originalRoom.id);
+    expect(restoredRoom).toBeDefined();
+    const staleAction = failoverService.applyHumanAction(player, { type: "pass" }, 0);
+    expect(staleAction?.error).toBe("Stale game state, please sync and retry");
   });
 
   it("cleans up expired ended games but keeps active games", () => {

@@ -631,10 +631,18 @@ export function registerGameSocketServer(input: {
         return;
       }
 
-      const activeRoom = gameRoomService.getRoomForUser(user);
-      const result = activeRoom
-        ? await roomCoordinator.runExclusive(activeRoom.id, async () =>
-            gameRoomService.applyHumanAction(user, payload.action)
+      const activeRoom = payload.gameId
+        ? gameRoomService.getRoomForUser(user, payload.gameId)
+        : gameRoomService.getRoomForUser(user);
+      if (!activeRoom && payload.gameId) {
+        await gameRoomService.restoreRoom(payload.gameId);
+      }
+      const restoredRoom = payload.gameId
+        ? gameRoomService.getRoomForUser(user, payload.gameId)
+        : gameRoomService.getRoomForUser(user);
+      const result = restoredRoom
+        ? await roomCoordinator.runExclusive(restoredRoom.id, async () =>
+            gameRoomService.applyHumanAction(user, payload.action, payload.stateVersion)
           )
         : null;
       if (!result) {
@@ -712,13 +720,14 @@ export function registerGameSocketServer(input: {
       scheduleRoomBots(result.room.id);
     });
 
-    gameSocket.on("game:sync", (payload) => {
+    gameSocket.on("game:sync", async (payload) => {
       const accessError = getGameSocketAccessError(user, "sync");
       if (accessError) {
         gameSocket.emit("game:error", { message: accessError });
         return;
       }
 
+      if (payload.gameId) await gameRoomService.restoreRoom(payload.gameId);
       const room = gameRoomService.getRoomForUser(user, payload.gameId);
       if (!room) {
         gameSocket.emit("game:error", { message: "Game room not found" });
