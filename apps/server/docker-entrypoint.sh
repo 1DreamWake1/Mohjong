@@ -7,16 +7,12 @@ case "${DATABASE_URL:-}" in
   *) IS_POSTGRES=0 ;;
 esac
 
-if [ "${BACKUP_ON_BOOT:-1}" = "1" ] && [ "$IS_POSTGRES" = "0" ]; then
+if [ "${BACKUP_ON_BOOT:-1}" = "1" ]; then
   node ./apps/server/dist/scripts/dbbackup.js create
 fi
 
 PRISMA_SCHEMA_PATH="./${PRISMA_SCHEMA:-prisma/schema.prisma}"
-if [ "$IS_POSTGRES" = "1" ]; then
-  ./node_modules/.bin/prisma db push --schema "$PRISMA_SCHEMA_PATH" --skip-generate
-else
-  ./node_modules/.bin/prisma migrate deploy --schema "$PRISMA_SCHEMA_PATH"
-fi
+./node_modules/.bin/prisma migrate deploy --schema "$PRISMA_SCHEMA_PATH"
 if [ "${DEMO_SEED:-0}" = "1" ]; then
   node ./apps/server/dist/scripts/seedDemoPlayers.js
 fi

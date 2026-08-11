@@ -20,7 +20,7 @@
 
 ### PostgreSQL、Redis 与多实例扩展
 
-默认 Compose 仍使用 SQLite，适合单 Server 实例。仓库同时提供 `prisma/schema.postgresql.prisma`、PostgreSQL/Redis Compose 服务和 Socket.IO Redis 适配器。
+默认 Compose 仍使用 SQLite，适合单 Server 实例。仓库同时提供 `prisma/postgresql/schema.prisma`、PostgreSQL/Redis Compose 服务和 Socket.IO Redis 适配器。
 
 ```bash
 POSTGRES_PASSWORD='change-this-password' \
@@ -29,14 +29,60 @@ REDIS_URL='redis://redis:6379' \
 docker compose --profile scale up -d --build
 ```
 
-PostgreSQL 扩展部署使用 `prisma db push` 同步当前 schema，不使用 SQLite migration 目录。构建 Server 镜像时指定 PostgreSQL Prisma schema：
+PostgreSQL 扩展部署使用独立 migration 目录，不复用 SQLite migration。构建 Server 镜像时指定 PostgreSQL Prisma schema：
 
 ```bash
-docker build --build-arg PRISMA_SCHEMA=prisma/schema.postgresql.prisma \
+docker build --build-arg PRISMA_SCHEMA=prisma/postgresql/schema.prisma \
   -f apps/server/Dockerfile -t mahjong-server:postgres .
 ```
 
-多实例必须共用 PostgreSQL 和 Redis，并设置相同的 `REDIS_URL`。Redis 负责 Socket.IO 跨实例广播和房间动作锁；房间恢复仍以数据库 recovery snapshot 为准。SQLite 备份脚本只适用于 SQLite，PostgreSQL 应使用 `pg_dump` 或云数据库备份。
+多实例必须共用 PostgreSQL 和 Redis，并设置相同的 `REDIS_URL`。Redis 负责 Socket.IO 跨实例广播和房间动作锁；Redis 快照优先用于快速恢复，PostgreSQL recovery snapshot 作为持久化兜底。
+
+### 双 Server 启动与阶段 23 演练
+
+仓库提供 `compose.scale.yaml`，会切换 PostgreSQL Prisma schema、等待 PostgreSQL/Redis healthy，并允许启动两个 Server 实例：
+
+```bash
+export POSTGRES_PASSWORD='change-this-password'
+export DATABASE_URL='postgresql://mahjong:change-this-password@postgres:5432/mahjong'
+export REDIS_URL='redis://redis:6379'
+docker compose -f compose.yaml -f compose.scale.yaml \
+  --profile scale up -d --build --wait --scale server=2
+```
+
+阶段 23 故障演练脚本会验证双实例、Redis 停止/恢复、PostgreSQL 不可用/恢复、单 Server 故障转移和 PostgreSQL 备份：
+
+```bash
+POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+DATABASE_URL="$DATABASE_URL" \
+pnpm phase23:drill
+```
+
+脚本默认保留命名卷；仅在明确需要清理测试数据时设置 `DRILL_CLEAN_VOLUMES=1`。
+
+### PostgreSQL 备份与恢复
+
+Server 镜像包含 `postgresql-client`，备份使用 PostgreSQL custom format，不复制活动数据目录：
+
+```bash
+docker compose -f compose.yaml -f compose.scale.yaml \
+  --profile scale exec -T server node ./apps/server/dist/scripts/dbbackup.js create
+docker compose -f compose.yaml -f compose.scale.yaml \
+  --profile scale exec -T server node ./apps/server/dist/scripts/dbbackup.js list
+docker compose -f compose.yaml -f compose.scale.yaml \
+  --profile scale exec -T server node ./apps/server/dist/scripts/dbbackup.js verify <备份文件名.dump>
+```
+
+恢复前停止所有 Server，先完成当前数据库的独立备份，再执行：
+
+```bash
+docker compose -f compose.yaml -f compose.scale.yaml --profile scale stop server
+docker compose -f compose.yaml -f compose.scale.yaml --profile scale exec -T server \
+  node ./apps/server/dist/scripts/dbbackup.js restore <备份文件名.dump>
+docker compose -f compose.yaml -f compose.scale.yaml --profile scale up -d --wait server
+```
+
+`pg_restore` 使用 `--clean --if-exists --single-transaction`，恢复失败会回滚当前恢复事务。生产环境仍建议同时配置云数据库的时间点恢复和异地备份。
 
 ## 2. 准备配置
 
@@ -95,7 +141,7 @@ docker compose up -d --build --wait
 docker compose ps
 ```
 
-Server entrypoint 会在应用启动前执行 `prisma migrate deploy`。迁移失败时 Server 不会进入 healthy，Web 也不会启动服务。
+Server entrypoint 会在应用启动前执行对应 schema 的 `prisma migrate deploy`。迁移失败时 Server 不会进入 healthy，Web 也不会启动服务。
 
 默认访问：
 

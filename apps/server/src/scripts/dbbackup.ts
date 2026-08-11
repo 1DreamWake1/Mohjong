@@ -5,6 +5,12 @@ import { PrismaClient } from "@prisma/client";
 
 import { loadEnv } from "../config/env.js";
 import {
+  createPostgresBackup,
+  listPostgresBackups,
+  restorePostgresBackup,
+  verifyPostgresBackup
+} from "../db/postgresBackup.js";
+import {
   createBackup,
   DEFAULT_BACKUP_KEEP,
   listBackups,
@@ -14,10 +20,10 @@ import {
 } from "../db/backup.js";
 
 const usage = `用法:
-  dbbackup create               创建一致性备份（默认在线 VACUUM INTO）
+  dbbackup create               创建一致性备份（SQLite 或 PostgreSQL）
   dbbackup list                 列出备份
-  dbbackup verify <file>        校验备份文件完整性和 migration
-  dbbackup restore <file>       恢复备份（恢复前保留当前数据库）
+  dbbackup verify <file>        校验备份文件完整性
+  dbbackup restore <file>       恢复备份（恢复前请停止 Server）
 
 环境变量:
   DATABASE_URL   数据库连接（默认 file:../data/dev.db）
@@ -40,11 +46,11 @@ function readBackupConfig(): {
   keep: number;
 } {
   loadEnv();
-  const databasePath = resolveDatabasePath(
-    process.env.DATABASE_URL ?? "file:../data/dev.db",
-    process.cwd()
-  );
-  const backupDir = process.env.BACKUP_DIR ?? join(dirname(databasePath), "backups");
+  const databaseUrl = process.env.DATABASE_URL ?? "file:../data/dev.db";
+  const postgres = databaseUrl.startsWith("postgres://") || databaseUrl.startsWith("postgresql://");
+  const databasePath = postgres ? "" : resolveDatabasePath(databaseUrl, process.cwd());
+  const backupDir =
+    process.env.BACKUP_DIR ?? join(postgres ? process.cwd() : dirname(databasePath), "backups");
   const keep = Number(process.env.BACKUP_KEEP ?? DEFAULT_BACKUP_KEEP);
 
   return {
@@ -52,6 +58,11 @@ function readBackupConfig(): {
     databasePath,
     keep: Number.isFinite(keep) && keep > 0 ? keep : DEFAULT_BACKUP_KEEP
   };
+}
+
+function isPostgres(): boolean {
+  const url = process.env.DATABASE_URL ?? "";
+  return url.startsWith("postgres://") || url.startsWith("postgresql://");
 }
 
 function openDatabase(databasePath: string): PrismaClient {
@@ -64,6 +75,17 @@ function openDatabase(databasePath: string): PrismaClient {
 
 async function runCreate(): Promise<void> {
   const { backupDir, databasePath, keep } = readBackupConfig();
+  if (isPostgres()) {
+    const result = await createPostgresBackup({
+      appVersion: await readAppVersion(),
+      backupDir,
+      databaseUrl: process.env.DATABASE_URL!,
+      keep
+    });
+    console.log(`PostgreSQL 备份完成: ${join(backupDir, result.file)}`);
+    if (result.removed.length > 0) console.log(`清理旧备份: ${result.removed.join(", ")}`);
+    return;
+  }
   if (!existsSync(databasePath)) {
     console.log(`跳过备份：数据库不存在 ${databasePath}`);
     return;
@@ -92,6 +114,18 @@ async function runCreate(): Promise<void> {
 
 async function runList(): Promise<void> {
   const { backupDir } = readBackupConfig();
+  if (isPostgres()) {
+    const records = await listPostgresBackups(backupDir);
+    if (records.length === 0) {
+      console.log(`暂无 PostgreSQL 备份（目录 ${backupDir}）`);
+      return;
+    }
+    console.log(`PostgreSQL 备份目录: ${backupDir}`);
+    for (const record of records) {
+      console.log(`- ${record.file}  (v${record.metadata?.appVersion ?? "unknown"})`);
+    }
+    return;
+  }
   const records = await listBackups(backupDir);
 
   if (records.length === 0) {
@@ -114,6 +148,11 @@ async function runVerify(file: string): Promise<void> {
 
   const { backupDir } = readBackupConfig();
   const backupPath = join(backupDir, file);
+  if (isPostgres()) {
+    await verifyPostgresBackup(backupPath);
+    console.log(`PostgreSQL 备份校验通过: ${backupPath}`);
+    return;
+  }
   if (!existsSync(backupPath)) {
     throw new Error(`备份文件不存在: ${backupPath}`);
   }
@@ -139,6 +178,11 @@ async function runRestore(file: string): Promise<void> {
 
   const { backupDir, databasePath } = readBackupConfig();
   const backupPath = join(backupDir, file);
+  if (isPostgres()) {
+    await restorePostgresBackup({ backupPath, databaseUrl: process.env.DATABASE_URL! });
+    console.log(`PostgreSQL 恢复完成: ${backupPath}`);
+    return;
+  }
   if (!existsSync(backupPath)) {
     throw new Error(`备份文件不存在: ${backupPath}`);
   }

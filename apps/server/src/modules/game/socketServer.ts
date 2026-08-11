@@ -173,6 +173,7 @@ function scheduleBots(input: {
   activeSocketsByRoomId: Map<string, Set<GameSocket>>;
   gameLobbyService: GameLobbyService;
   gameRoomService: GameRoomService;
+  roomStateStore: RoomStateStore;
   humanTurnDeadlinesByRoomId: Map<string, string>;
   roomId: string;
   isStopping: () => boolean;
@@ -269,7 +270,11 @@ function scheduleBots(input: {
       return;
     }
 
-    input.gameRoomService.applyNextBotAction(latestRoom);
+    const botAdvanced = input.gameRoomService.applyNextBotAction(latestRoom);
+    if (botAdvanced) {
+      const snapshot = input.gameRoomService.getRecoverySnapshot(latestRoom.id);
+      if (snapshot) void input.roomStateStore.set(snapshot);
+    }
     syncLobbyRoomEnd(input.gameLobbyService, latestRoom);
     if (latestSockets) {
       emitLatestRoomEventToSockets(latestRoom, latestSockets);
@@ -289,6 +294,7 @@ function scheduleHumanTimeout(input: {
   activeSocketsByRoomId: Map<string, Set<GameSocket>>;
   gameLobbyService: GameLobbyService;
   gameRoomService: GameRoomService;
+  roomStateStore: RoomStateStore;
   humanTurnDeadlinesByRoomId: Map<string, string>;
   roomId: string;
   isStopping: () => boolean;
@@ -333,6 +339,8 @@ function scheduleHumanTimeout(input: {
     if (!input.gameRoomService.applyHumanTimeout(latestRoom)) {
       return;
     }
+    const snapshot = input.gameRoomService.getRecoverySnapshot(latestRoom.id);
+    if (snapshot) void input.roomStateStore.set(snapshot);
     syncLobbyRoomEnd(input.gameLobbyService, latestRoom);
 
     if (latestSockets) {
@@ -482,6 +490,7 @@ export function registerGameSocketServer(input: {
         activeSocketsByRoomId,
         gameLobbyService,
         gameRoomService,
+        roomStateStore,
         humanTurnDeadlinesByRoomId,
         isStopping: () => stopping,
         roomId,

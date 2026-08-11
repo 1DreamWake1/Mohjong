@@ -29,9 +29,17 @@ export function createRoomCoordinator(
   async function getRedis(): Promise<RedisClient | undefined> {
     if (!options.redisUrl) return undefined;
     if (redis?.isReady) return redis;
+    if (redis && !redis.isReady) {
+      redis = undefined;
+      redisConnectPromise = undefined;
+    }
     redisConnectPromise ??= (async () => {
       const client = createClient({ url: options.redisUrl! });
       client.on("error", () => undefined);
+      client.on("end", () => {
+        if (redis === client) redis = undefined;
+        redisConnectPromise = undefined;
+      });
       try {
         await client.connect();
         redis = client;
@@ -84,6 +92,7 @@ export function createRoomCoordinator(
     close: async () => {
       if (redis) await redis.quit().catch(() => undefined);
       redis = undefined;
+      redisConnectPromise = undefined;
     },
     runExclusive
   };

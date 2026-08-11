@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: apps/server/Dockerfile
+      args:
+        PRISMA_SCHEMA: ${PRISMA_SCHEMA:-prisma/schema.prisma}
     environment:
       AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:?Set AUTH_TOKEN_SECRET in .env}
       AUTH_COOKIE_NAME: ${AUTH_COOKIE_NAME:-mahjong_session}
@@ -18,6 +20,7 @@ services:
       LOGIN_RATE_LIMIT_WINDOW_MS: ${LOGIN_RATE_LIMIT_WINDOW_MS:-60000}
       NODE_ENV: production
       PORT: 3000
+      PRISMA_SCHEMA: ${PRISMA_SCHEMA:-prisma/schema.prisma}
       REDIS_URL: ${REDIS_URL:-}
       SHUTDOWN_TIMEOUT_MS: ${SHUTDOWN_TIMEOUT_MS:-10000}
       TRUST_PROXY: ${TRUST_PROXY:-1}

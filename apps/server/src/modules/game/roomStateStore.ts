@@ -4,6 +4,16 @@ import type { GameRecoverySnapshot } from "./gameRecordRepository.js";
 
 type RedisClient = ReturnType<typeof createClient>;
 
+const setSnapshotIfNewerScript = `
+local current = redis.call("get", KEYS[1])
+if current then
+  local decoded = cjson.decode(current)
+  local currentVersion = tonumber(decoded.stateVersion or 0)
+  if currentVersion > tonumber(ARGV[1]) then return 0 end
+end
+redis.call("set", KEYS[1], ARGV[2])
+return 1`;
+
 export type RoomStateStore = {
   close(): Promise<void>;
   get(roomId: string): Promise<GameRecoverySnapshot | undefined>;
@@ -17,9 +27,17 @@ export function createRoomStateStore(redisUrl?: string): RoomStateStore {
   async function getClient(): Promise<RedisClient | undefined> {
     if (!redisUrl) return undefined;
     if (client?.isReady) return client;
+    if (client && !client.isReady) {
+      client = undefined;
+      connectPromise = undefined;
+    }
     connectPromise ??= (async () => {
       const nextClient = createClient({ url: redisUrl });
       nextClient.on("error", () => undefined);
+      nextClient.on("end", () => {
+        if (client === nextClient) client = undefined;
+        connectPromise = undefined;
+      });
       try {
         await nextClient.connect();
         client = nextClient;
@@ -49,7 +67,11 @@ export function createRoomStateStore(redisUrl?: string): RoomStateStore {
       const value = await redis.get(key(roomId)).catch(() => null);
       if (!value) return undefined;
       try {
-        return JSON.parse(value) as GameRecoverySnapshot;
+        const snapshot = JSON.parse(value) as Partial<GameRecoverySnapshot>;
+        if (snapshot.roomId !== roomId || !snapshot.state || snapshot.version !== 1) {
+          return undefined;
+        }
+        return snapshot as GameRecoverySnapshot;
       } catch {
         return undefined;
       }
@@ -57,16 +79,12 @@ export function createRoomStateStore(redisUrl?: string): RoomStateStore {
     async set(snapshot) {
       const redis = await getClient();
       if (!redis) return;
-      const current = await redis.get(key(snapshot.roomId)).catch(() => null);
-      if (current) {
-        try {
-          const currentSnapshot = JSON.parse(current) as GameRecoverySnapshot;
-          if ((currentSnapshot.stateVersion ?? 0) > (snapshot.stateVersion ?? 0)) return;
-        } catch {
-          // Replace malformed state with the next valid snapshot.
-        }
-      }
-      await redis.set(key(snapshot.roomId), JSON.stringify(snapshot)).catch(() => undefined);
+      await redis
+        .eval(setSnapshotIfNewerScript, {
+          keys: [key(snapshot.roomId)],
+          arguments: [String(snapshot.stateVersion ?? 0), JSON.stringify(snapshot)]
+        })
+        .catch(() => undefined);
     }
   };
 }

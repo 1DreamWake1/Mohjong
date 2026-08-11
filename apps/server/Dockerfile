@@ -36,7 +36,14 @@ ENV HOST=0.0.0.0
 ENV PORT=3000
 WORKDIR /app
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl \
+  && apt-get install -y --no-install-recommends ca-certificates curl gnupg openssl \
+  && install -d /etc/apt/keyrings \
+  && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    | gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg \
+  && echo "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+    > /etc/apt/sources.list.d/pgdg.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends postgresql-client-16 \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY --from=production-dependencies /app/apps/server/node_modules ./apps/server/node_modules
@@ -49,7 +56,8 @@ COPY --from=build /app/packages/shared/package.json ./packages/shared/package.js
 COPY --from=build /app/packages/mahjong-core/package.json ./packages/mahjong-core/package.json
 COPY --from=build /app/prisma ./prisma
 COPY --chmod=755 apps/server/docker-entrypoint.sh ./apps/server/docker-entrypoint.sh
-RUN mkdir -p /app/data /app/backups && chown -R node:node /app/data /app/backups
+RUN mkdir -p /app/data /app/backups \
+  && chown -R node:node /app/data /app/backups /app/prisma
 USER node
 EXPOSE 3000
 ENTRYPOINT ["./apps/server/docker-entrypoint.sh"]

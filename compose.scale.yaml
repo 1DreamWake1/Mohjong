@@ -1,0 +1,19 @@
+services:
+  server:
+    build:
+      args:
+        PRISMA_SCHEMA: prisma/postgresql/schema.prisma
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL for the PostgreSQL scale profile}
+      PRISMA_SCHEMA: prisma/postgresql/schema.prisma
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    depends_on:
+      server:
+        condition: service_healthy
